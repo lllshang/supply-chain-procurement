@@ -5,7 +5,6 @@ import com.dzgylxt.common.R;
 import com.dzgylxt.entity.PurchaseApply;
 import com.dzgylxt.enums.PurchaseApplyStatus;
 import com.dzgylxt.security.UserContext;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseApplyController extends BaseController<IService<PurchaseApply>, PurchaseApply> {
 
     @Override
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @PostMapping
     public R<Boolean> save(@RequestBody PurchaseApply entity) {
         // 后端强制填充安全/审计字段，禁止前端直传落库（修复 P1-5：dept_id NOT NULL）
