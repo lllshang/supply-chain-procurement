@@ -14,7 +14,7 @@
 backend/build/
 backend/.gradle/
 backend/**/build/
-backend/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
 !backend/gradle/wrapper/gradle-wrapper.properties
 *.class
 target/

@@ -32,7 +32,8 @@ public enum ResultCode implements IResultCode {
 
     // 4xxx 参数
     PARAM_ERROR(4000, "参数校验失败"),
-    METHOD_NOT_ALLOWED(4005, "请求方法不被允许");
+    METHOD_NOT_ALLOWED(4005, "请求方法不被允许"),
+    NOT_FOUND(4040, "请求的资源不存在");
 
     private final int code;
     private final String message;
