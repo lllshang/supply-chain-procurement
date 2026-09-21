@@ -48,8 +48,8 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 (7,  1, 7,  NOW(), NOW(), 0),
 (8,  1, 8,  NOW(), NOW(), 0),
 (9,  1, 9,  NOW(), NOW(), 0),
-(10, 'SUPER_ADMIN', 10, NOW(), NOW(), 0),
-(11, 'SUPER_ADMIN', 11, NOW(), NOW(), 0),
-(12, 'SUPER_ADMIN', 12, NOW(), NOW(), 0);
+(10, 1, 10, NOW(), NOW(), 0),
+(11, 1, 11, NOW(), NOW(), 0),
+(12, 1, 12, NOW(), NOW(), 0);
 
 SET FOREIGN_KEY_CHECKS = 1;

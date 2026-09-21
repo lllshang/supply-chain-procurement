@@ -4,7 +4,7 @@ spring:
     activate:
       on-profile: dev
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/supply_chain?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    url: jdbc:mysql://127.0.0.1:3306/supply_chain?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
   data:
     redis:
       host: 127.0.0.1
