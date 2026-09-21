@@ -1,0 +1,41 @@
+# ---------------- 通用 ----------------
+*.log
+*.tmp
+*.swp
+.DS_Store
+.idea/
+.vscode/
+*.iml
+.cache/
+.env.local
+.env.*.local
+
+# ---------------- 后端 (Gradle / Java) ----------------
+backend/build/
+backend/.gradle/
+backend/**/build/
+backend/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.properties
+*.class
+target/
+
+# ---------------- 前端 / H5 (Node) ----------------
+frontend/node_modules/
+frontend/dist/
+h5/node_modules/
+h5/dist/
+node_modules/
+dist/
+*.tsbuildinfo
+
+# ---------------- 运行时 / 密钥 ----------------
+*.pem
+*.key
+secrets.*.yml
+application-local.yml
+uploads/
+minio-data/
+
+# ---------------- 工具 / 系统 ----------------
+.workbuddy/
+.git/

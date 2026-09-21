@@ -1,0 +1,82 @@
+# 供应链采购协同中台 —— GitLab CI
+# stages: build -> docker-build -> deploy
+# 阶段一仅落地 build 阶段；docker-build / deploy 为占位模板（按需启用）。
+
+stages:
+  - build
+  - docker-build
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  NODE_IMAGE: "node:22-alpine"
+
+# -------------------- 后端构建 --------------------
+backend-build:
+  stage: build
+  image: gradle:8.7-jdk17
+  cache:
+    key: backend-gradle
+    paths:
+      - backend/.gradle/
+      - backend/build/
+  script:
+    - cd backend
+    - gradle build -x test --no-daemon
+  artifacts:
+    paths:
+      - backend/build/libs/*.jar
+    expire_in: 1 week
+  rules:
+    - changes:
+        - backend/**/*
+
+# -------------------- 前端构建 --------------------
+frontend-build:
+  stage: build
+  image: $NODE_IMAGE
+  cache:
+    key: frontend-npm
+    paths:
+      - frontend/node_modules/
+  script:
+    - cd frontend
+    - npm ci || npm install
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist/
+    expire_in: 1 week
+  rules:
+    - changes:
+        - frontend/**/*
+
+# -------------------- H5 构建 --------------------
+h5-build:
+  stage: build
+  image: $NODE_IMAGE
+  cache:
+    key: h5-npm
+    paths:
+      - h5/node_modules/
+  script:
+    - cd h5
+    - npm ci || npm install
+    - npm run build
+  artifacts:
+    paths:
+      - h5/dist/
+    expire_in: 1 week
+  rules:
+    - changes:
+        - h5/**/*
+
+# -------------------- Docker 镜像（占位，按需启用） --------------------
+# docker-build-backend:
+#   stage: docker-build
+#   image: docker:24
+#   services: [docker:dind]
+#   script:
+#     - docker build -t registry.example.com/dzgylxt/backend:${CI_COMMIT_SHA} ./backend
+#     - docker push registry.example.com/dzgylxt/backend:${CI_COMMIT_SHA}
+#   rules:
+#     - if: $CI_COMMIT_BRANCH == "main"
