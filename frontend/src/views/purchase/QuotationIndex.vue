@@ -100,7 +100,7 @@ async function onImport() {
   }
   importing.value = true
   try {
-    const res = await importQuotations(Number(importForm.inquiryId), file)
+    const res = await importQuotations(importForm.inquiryId, file)
     importResult.value = res.data
     if (res.data && res.data.success > 0) {
       ElMessage.success(`导入成功 ${res.data.success} 行`)

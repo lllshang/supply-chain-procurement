@@ -20,7 +20,25 @@ service.interceptors.request.use(
 )
 
 service.interceptors.response.use(
-  (response) => {
+  async (response) => {
+    // blob 响应（导出/模板/下载）：#30 若后端实际返回 JSON 错误体（业务码失败），
+    // 解析并走统一错误提示，避免把错误 JSON 当文件保存
+    if (response.config.responseType === 'blob' && response.data instanceof Blob) {
+      if (response.data.type && response.data.type.includes('application/json')) {
+        const text = await response.data.text()
+        let err = {}
+        try {
+          err = JSON.parse(text)
+        } catch (e) {
+          err = {}
+        }
+        if (err && typeof err.code === 'number' && err.code !== 0) {
+          ElMessage.error(err.message || '请求失败')
+          return Promise.reject(new Error(err.message || 'Error'))
+        }
+      }
+      return response.data
+    }
     const res = response.data
     // 约定响应体含 { code, message, data, traceId }
     if (res && typeof res.code === 'number' && res.code !== 0) {

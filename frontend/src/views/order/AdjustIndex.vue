@@ -89,8 +89,8 @@ async function onSave() {
   try {
     await createAdjust({
       bizType: form.bizType,
-      orderId: Number(form.orderId),
-      arrivalId: form.arrivalId ? Number(form.arrivalId) : null,
+      orderId: form.orderId,
+      arrivalId: form.arrivalId || null,
       adjustType: form.adjustType,
       amount: form.amount,
       reason: form.reason

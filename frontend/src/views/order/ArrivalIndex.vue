@@ -103,7 +103,7 @@ async function onSave() {
   }
   saving.value = true
   try {
-    await createArrival({ orderId: Number(form.orderId), remark: form.remark })
+    await createArrival({ orderId: form.orderId, remark: form.remark })
     ElMessage.success('到货已登记')
     formVisible.value = false
     reload()

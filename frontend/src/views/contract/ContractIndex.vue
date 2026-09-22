@@ -108,8 +108,8 @@ async function onSave() {
   saving.value = true
   try {
     await createContract({
-      supplierId: Number(form.supplierId),
-      awardId: form.awardId ? Number(form.awardId) : null,
+      supplierId: form.supplierId,
+      awardId: form.awardId || null,
       title: form.title,
       contractType: form.contractType,
       amount: form.amount,

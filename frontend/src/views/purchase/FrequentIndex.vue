@@ -72,7 +72,7 @@ async function onAdd() {
   }
   saving.value = true
   try {
-    await frequentBringIn({ skuIds: [Number(addForm.skuId)] })
+    await frequentBringIn({ skuIds: [addForm.skuId] })
     ElMessage.success('已加入常购清单')
     addVisible.value = false
     reload()

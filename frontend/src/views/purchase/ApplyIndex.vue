@@ -179,7 +179,7 @@ async function openEdit(row) {
 
 // 常购带入（后端返回草稿明细行）
 async function onBringIn() {
-  const res = await frequentBringIn({ skuIds: form.items.map((i) => i.skuId).filter(Boolean).map(Number) })
+  const res = await frequentBringIn({ skuIds: form.items.map((i) => i.skuId).filter(Boolean) })
   if (res.data && res.data.length) {
     form.items = res.data.map((d) => ({
       skuId: String(d.skuId), qty: d.qty || 1, purchaseUnit: d.purchaseUnit || '',
@@ -202,7 +202,7 @@ async function onSave() {
       type: form.type,
       expectedDate: form.expectedDate,
       items: form.items.filter((i) => i.skuId).map((i) => ({
-        skuId: Number(i.skuId), qty: i.qty, purchaseUnit: i.purchaseUnit,
+        skuId: i.skuId, qty: i.qty, purchaseUnit: i.purchaseUnit,
         priceEstimate: i.priceEstimate, itemType: i.itemType, remark: i.remark
       }))
     }

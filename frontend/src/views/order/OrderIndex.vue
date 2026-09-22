@@ -145,8 +145,8 @@ function openCreate() {
 }
 async function onSave() {
   const items = form.items.filter((i) => i.skuId).map((i) => ({
-    applyItemId: i.applyItemId ? Number(i.applyItemId) : null,
-    skuId: Number(i.skuId), qty: i.qty, purchaseUnit: i.purchaseUnit, price: i.price
+    applyItemId: i.applyItemId || null,
+    skuId: i.skuId, qty: i.qty, purchaseUnit: i.purchaseUnit, price: i.price
   }))
   if (!form.contractId || !items.length) {
     ElMessage.warning('请填写合同 ID 与明细')
@@ -154,7 +154,7 @@ async function onSave() {
   }
   saving.value = true
   try {
-    const res = await createOrder({ contractId: Number(form.contractId), applyId: form.applyId ? Number(form.applyId) : null, items })
+    const res = await createOrder({ contractId: form.contractId, applyId: form.applyId || null, items })
     ElMessage.success(`下单成功，生成 ${res.data.length} 张订单`)
     formVisible.value = false
     reload()
@@ -185,7 +185,7 @@ async function onChange() {
   saving.value = true
   try {
     await changeOrder(changeForm.orderId, {
-      items: [{ itemId: Number(changeForm.itemId), qty: changeForm.newQty }],
+      items: [{ itemId: changeForm.itemId, qty: changeForm.newQty }],
       reason: changeForm.reason
     })
     ElMessage.success('变更完成（留痕可查）')

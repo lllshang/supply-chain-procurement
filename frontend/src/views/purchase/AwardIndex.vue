@@ -132,7 +132,7 @@ function openCreate(row) {
 
 async function onSave() {
   const items = form.items.filter((i) => i.skuId && i.supplierId).map((i) => ({
-    skuId: Number(i.skuId), supplierId: Number(i.supplierId), price: i.price, qty: i.qty
+    skuId: i.skuId, supplierId: i.supplierId, price: i.price, qty: i.qty
   }))
   if (!form.inquiryId || !items.length) {
     ElMessage.warning('请填写询价 ID 与完整明细')
@@ -141,10 +141,10 @@ async function onSave() {
   saving.value = true
   try {
     if (form.editId) {
-      await updateAwardItems(form.editId, { inquiryId: Number(form.inquiryId), applyId: form.applyId ? Number(form.applyId) : null, items, remark: form.remark })
+      await updateAwardItems(form.editId, { inquiryId: form.inquiryId, applyId: form.applyId || null, items, remark: form.remark })
       ElMessage.success('已调整，请提交审批')
     } else {
-      await createAward({ inquiryId: Number(form.inquiryId), applyId: form.applyId ? Number(form.applyId) : null, items, remark: form.remark })
+      await createAward({ inquiryId: form.inquiryId, applyId: form.applyId || null, items, remark: form.remark })
       ElMessage.success('定标已创建，请提交审批')
     }
     formVisible.value = false

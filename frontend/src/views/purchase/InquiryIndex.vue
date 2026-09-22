@@ -131,8 +131,9 @@ async function onSave() {
   }
   saving.value = true
   try {
-    const supplierIds = form.supplierIdsText.split(/[,，\s]+/).filter(Boolean).map(Number)
-    await createInquiry({ applyId: Number(form.applyId), deadline: form.deadline, supplierIds })
+    const supplierIds = form.supplierIdsText.split(/[,，\s]+/).filter(Boolean)
+    // 雪花 ID 全程字符串直传（#28）：Number() 会丢失 >2^53 精度，后端 Long→String 序列化
+    await createInquiry({ applyId: form.applyId, deadline: form.deadline, supplierIds })
     ElMessage.success('询价已创建')
     formVisible.value = false
     reload()
@@ -178,7 +179,7 @@ async function openSuppliers(row) {
   scopeVisible.value = true
 }
 async function onAddSuppliers() {
-  const ids = scopeAddText.value.split(/[,，\s]+/).filter(Boolean).map(Number)
+  const ids = scopeAddText.value.split(/[,，\s]+/).filter(Boolean)
   if (!ids.length) {
     ElMessage.warning('请输入供应商 ID')
     return

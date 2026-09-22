@@ -95,7 +95,7 @@ async function onSave() {
   saving.value = true
   try {
     await createAssess({
-      orderId: Number(form.orderId),
+      orderId: form.orderId,
       assessDate: form.assessDate,
       score: form.score,
       deductAmount: form.deductAmount,
