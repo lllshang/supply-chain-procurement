@@ -1,6 +1,5 @@
 package com.dzgylxt.service.impl.purchase;
 
-import cn.hutool.json.JSONUtil;
 import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -34,6 +33,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,14 +42,23 @@ import java.util.stream.Collectors;
 /**
  * 报价服务实现（设计 §2.3）。
  *
- * <p>批次导入幂等：同一批次号维度整体失效旧批次（新批次落库后同询价旧批次
- * {@code invalid=1}，重复上传同一文件也只保留最新批次有效行）。</p>
+ * <p>批次导入口径（QA #21/#23/#24 修复后）：</p>
+ * <ol>
+ *   <li><b>模板/导入 ID 均为文本</b>：19 位雪花 ID 超出 Excel double 53 位精度，
+ *       模板以字符串写出（文本单元格），导入按文本读再 {@code BigDecimal→Long}
+ *       精确解析（同时兼容用户把数值填成数字单元格的场景——此时精度已不可恢复，
+ *       由"SKU 不属于该询价"校验兜底拦截）；</li>
+ *   <li><b>批次失效按供应商维度</b>：同一供应商新批次落库后仅失效<b>该供应商</b>
+ *       的旧有效报价，多供应商有效报价共存（比价不退化）；</li>
+ *   <li><b>全有或全无</b>：任一行校验失败则整批不落库（AC④），错误明细在
+ *       {@code errors} 列表并附错误 Sheet（行号+原因，base64 xlsx）供下载。</li>
+ * </ol>
  */
 @Service
 public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation>
         implements IQuotationService {
 
-    private static final String TEMPLATE_VERSION = "p2-quotation-v1";
+    private static final String TEMPLATE_VERSION = "p2-quotation-v2";
 
     @Autowired
     private InquiryMapper inquiryMapper;
@@ -87,12 +96,14 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
         for (PurchaseApplyItem item : items) {
             Sku sku = skuMapper.selectById(item.getSkuId());
             TemplateRow row = new TemplateRow();
-            row.setSkuId(item.getSkuId());
+            // 19 位雪花 ID 必须文本写出（数值单元格 double 精度丢位 → 按模板导入必败，QA #21）
+            row.setSupplierId("");
+            row.setSkuId(String.valueOf(item.getSkuId()));
             row.setSkuCode(sku == null ? "" : sku.getSkuCode());
             row.setSkuName(sku == null ? "" : sku.getSkuCode());
             row.setPurchaseUnit(item.getPurchaseUnit());
             row.setQty(item.getQtyInPurchaseUnit());
-            // 供应商信息位：导入时按"供应商名称+供应商ID"识别（空模板由供应商填写）
+            // 供应商信息位：由供应商填写自己的 supplier_id（文本格式）
             rows.add(row);
         }
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -119,12 +130,14 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
             throw new BizException(ResultCode.PARAM_ERROR, "报价文件不能为空");
         }
 
-        // 询价 SKU 集合（来自申请明细）与供应商范围
+        // 询价 SKU 集合（来自申请明细）与供应商范围（仅未剔除 invited=1 的有效范围，QA #25 剔除式）
         Set<Long> inquirySkuIds = applyItemMapper.selectList(Wrappers.<PurchaseApplyItem>lambdaQuery()
                         .eq(PurchaseApplyItem::getApplyId, inquiry.getApplyId())).stream()
                 .map(PurchaseApplyItem::getSkuId).collect(Collectors.toSet());
         List<InquirySupplier> scope = inquirySupplierMapper.selectList(
-                Wrappers.<InquirySupplier>lambdaQuery().eq(InquirySupplier::getInquiryId, inquiryId));
+                Wrappers.<InquirySupplier>lambdaQuery()
+                        .eq(InquirySupplier::getInquiryId, inquiryId)
+                        .eq(InquirySupplier::getInvited, 1));
         Set<Long> scopeSupplierIds = scope.stream()
                 .map(InquirySupplier::getSupplierId).collect(Collectors.toSet());
 
@@ -146,7 +159,9 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
         for (int i = 0; i < rows.size(); i++) {
             TemplateRow row = rows.get(i);
             int lineNo = i + 2; // 表头占第 1 行
-            if (row.getSupplierId() == null || row.getSkuId() == null
+            Long supplierId = parseId(row.getSupplierId());
+            Long skuId = parseId(row.getSkuId());
+            if (supplierId == null || skuId == null
                     || row.getPrice() == null || row.getQty() == null) {
                 result.getErrors().add("第" + lineNo + "行：供应商ID/SKU ID/数量/单价均必填");
                 result.setFail(result.getFail() + 1);
@@ -157,46 +172,59 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
                 result.setFail(result.getFail() + 1);
                 continue;
             }
-            if (!inquirySkuIds.contains(row.getSkuId())) {
-                result.getErrors().add("第" + lineNo + "行：SKU 不属于该询价：" + row.getSkuId());
+            if (!inquirySkuIds.contains(skuId)) {
+                result.getErrors().add("第" + lineNo + "行：SKU 不属于该询价：" + skuId);
                 result.setFail(result.getFail() + 1);
                 continue;
             }
-            if (!scopeSupplierIds.contains(row.getSupplierId())) {
-                result.getErrors().add("第" + lineNo + "行：供应商不在询价范围内：" + row.getSupplierId());
+            if (!scopeSupplierIds.contains(supplierId)) {
+                result.getErrors().add("第" + lineNo + "行：供应商不在询价范围内：" + supplierId);
                 result.setFail(result.getFail() + 1);
                 continue;
             }
             // 换算快照：报价单位 → 基本单位（当前生效版本，应用时钟）
             String unit = row.getPurchaseUnit() == null ? "" : row.getPurchaseUnit();
             UnitConversion conv = unit == null || unit.isBlank() ? null
-                    : unitConversionMapper.selectCurrentEffective(row.getSkuId(), unit, now);
+                    : unitConversionMapper.selectCurrentEffective(skuId, unit, now);
             BigDecimal rate = conv == null || conv.getRate() == null ? BigDecimal.ONE : conv.getRate();
             BigDecimal qtyBase = row.getQty().multiply(rate);
 
             Quotation q = new Quotation();
             q.setInquiryId(inquiryId);
             q.setBatchNo(result.getBatchNo());
-            q.setSupplierId(row.getSupplierId());
-            q.setSkuId(row.getSkuId());
+            q.setSupplierId(supplierId);
+            q.setSkuId(skuId);
             q.setPurchaseUnit(unit);
             q.setQtyInBaseUnit(qtyBase);
             q.setPrice(row.getPrice());
             q.setStatus(QuotationStatus.SUBMITTED);
             q.setInvalid(0);
             batch.add(q);
-            quotedSupplierIds.add(row.getSupplierId());
-            result.setSuccess(result.getSuccess() + 1);
+            quotedSupplierIds.add(supplierId);
+        }
+
+        // 全有或全无（AC④ / QA #24）：任一行校验失败 → 整批不落库；错误 Sheet（行号+原因）随结果返回
+        if (!result.getErrors().isEmpty()) {
+            result.setFail(result.getErrors().size());
+            result.setSuccess(0);
+            result.setErrorSheetBase64(Base64.getEncoder()
+                    .encodeToString(buildErrorSheet(result.getErrors())));
+            return result;
         }
 
         if (!batch.isEmpty()) {
-            // 新批次落库后旧批次整体失效（幂等：重复上传以最新批次为准）
+            result.setSuccess(batch.size());
             saveBatch(batch);
-            quotationMapper.update(null, Wrappers.<Quotation>update()
-                    .eq("inquiry_id", inquiryId)
-                    .eq("invalid", 0)
-                    .ne("batch_no", result.getBatchNo())
-                    .set("invalid", 1));
+            // 批次失效按供应商维度（QA #23）：仅失效本次报价供应商的旧有效批次，
+            // 多供应商有效报价共存；同供应商重复上传以最新批次为准（幂等）
+            for (Long supplierId : quotedSupplierIds) {
+                quotationMapper.update(null, Wrappers.<Quotation>update()
+                        .eq("inquiry_id", inquiryId)
+                        .eq("supplier_id", supplierId)
+                        .eq("invalid", 0)
+                        .ne("batch_no", result.getBatchNo())
+                        .set("invalid", 1));
+            }
             // 已报价标记
             for (Long supplierId : quotedSupplierIds) {
                 InquirySupplier is = inquirySupplierMapper.selectOne(
@@ -247,13 +275,50 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
         updateById(quotation);
     }
 
-    /** 报价模板/导入行（EasyExcel 注解列头）。 */
+    /**
+     * 文本/数值兼容的雪花 ID 解析：文本单元格精确（BigDecimal→Long）；
+     * 数值单元格因 double 精度可能已失真，解析出的值由业务校验兜底。
+     */
+    private Long parseId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(raw.trim()).longValueExact();
+        } catch (ArithmeticException | NumberFormatException e) {
+            // 超过 Long 范围或非数字：视为非法 ID
+            return null;
+        }
+    }
+
+    /** 错误 Sheet（行号+原因，单表两列），xlsx 字节。 */
+    private byte[] buildErrorSheet(List<String> errors) {
+        List<List<String>> head = new ArrayList<>();
+        head.add(List.of("行号/原因"));
+        List<List<String>> data = new ArrayList<>();
+        for (String e : errors) {
+            data.add(List.of(e));
+        }
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            EasyExcel.write(out).head(head).sheet("导入错误").doWrite(data);
+            return out.toByteArray();
+        } catch (IOException e) {
+            return new byte[0];
+        }
+    }
+
+    /**
+     * 报价模板/导入行（EasyExcel 注解列头）。
+     *
+     * <p>supplierId/skuId 用 <b>String</b>：模板写出为文本单元格（防 19 位 ID
+     * double 精度丢位），导入按文本读后经 {@link #parseId} 精确解析。</p>
+     */
     @Data
     public static class TemplateRow {
         @com.alibaba.excel.annotation.ExcelProperty("供应商ID")
-        private Long supplierId;
+        private String supplierId;
         @com.alibaba.excel.annotation.ExcelProperty("SKU ID")
-        private Long skuId;
+        private String skuId;
         @com.alibaba.excel.annotation.ExcelProperty("SKU编码")
         private String skuCode;
         @com.alibaba.excel.annotation.ExcelProperty("SKU名称")

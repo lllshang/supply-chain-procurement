@@ -107,9 +107,18 @@ public class InquiryServiceImpl extends ServiceImpl<InquiryMapper, Inquiry> impl
             scope = inquirySupplierService.list(
                     Wrappers.<InquirySupplier>lambdaQuery().eq(InquirySupplier::getInquiryId, id));
         }
-        // 逐家准入校验在 addSuppliers 内完成（不合格即拒绝）；
+        // 剔除式（QA #25）：逐家准入——不合格剔除（invited=0，快照留痕原因）、合格加入；
         // 此处补齐快照（范围既有行可能为建单时落库，统一刷新一次）
         inquirySupplierService.refreshSnapshots(id);
+
+        // 剔除后有效范围（invited=1）为空才拒绝；混合 [合格,不合格] 不再整体 4000
+        long effective = inquirySupplierService.count(
+                Wrappers.<InquirySupplier>lambdaQuery()
+                        .eq(InquirySupplier::getInquiryId, id)
+                        .eq(InquirySupplier::getInvited, 1));
+        if (effective == 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "无可用供应商：全部候选均未通过准入校验（原因见范围快照）");
+        }
 
         inquiry.setStatus(InquiryStatus.PUBLISHED);
         updateById(inquiry);

@@ -66,6 +66,7 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (802, 8, '到货验收', 2, '/order/arrival', 'order/arrival/index','box',   'arrival:read,arrival:write,arrival:confirm',                     2, 0, NOW(), NOW(), 0),
 (803, 8, '入库台账', 2, '/order/ledger',  'order/ledger/index', 'money', 'arrival:read',                                                   3, 0, NOW(), NOW(), 0),
 (804, 8, '履约调整', 2, '/order/adjust',  'order/adjust/index', 'tools', 'adjust:read,adjust:write',                                       4, 0, NOW(), NOW(), 0),
+(805, 8, '服务考核', 2, '/order/assess',  'order/assess/index', 'audit', 'order:assess:read,order:assess:write',                           5, 0, NOW(), NOW(), 0),
 -- 审批中心（parent_id = 10）
 (1001,10, '待我审批', 2, '/approval/tasks', 'approval/tasks/index', 'audit', 'approval:read,approval:approve', 1, 0, NOW(), NOW(), 0);
 
@@ -118,6 +119,7 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 (35, 1, 802, NOW(), NOW(), 0),
 (36, 1, 803, NOW(), NOW(), 0),
 (37, 1, 804, NOW(), NOW(), 0),
+(39, 1, 805, NOW(), NOW(), 0),
 (38, 1, 1001, NOW(), NOW(), 0);
 
 -- ---------------- P1 计量单位字典（基础种子，幂等） ----------------

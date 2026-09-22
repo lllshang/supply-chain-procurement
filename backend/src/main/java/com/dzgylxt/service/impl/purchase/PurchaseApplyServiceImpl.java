@@ -1,5 +1,6 @@
 package com.dzgylxt.service.impl.purchase;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.approval.ApprovalGateway;
@@ -30,8 +31,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -168,32 +170,68 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         return vo;
     }
 
+    /**
+     * 导出申请单（QA #26：与其他导出统一为 OOXML）。
+     *
+     * <p>两个 Sheet：①「申请单头」1 行；②「明细」含换算快照列
+     * （SKU 文本格式，19 位雪花 ID 不经数值转换）。</p>
+     */
     @Override
     public byte[] exportApply(Long id) {
         ApplyDetailRespVO detail = detail(id);
-        StringBuilder sb = new StringBuilder();
-        sb.append("申请单号,标题,类型,状态,预算状态,期望到货,申请部门,申请人\n");
         PurchaseApply apply = detail.getApply();
-        sb.append(csv(apply.getApplyNo())).append(',')
-                .append(csv(apply.getTitle())).append(',')
-                .append(csv(apply.getType() == null ? "" : apply.getType().getDesc())).append(',')
-                .append(csv(apply.getStatus() == null ? "" : apply.getStatus().getDesc())).append(',')
-                .append(apply.getBudgetStatus() == null ? 0 : apply.getBudgetStatus()).append(',')
-                .append(csv(apply.getExpectedDate() == null ? "" : apply.getExpectedDate().toString())).append(',')
-                .append(csv(String.valueOf(apply.getDeptId()))).append(',')
-                .append(csv(String.valueOf(apply.getApplicantId()))).append('\n');
-        sb.append("\nSKU,采购单位,采购数量,换算率,基本单位数量,预估单价,行类型,备注\n");
-        for (PurchaseApplyItem item : detail.getItems()) {
-            sb.append(csv(String.valueOf(item.getSkuId()))).append(',')
-                    .append(csv(item.getPurchaseUnit())).append(',')
-                    .append(csv(String.valueOf(item.getQtyInPurchaseUnit()))).append(',')
-                    .append(csv(String.valueOf(item.getConvRateSnapshot()))).append(',')
-                    .append(csv(String.valueOf(item.getQtyInBaseUnit()))).append(',')
-                    .append(csv(String.valueOf(item.getPriceEstimate()))).append(',')
-                    .append(csv(item.getItemType() == null ? ItemType.MATERIAL.getDesc() : item.getItemType().getDesc())).append(',')
-                    .append(csv(item.getRemark())).append('\n');
+
+        // EasyExcel head 语义：外层=列、内层=该列的表头行 → 每列各一层
+        List<List<String>> headSheet = new java.util.ArrayList<>();
+        for (String h : List.of("申请单号", "标题", "类型", "状态", "预算状态", "期望到货", "申请部门", "申请人")) {
+            headSheet.add(List.of(h));
         }
-        return sb.toString().getBytes(StandardCharsets.UTF_8);
+        List<List<Object>> headData = new java.util.ArrayList<>();
+        headData.add(List.of(
+                nvl(apply.getApplyNo()),
+                nvl(apply.getTitle()),
+                apply.getType() == null ? "" : apply.getType().getDesc(),
+                apply.getStatus() == null ? "" : apply.getStatus().getDesc(),
+                apply.getBudgetStatus() == null ? 0 : apply.getBudgetStatus(),
+                apply.getExpectedDate() == null ? "" : apply.getExpectedDate().toString(),
+                String.valueOf(apply.getDeptId()),
+                String.valueOf(apply.getApplicantId())));
+
+        List<List<String>> itemHead = new java.util.ArrayList<>();
+        for (String h : List.of("SKU", "采购单位", "采购数量", "换算率", "基本单位数量", "预估单价", "行类型", "备注")) {
+            itemHead.add(List.of(h));
+        }
+        List<List<Object>> itemData = new java.util.ArrayList<>();
+        for (PurchaseApplyItem item : detail.getItems()) {
+            itemData.add(List.of(
+                    String.valueOf(item.getSkuId()),
+                    nvl(item.getPurchaseUnit()),
+                    String.valueOf(item.getQtyInPurchaseUnit()),
+                    String.valueOf(item.getConvRateSnapshot()),
+                    String.valueOf(item.getQtyInBaseUnit()),
+                    String.valueOf(item.getPriceEstimate()),
+                    item.getItemType() == null ? ItemType.MATERIAL.getDesc() : item.getItemType().getDesc(),
+                    nvl(item.getRemark())));
+        }
+
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            com.alibaba.excel.ExcelWriter writer = EasyExcel.write(out).build();
+            com.alibaba.excel.write.metadata.WriteSheet sheet1 = EasyExcel.writerSheet("申请单头")
+                    .head(headSheet).build();
+            com.alibaba.excel.write.metadata.WriteSheet sheet2 = EasyExcel.writerSheet("明细")
+                    .head(itemHead).build();
+            writer.write(headData, sheet1);
+            writer.write(itemData, sheet2);
+            writer.finish();
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new BizException(ResultCode.SYSTEM_ERROR, "申请单导出失败");
+        }
+    }
+
+    /** null 安全字符串。 */
+    private String nvl(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     @Override
@@ -282,14 +320,5 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         }
         apply.setStatus(PurchaseApplyStatus.REJECTED);
         updateById(apply);
-    }
-
-    /** CSV 单元格转义。 */
-    private String csv(Object value) {
-        String s = value == null ? "" : String.valueOf(value);
-        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
-            return '"' + s.replace("\"", "\"\"") + '"';
-        }
-        return s;
     }
 }

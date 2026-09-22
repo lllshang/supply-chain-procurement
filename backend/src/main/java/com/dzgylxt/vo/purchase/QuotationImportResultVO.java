@@ -16,4 +16,10 @@ public class QuotationImportResultVO implements Serializable {
     private int success;
     private int fail;
     private List<String> errors = new ArrayList<>();
+    /**
+     * 错误 Sheet（xlsx 字节的 base64，单表「行号/原因」列）。
+     *
+     * <p>仅校验失败（整批不落库，AC④ 全有或全无）时填充，前端解码后可直接下载。</p>
+     */
+    private String errorSheetBase64;
 }

@@ -84,16 +84,17 @@ public class PurchaseApplyController {
         return R.ok(applyService.submit(id));
     }
 
-    /** 导出申请单（CSV，含明细与快照列）。 */
+    /** 导出申请单（OOXML，单头+明细两 Sheet；与其他导出格式统一，QA #26）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/{id}/export")
     public ResponseEntity<byte[]> export(@PathVariable Long id) {
         byte[] bytes = applyService.exportApply(id);
-        String filename = "purchase-apply-" + id + ".csv";
+        String filename = "purchase-apply-" + id + ".xlsx";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + filename)
-                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(bytes);
     }
 }
