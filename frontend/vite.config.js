@@ -3,6 +3,9 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // 后端 API 前缀：开发环境通过 Vite 代理转发到后端 8080
+// 代理目标可用环境变量覆盖（本机 8080 被其它服务占用/劫持时）：
+//   VITE_API_PROXY_TARGET=http://[::1]:61574 npm run dev
+const apiTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:8080'
 
 /**
  * Element Plus 组件依赖拓扑序（P3-19 分包依据）。
@@ -49,8 +52,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:8080', changeOrigin: true },
-      '/h5': { target: 'http://localhost:8080', changeOrigin: true }
+      '/api': { target: apiTarget, changeOrigin: true },
+      '/h5': { target: apiTarget, changeOrigin: true }
     }
   },
   build: {
