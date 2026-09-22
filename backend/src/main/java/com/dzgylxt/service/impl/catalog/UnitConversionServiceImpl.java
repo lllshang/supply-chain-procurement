@@ -62,7 +62,9 @@ public class UnitConversionServiceImpl extends ServiceImpl<UnitConversionMapper,
 
     @Override
     public UnitConversion currentEffective(Long skuId, String fromUnit) {
-        return baseMapper.selectCurrentEffective(skuId, fromUnit);
+        // 基准时间用应用时钟，与 saveConversion 写入 effective_from 的时钟保持一致，
+        // 避免"DB 时区 ≠ 应用时区"时 NOW() 比较恒不命中（见 Mapper Javadoc）。
+        return baseMapper.selectCurrentEffective(skuId, fromUnit, LocalDateTime.now());
     }
 
     @Override
