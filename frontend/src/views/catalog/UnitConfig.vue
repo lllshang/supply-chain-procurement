@@ -1,10 +1,10 @@
 <template>
   <el-card>
-    <div class="toolbar">
+    <PageHead title="单位配置">
       <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openDialog()">新建单位</el-button>
-    </div>
+    </PageHead>
 
-    <el-table :data="list" v-loading="loading" border stripe>
+    <el-table :data="list" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="180" />
       <el-table-column prop="code" label="编码" />
       <el-table-column prop="name" label="名称" />
@@ -59,6 +59,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatusTag from '@/components/StatusTag.vue'
+import PageHead from '@/components/PageHead.vue'
 import { pageUnits, createUnit, updateUnit, invalidateUnit } from '@/api/catalog'
 import { usePagination } from '@/composables/usePagination'
 
@@ -130,6 +131,5 @@ onMounted(reload)
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 12px; }
 .pager { margin-top: 16px; justify-content: flex-end; display: flex; }
 </style>

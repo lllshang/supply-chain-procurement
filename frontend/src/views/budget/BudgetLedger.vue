@@ -1,6 +1,7 @@
 <template>
   <div>
     <el-card>
+      <PageHead title="预算台账" />
       <div class="toolbar">
         <el-input-number v-model="year" :min="2000" :max="2100" :controls="false" placeholder="年份" style="width: 130px" />
         <el-button type="primary" :icon="Search" @click="reload">查询</el-button>
@@ -8,7 +9,6 @@
       <el-table
         :data="headers"
         v-loading="loading"
-        border
         stripe
         highlight-current-row
         @current-change="onSelectHeader"
@@ -40,7 +40,7 @@
 
     <el-card class="ledger-card">
       <div class="ledger-head">
-        <span class="title">预算台账</span>
+        <span class="title">台账明细</span>
         <span v-if="selectedHeader" class="sub">
           年度 {{ selectedHeader.year }} · 部门 {{ selectedHeader.deptId }} · 总额 {{ selectedHeader.totalAmount }}
         </span>
@@ -58,6 +58,7 @@ import { onMounted, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import StatusTag from '@/components/StatusTag.vue'
 import BudgetLedgerTable from '@/components/BudgetLedgerTable.vue'
+import PageHead from '@/components/PageHead.vue'
 import { pageBudgetHeaders, listBudgetLines } from '@/api/budget'
 import { usePagination } from '@/composables/usePagination'
 

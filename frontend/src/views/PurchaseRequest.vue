@@ -1,10 +1,10 @@
 <template>
   <div>
     <el-card>
-      <div class="toolbar">
+      <PageHead title="采购申请">
         <el-button type="primary" :icon="Plus" @click="openDialog">新建采购申请</el-button>
-      </div>
-      <el-table :data="list" v-loading="loading" border stripe>
+      </PageHead>
+      <el-table :data="list" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="100" />
         <el-table-column prop="applyNo" label="申请单号" />
         <el-table-column prop="title" label="标题" />
@@ -50,6 +50,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import PageHead from '@/components/PageHead.vue'
 import { pagePurchaseRequests, createPurchaseRequest } from '@/api/purchase'
 
 const list = ref([])

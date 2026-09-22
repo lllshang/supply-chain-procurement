@@ -1,5 +1,6 @@
 <template>
   <el-card>
+    <PageHead title="年度预算导入" />
     <div class="tip-box">
       年度预算导入：一行 = 一个「科目×项目」，列口径为 年度总额 + 1–12 月。
       上传后先预览校验，通过后确认导入（异步任务，轮询进度）。
@@ -21,7 +22,7 @@
             <span>年度总额：{{ preview.totalAmount ?? '-' }}</span>
             <span>明细行：{{ (preview.lines || []).length }}</span>
           </div>
-          <el-table :data="(preview.lines || []).slice(0, 50)" border stripe size="small" max-height="320">
+          <el-table :data="(preview.lines || []).slice(0, 50)" stripe size="small" max-height="320">
             <el-table-column prop="subjectName" label="科目" min-width="140" />
             <el-table-column prop="projectName" label="项目" min-width="120" />
             <el-table-column label="期间" width="90">
@@ -39,6 +40,7 @@
 
 <script setup>
 import ImportWizard from '@/components/ImportWizard.vue'
+import PageHead from '@/components/PageHead.vue'
 import { enumLabel } from '@/constants/enums'
 import { previewBudgetImport, importBudget, budgetImportTask } from '@/api/budget'
 

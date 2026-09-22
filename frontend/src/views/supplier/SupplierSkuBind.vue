@@ -1,15 +1,17 @@
 <template>
   <el-card>
+    <PageHead title="产品绑定">
+      <el-button v-permission="writePerm" type="primary" :icon="Plus" :disabled="!supplierId" @click="openForm()">新增绑定</el-button>
+      <el-button :icon="Upload" :disabled="!supplierId" @click="batchVisible = true">批量绑定</el-button>
+      <el-button :icon="Refresh" :disabled="!supplierId" @click="loadBindings">刷新</el-button>
+    </PageHead>
     <div class="toolbar">
       <el-select v-model="supplierId" filterable placeholder="选择供应商" style="width: 260px" @change="loadBindings">
         <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
       </el-select>
-      <el-button v-permission="writePerm" type="primary" :icon="Plus" :disabled="!supplierId" @click="openForm()">新增绑定</el-button>
-      <el-button :icon="Upload" :disabled="!supplierId" @click="batchVisible = true">批量绑定</el-button>
-      <el-button :icon="Refresh" :disabled="!supplierId" @click="loadBindings">刷新</el-button>
     </div>
 
-    <el-table :data="bindings" v-loading="loading" border stripe>
+    <el-table :data="bindings" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="160" />
       <el-table-column prop="skuId" label="SKU ID" width="160" />
       <el-table-column prop="skuCode" label="SKU编码" width="140" />
@@ -66,6 +68,7 @@ import EnumSelect from '@/components/EnumSelect.vue'
 import MoneyInput from '@/components/MoneyInput.vue'
 import UnitSelect from '@/components/UnitSelect.vue'
 import ImportWizard from '@/components/ImportWizard.vue'
+import PageHead from '@/components/PageHead.vue'
 import { enumLabel } from '@/constants/enums'
 import { pageSuppliers, listSupplierSkus, bindSupplierSku, unbindSupplierSku, batchBindSupplierSku } from '@/api/supplier'
 

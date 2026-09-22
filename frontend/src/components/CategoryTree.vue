@@ -1,9 +1,9 @@
 <template>
   <div class="category-tree">
-    <div class="toolbar">
+    <PageHead :title="title">
       <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="onAddRoot">新增一级</el-button>
       <el-button :icon="Refresh" @click="reload">刷新</el-button>
-    </div>
+    </PageHead>
 
     <el-tree
       v-loading="loading"
@@ -49,6 +49,7 @@
 import { onMounted, ref } from 'vue'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PageHead from '@/components/PageHead.vue'
 
 // 通用三级树（品类 / 供应商分类 / 预算科目复用）
 const props = defineProps({
@@ -57,7 +58,9 @@ const props = defineProps({
   // 置无效函数：(id) => R<Boolean>
   invalidateApi: { type: Function, default: null },
   levelMax: { type: Number, default: 3 },
-  writePerm: { type: String, default: '' }
+  writePerm: { type: String, default: '' },
+  // 页头标题（纯展示）：传入则在树工具栏上方渲染页头
+  title: { type: String, default: '' }
 })
 const emit = defineEmits(['add', 'edit'])
 

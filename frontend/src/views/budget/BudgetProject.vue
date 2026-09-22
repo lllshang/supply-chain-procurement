@@ -1,13 +1,14 @@
 <template>
   <el-card>
+    <PageHead title="预算项目">
+      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openForm()">新建项目</el-button>
+    </PageHead>
     <div class="toolbar">
       <el-input-number v-model="year" :min="2000" :max="2100" :controls="false" placeholder="年份" style="width: 130px" />
       <el-button type="primary" :icon="Search" @click="load">查询</el-button>
-      <div class="spacer" />
-      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openForm()">新建项目</el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" border stripe>
+    <el-table :data="list" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="160" />
       <el-table-column prop="code" label="项目编码" width="160" />
       <el-table-column prop="name" label="项目名称" min-width="160" />
@@ -44,6 +45,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatusTag from '@/components/StatusTag.vue'
+import PageHead from '@/components/PageHead.vue'
 import { listBudgetProjects, createBudgetProject, updateBudgetProject, invalidateBudgetProject } from '@/api/budget'
 
 // P-B2 预算项目：列表 + 按年筛选 + 增改/置无效

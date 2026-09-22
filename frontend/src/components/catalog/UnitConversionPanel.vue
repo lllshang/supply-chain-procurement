@@ -5,7 +5,7 @@
       <el-button :icon="Refresh" @click="load">刷新</el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" border stripe size="small">
+    <el-table :data="list" v-loading="loading" stripe size="small">
       <el-table-column prop="fromUnit" label="原单位" width="110" />
       <el-table-column prop="toUnit" label="目标单位" width="110" />
       <el-table-column prop="rate" label="换算率" width="110" />

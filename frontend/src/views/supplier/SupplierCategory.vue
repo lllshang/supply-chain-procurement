@@ -1,6 +1,7 @@
 <template>
   <el-card>
     <CategoryTree
+      title="供应商分类"
       ref="treeRef"
       :fetcher="getSupplierCategoryTree"
       :invalidate-api="invalidateSupplierCategory"

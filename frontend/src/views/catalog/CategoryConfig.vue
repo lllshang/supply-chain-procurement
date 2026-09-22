@@ -1,6 +1,7 @@
 <template>
   <el-card>
     <CategoryTree
+      title="品类配置"
       ref="treeRef"
       :fetcher="getCategoryTree"
       :invalidate-api="invalidateCategory"

@@ -1,5 +1,6 @@
 <template>
   <el-card>
+    <PageHead title="产品导入" />
     <div class="toolbar">
       <el-radio-group v-model="mode">
         <el-radio-button value="single">单规格导入</el-radio-button>
@@ -35,7 +36,7 @@
             <span>展开行数：{{ (preview.rows || []).length }}</span>
             <span>错误数：{{ (preview.errors || []).length }}</span>
           </div>
-          <el-table :data="(preview.rows || []).slice(0, 50)" border stripe size="small" max-height="320">
+          <el-table :data="(preview.rows || []).slice(0, 50)" stripe size="small" max-height="320">
             <el-table-column prop="spuCode" label="SPU编码" width="120" />
             <el-table-column prop="spuName" label="SPU名称" min-width="140" />
             <el-table-column prop="skuCode" label="SKU编码" width="120" />
@@ -53,6 +54,7 @@
 <script setup>
 import { ref } from 'vue'
 import ImportWizard from '@/components/ImportWizard.vue'
+import PageHead from '@/components/PageHead.vue'
 import { importSingle, importMulti, previewMulti } from '@/api/catalog'
 
 // P-C6 产品导入向导（单规格 / 多规格预览+导入）

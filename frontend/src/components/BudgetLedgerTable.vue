@@ -1,5 +1,5 @@
 <template>
-  <el-table :data="rows" border stripe size="small" show-summary :summary-method="summaryMethod">
+  <el-table :data="rows" stripe size="small" show-summary :summary-method="summaryMethod">
     <el-table-column prop="subjectName" label="科目" min-width="150" fixed />
     <el-table-column v-if="showProject" prop="projectName" label="项目" min-width="130" />
     <el-table-column

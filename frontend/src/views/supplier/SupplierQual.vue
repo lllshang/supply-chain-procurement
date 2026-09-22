@@ -1,14 +1,16 @@
 <template>
   <el-card>
+    <PageHead title="资质管理">
+      <el-button v-permission="writePerm" type="primary" :icon="Plus" :disabled="!supplierId" @click="openCreate">录入资质</el-button>
+      <el-button :icon="Refresh" :disabled="!supplierId" @click="loadQuals">刷新</el-button>
+    </PageHead>
     <div class="toolbar">
       <el-select v-model="supplierId" filterable placeholder="选择供应商" style="width: 260px" @change="loadQuals">
         <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
       </el-select>
-      <el-button v-permission="writePerm" type="primary" :icon="Plus" :disabled="!supplierId" @click="openCreate">录入资质</el-button>
-      <el-button :icon="Refresh" :disabled="!supplierId" @click="loadQuals">刷新</el-button>
     </div>
 
-    <el-table :data="quals" v-loading="loading" border stripe>
+    <el-table :data="quals" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="160" />
       <el-table-column prop="type" label="类型" width="120" />
       <el-table-column prop="qualName" label="资质名称" min-width="140" />
@@ -59,6 +61,7 @@ import { ElMessage } from 'element-plus'
 import StatusTag from '@/components/StatusTag.vue'
 import FileUpload from '@/components/FileUpload.vue'
 import QualReviewDialog from '@/components/supplier/QualReviewDialog.vue'
+import PageHead from '@/components/PageHead.vue'
 import { pageSuppliers, listQuals, createQual, updateQual, reviewQual, resubmitQual, qualCallback } from '@/api/supplier'
 
 // P-S4 资质管理：录入 → 提交审核 → 审核（通过/驳回）→ 驳回重提

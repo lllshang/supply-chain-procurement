@@ -51,10 +51,6 @@
         </div>
       </el-header>
       <el-main class="main">
-        <!-- 页头标题（对齐原型：左侧 3px 主色竖条 + 22px 标题） -->
-        <div class="page-head">
-          <h1 class="page-title">{{ currentTitle }}</h1>
-        </div>
         <router-view />
       </el-main>
     </el-container>
@@ -298,27 +294,5 @@ function onCommand(cmd) {
   padding: 16px;
   overflow: auto;
   background: var(--app-bg-page);
-}
-.page-head {
-  margin-bottom: 16px;
-}
-.page-title {
-  position: relative;
-  margin: 0;
-  padding-left: 12px;
-  color: var(--app-text-primary);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.page-title::before {
-  content: "";
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 0;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--app-color-primary);
 }
 </style>

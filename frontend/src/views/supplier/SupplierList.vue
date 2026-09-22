@@ -1,16 +1,17 @@
 <template>
   <el-card>
+    <PageHead title="供应商档案">
+      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openForm()">新建供应商</el-button>
+    </PageHead>
     <div class="toolbar">
       <el-input v-model="query.name" class="filter" placeholder="供应商名称" clearable :prefix-icon="Search" @keyup.enter="reload" />
       <TreeSelect v-model="query.categoryId" class="filter" :fetcher="getSupplierCategoryTree" :leaf-only="false" placeholder="供应商分类" />
       <EnumSelect v-model="query.coopStatus" class="filter-sm" enum-key="coopStatus" placeholder="合作状态" />
       <EnumSelect v-model="query.blacklist" class="filter-sm" enum-key="blacklist" placeholder="黑名单" />
       <el-button type="primary" :icon="Search" @click="reload">查询</el-button>
-      <div class="spacer" />
-      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openForm()">新建供应商</el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" border stripe>
+    <el-table :data="list" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="150" />
       <el-table-column prop="name" label="名称" min-width="160" />
       <el-table-column prop="creditCode" label="信用代码" width="180" />
@@ -79,6 +80,7 @@ import { ElMessage } from 'element-plus'
 import TreeSelect from '@/components/TreeSelect.vue'
 import EnumSelect from '@/components/EnumSelect.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import PageHead from '@/components/PageHead.vue'
 import SupplierDrawer from '@/components/supplier/SupplierDrawer.vue'
 import { getSupplierCategoryTree, pageSuppliers, createSupplier, updateSupplier, getSupplier } from '@/api/supplier'
 import { usePagination } from '@/composables/usePagination'

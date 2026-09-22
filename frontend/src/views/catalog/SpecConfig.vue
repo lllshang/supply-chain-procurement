@@ -1,5 +1,8 @@
 <template>
   <el-card>
+    <PageHead title="规格配置">
+      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openDialog()">新建规格值</el-button>
+    </PageHead>
     <div class="toolbar">
       <el-radio-group v-model="view">
         <el-radio-button value="list">列表</el-radio-button>
@@ -12,11 +15,10 @@
         clearable
         :prefix-icon="Search"
       />
-      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openDialog()">新建规格值</el-button>
     </div>
 
     <!-- 列表视图 -->
-    <el-table v-if="view === 'list'" :data="filteredList" v-loading="loading" border stripe>
+    <el-table v-if="view === 'list'" :data="filteredList" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="180" />
       <el-table-column prop="specName" label="规格名" />
       <el-table-column prop="specValue" label="规格值" />
@@ -72,6 +74,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatusTag from '@/components/StatusTag.vue'
+import PageHead from '@/components/PageHead.vue'
 import { listSpecOptions, listSpecGrouped, createSpecOption, updateSpecOption, invalidateSpecOption } from '@/api/catalog'
 
 // P-C3 规格配置：列表 + 分组视图 + 增改/置无效

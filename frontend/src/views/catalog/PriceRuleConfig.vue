@@ -1,11 +1,11 @@
 <template>
   <el-card>
-    <div class="toolbar">
+    <PageHead title="价格规则">
       <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openDialog()">新建规则</el-button>
       <el-button :icon="Check" @click="validateVisible = true">价格校验</el-button>
-    </div>
+    </PageHead>
 
-    <el-table :data="list" v-loading="loading" border stripe>
+    <el-table :data="list" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="160" />
       <el-table-column label="规则类型" width="120">
         <template #default="{ row }">{{ enumLabel('priceRuleType', row.ruleType) }}</template>
@@ -109,6 +109,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { Plus, Check } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import EnumSelect from '@/components/EnumSelect.vue'
+import PageHead from '@/components/PageHead.vue'
 import MoneyInput from '@/components/MoneyInput.vue'
 import TreeSelect from '@/components/TreeSelect.vue'
 import StatusTag from '@/components/StatusTag.vue'

@@ -1,16 +1,17 @@
 <template>
   <el-card>
+    <PageHead title="产品库">
+      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openSpuForm()">新建产品</el-button>
+      <el-button :icon="Download" @click="exportVisible = true">导出</el-button>
+    </PageHead>
     <div class="toolbar">
       <el-input v-model="query.keyword" class="filter" placeholder="SPU 编码 / 名称" clearable :prefix-icon="Search" @keyup.enter="reload" />
       <TreeSelect v-model="query.categoryId" class="filter" :fetcher="getCategoryTree" :leaf-only="false" placeholder="品类" />
       <EnumSelect v-model="query.status" class="filter-sm" enum-key="productStatus" placeholder="状态" />
       <el-button type="primary" :icon="Search" @click="reload">查询</el-button>
-      <div class="spacer" />
-      <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openSpuForm()">新建产品</el-button>
-      <el-button :icon="Download" @click="exportVisible = true">导出</el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" border stripe>
+    <el-table :data="list" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="160" />
       <el-table-column prop="spuCode" label="SPU编码" width="140" />
       <el-table-column prop="name" label="名称" min-width="160" />
@@ -51,7 +52,7 @@
         <el-button v-permission="writePerm" type="primary" :icon="Plus" @click="openSkuForm()">新建 SKU</el-button>
         <el-button :icon="Refresh" @click="loadSkus">刷新</el-button>
       </div>
-      <el-table :data="skus" v-loading="skuLoading" border stripe size="small">
+      <el-table :data="skus" v-loading="skuLoading" stripe size="small">
         <el-table-column prop="id" label="ID" width="150" />
         <el-table-column prop="skuCode" label="SKU编码" width="140" />
         <el-table-column prop="spec" label="规格" />
@@ -89,6 +90,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { Plus, Search, Download, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PageHead from '@/components/PageHead.vue'
 import TreeSelect from '@/components/TreeSelect.vue'
 import EnumSelect from '@/components/EnumSelect.vue'
 import StatusTag from '@/components/StatusTag.vue'

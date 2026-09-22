@@ -1,6 +1,7 @@
 <template>
   <el-card>
     <CategoryTree
+      title="预算科目"
       ref="treeRef"
       :fetcher="getBudgetSubjectTree"
       :invalidate-api="invalidateBudgetSubject"
