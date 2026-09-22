@@ -3,6 +3,7 @@ package com.dzgylxt.common;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -11,6 +12,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -54,6 +57,40 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public R<Void> handleMissingParam(MissingServletRequestParameterException e) {
         return R.fail(ResultCode.PARAM_ERROR.getCode(), "缺少必填参数: " + e.getParameterName());
+    }
+
+    /**
+     * 畸形请求统一返回 400 / code 4000（P3-9）。
+     *
+     * <p>覆盖三类此前未映射、会落到 {@code handleUnknown} 兜底返回 500 / 1000 的异常：</p>
+     * <ul>
+     *   <li>{@link MissingServletRequestPartException}：multipart 请求缺少 {@code file} 等部件；</li>
+     *   <li>{@link HttpMessageNotReadableException}：请求体不是合法 JSON；</li>
+     *   <li>{@link MultipartException}：multipart 解析失败（含体积超限等子类）。</li>
+     * </ul>
+     *
+     * <p>响应体仍为统一 {@code {code, message, data, traceId}}，code 采用参数校验错误码 4000。</p>
+     */
+    @ExceptionHandler({
+            MissingServletRequestPartException.class,
+            HttpMessageNotReadableException.class,
+            MultipartException.class
+    })
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public R<Void> handleBadRequest(Exception e) {
+        log.warn("请求体非法: {}", e.getMessage());
+        return R.fail(ResultCode.PARAM_ERROR.getCode(), badRequestMessage(e));
+    }
+
+    /** 依据异常类型给出可读的参数错误描述。 */
+    private String badRequestMessage(Exception e) {
+        if (e instanceof MissingServletRequestPartException) {
+            return "缺少必填的请求部件: " + ((MissingServletRequestPartException) e).getRequestPartName();
+        }
+        if (e instanceof HttpMessageNotReadableException) {
+            return "请求体格式非法，无法解析";
+        }
+        return "multipart 请求解析失败";
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
