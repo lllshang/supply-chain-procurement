@@ -21,7 +21,8 @@ export function usePagination(fetcher, options = {}) {
     try {
       const res = await fetcher({ current: current.value, size: pageSize.value })
       const data = res?.data || {}
-      total.value = data.total || 0
+      // #28 后端 Long→String 序列化后 total 为字符串，el-pagination 要求 Number（#34b）
+      total.value = Number(data.total) || 0
       return data.records || []
     } catch (e) {
       // 请求失败回退空列表（错误已由拦截器提示）

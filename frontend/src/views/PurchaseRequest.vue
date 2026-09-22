@@ -21,7 +21,7 @@
         background
         layout="total, prev, pager, next"
         :total="total"
-        :current-page="page.current"
+        v-model:current-page="page.current"
         :page-size="page.size"
         @current-change="onPageChange"
       />
