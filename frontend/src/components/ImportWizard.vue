@@ -112,7 +112,7 @@ const previewValid = computed(() => !(preview.value && preview.value.valid === f
 
 const resultIcon = computed(() => {
   if (polling.value) return 'info'
-  const status = taskData.value?.status
+  const status = taskData.value?.status || summary.value?.status
   if (status === 'SUCCESS') return 'success'
   if (status === 'FAILED') return 'error'
   if (summary.value) return summary.value.success === false ? 'warning' : 'success'
@@ -120,7 +120,7 @@ const resultIcon = computed(() => {
 })
 const resultTitle = computed(() => {
   if (polling.value) return '导入进行中…'
-  const status = taskData.value?.status
+  const status = taskData.value?.status || summary.value?.status
   if (status === 'SUCCESS') return '导入成功'
   if (status === 'FAILED') return '导入失败'
   return '处理完成'
@@ -131,8 +131,12 @@ const resultSubTitle = computed(() => {
     return `总行数 ${t.totalRows}，失败 ${t.errorRows ?? 0} 行`
   }
   const s = summary.value
-  if (s) {
+  if (!s) return ''
+  if (s.successRows != null || s.failRows != null) {
     return `总行数 ${s.totalRows ?? '-'}，成功 ${s.successRows ?? '-'}，失败 ${s.failRows ?? 0} 行`
+  }
+  if (s.totalRows != null) {
+    return `总行数 ${s.totalRows}，失败 ${s.errorRows ?? 0} 行`
   }
   return ''
 })
@@ -154,8 +158,9 @@ async function doPreview() {
     ElMessage.warning('请先选择文件')
     return
   }
+  // 无预览接口（如单规格导入）→ 直接提交
   if (!props.previewApi) {
-    active.value = 1
+    await doImport()
     return
   }
   previewing.value = true

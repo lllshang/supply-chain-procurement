@@ -77,11 +77,11 @@ async function reload() {
 }
 
 function onAddRoot() {
-  emit('add', { parentId: 0, level: 1 })
+  emit('add', { parentId: 0, level: 1, parentName: '根节点' })
 }
 
 function onAddChild(data) {
-  emit('add', { parentId: data.id, level: (data.level || 1) + 1 })
+  emit('add', { parentId: data.id, level: (data.level || 1) + 1, parentName: data.name })
 }
 
 async function onInvalidate(data) {
