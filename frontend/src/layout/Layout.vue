@@ -3,9 +3,19 @@
     <el-aside width="220px" class="aside">
       <div class="logo">供应链中台</div>
       <el-menu :default-active="activeMenu" background-color="#001529" text-color="#fff" active-text-color="#409EFF" router>
-        <el-menu-item v-for="m in menus" :key="m.id" :index="m.path">
-          <span>{{ m.menuName }}</span>
-        </el-menu-item>
+        <template v-for="m in menus" :key="m.id">
+          <el-sub-menu v-if="m.children && m.children.length" :index="m.path || String(m.id)">
+            <template #title>
+              <span>{{ m.menuName }}</span>
+            </template>
+            <el-menu-item v-for="c in m.children" :key="c.id" :index="c.path">
+              <span>{{ c.menuName }}</span>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-menu-item v-else :index="m.path">
+            <span>{{ m.menuName }}</span>
+          </el-menu-item>
+        </template>
       </el-menu>
     </el-aside>
     <el-container>
@@ -46,6 +56,14 @@ const currentTitle = computed(() => route.meta?.title || '')
 
 onMounted(async () => {
   menus.value = await userStore.fetchMenus()
+  // 刷新后 Pinia 状态丢失，需重新拉取用户信息以填充 perms（供 v-permission 使用）
+  if (!userStore.userInfo) {
+    try {
+      await userStore.fetchUserInfo()
+    } catch (e) {
+      // 后端不可用时忽略，按钮级权限将按“放行”兜底
+    }
+  }
 })
 
 function onCommand(cmd) {
