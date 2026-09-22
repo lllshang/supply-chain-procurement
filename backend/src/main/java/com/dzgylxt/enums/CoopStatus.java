@@ -1,6 +1,7 @@
 package com.dzgylxt.enums;
 
 import com.baomidou.mybatisplus.annotation.IEnum;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * 供应商合作状态：0=正常，1=停用，2=冻结。
@@ -21,6 +22,7 @@ public enum CoopStatus implements IEnum<Integer> {
     }
 
     @Override
+    @JsonValue
     public Integer getValue() {
         return code;
     }

@@ -1,6 +1,7 @@
 package com.dzgylxt.enums;
 
 import com.baomidou.mybatisplus.annotation.IEnum;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * 供应商来源：0=平台录入，1=H5提交，2=导入。
@@ -19,6 +20,7 @@ public enum SupplierSource implements IEnum<Integer> {
     }
 
     @Override
+    @JsonValue
     public Integer getValue() {
         return code;
     }
