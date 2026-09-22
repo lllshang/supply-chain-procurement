@@ -183,19 +183,22 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
             reasons.add("已列入黑名单");
         }
         List<SupplierQual> quals = supplierQualMapper.selectBySupplier(supplierId);
-        boolean hasValid = false;
+        // 文档口径（R-X-01 / §2.3.3）：准入需存在 status=1 且“未过期”的必要资质；
+        // “未过期” = VALID + EXPIRING（R-SUP-04 三态；R-SUP-05 到期预警仅提示、不阻断采购闭环），
+        // 仅 EXPIRED 阻断。黑名单 / coop_status 判定保持不变。
+        boolean hasUnexpiredQual = false;
         QualValidity overall = null;
         for (SupplierQual qual : quals) {
             if (qual.getStatus() != QualStatus.APPROVED) {
                 continue;
             }
             QualValidity validity = QualValidityCalculator.compute(qual.getExpireAt(), qualWarnDays);
-            if (validity == QualValidity.VALID) {
-                hasValid = true;
+            if (validity == QualValidity.VALID || validity == QualValidity.EXPIRING) {
+                hasUnexpiredQual = true;
             }
             overall = better(overall, validity);
         }
-        if (!hasValid) {
+        if (!hasUnexpiredQual) {
             reasons.add("无有效资质");
         }
         SupplierAdmissionVO vo = new SupplierAdmissionVO();
@@ -203,7 +206,7 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         vo.setCoopStatus(supplier.getCoopStatus() == null ? null : supplier.getCoopStatus().getValue());
         vo.setIsBlacklist(supplier.getIsBlacklist() == null ? null : supplier.getIsBlacklist().getValue());
         vo.setQualValidity(overall == null ? "NONE" : overall.name());
-        vo.setQualified(coopOk && notBlack && hasValid);
+        vo.setQualified(coopOk && notBlack && hasUnexpiredQual);
         vo.setReasons(reasons);
         return vo;
     }

@@ -9,8 +9,8 @@ import java.util.List;
 /**
  * 供应商准入资格（R-X-01 派生只读）。
  *
- * <p>{@code qualified = coopStatus==0 && isBlacklist==0 && 存在有效资质}；本阶段只计算与暴露，
- * 不做拦截（拦截点由 P2/P3 落地）。</p>
+ * <p>{@code qualified = coopStatus==0 && isBlacklist==0 && 存在未过期资质（VALID/EXPIRING）}；
+ * 本阶段只计算与暴露，不做拦截（拦截点由 P2/P3 落地）。</p>
  */
 @Data
 public class SupplierAdmissionVO implements Serializable {
