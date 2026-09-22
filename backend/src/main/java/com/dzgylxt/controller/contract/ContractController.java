@@ -1,13 +1,102 @@
 package com.dzgylxt.controller.contract;
 
-import com.baomidou.mybatisplus.extension.service.IService;
-import com.dzgylxt.entity.contract.Contract;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.dzgylxt.common.PageResult;
+import com.dzgylxt.common.R;
 import com.dzgylxt.controller.BaseController;
+import com.dzgylxt.entity.contract.Contract;
+import com.dzgylxt.service.IContractService;
+import com.dzgylxt.vo.contract.ContractRenewReqVO;
+import com.dzgylxt.vo.contract.ContractSaveReqVO;
+import com.dzgylxt.vo.contract.ContractWarnVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-/** 合同管理。 */
+import java.util.List;
+
+/** 合同管理（设计 §5.4：/api/v1/contracts）。 */
 @RestController
 @RequestMapping("/api/v1/contracts")
-public class ContractController extends BaseController<IService<Contract>, Contract> {
+public class ContractController extends BaseController<IContractService, Contract> {
+
+    @Autowired
+    private IContractService contractService;
+
+    @Override
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/page")
+    public R<PageResult<Contract>> page(@RequestParam(defaultValue = "1") long current,
+                                        @RequestParam(defaultValue = "10") long size) {
+        Page<Contract> page = new Page<>(current, size);
+        IPage<Contract> result = service.page(page,
+                new LambdaQueryWrapper<Contract>().orderByDesc(Contract::getId));
+        return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 合同登记（准入校验 + 定标金额核对）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping
+    public R<Long> create(@RequestBody ContractSaveReqVO req) {
+        return R.ok(contractService.createContract(req));
+    }
+
+    /** 编辑（仅 DRAFT）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PutMapping("/{id}")
+    public R<Boolean> update(@PathVariable Long id, @RequestBody ContractSaveReqVO req) {
+        contractService.updateContract(id, req);
+        return R.ok(true);
+    }
+
+    /** 提交审批（金额超阈值升两级）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/submit")
+    public R<Long> submit(@PathVariable Long id) {
+        return R.ok(contractService.submit(id));
+    }
+
+    /** 终止（仅 EFFECTIVE；额度冻结）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/terminate")
+    public R<Boolean> terminate(@PathVariable Long id, @RequestBody TerminateReq req) {
+        contractService.terminate(id, req.getReason());
+        return R.ok(true);
+    }
+
+    /** 续签（新合同独立走审批）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/renew")
+    public R<Long> renew(@PathVariable Long id, @RequestBody ContractRenewReqVO req) {
+        return R.ok(contractService.renew(id, req));
+    }
+
+    /** 到期预警（valid_to − 提前天数配置）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/expiring-warn")
+    public R<List<ContractWarnVO>> expiringWarn() {
+        return R.ok(contractService.expiringList());
+    }
+
+    /** 终止请求体。 */
+    public static class TerminateReq {
+        private String reason;
+
+        public String getReason() {
+            return reason;
+        }
+
+        public void setReason(String reason) {
+            this.reason = reason;
+        }
+    }
 }

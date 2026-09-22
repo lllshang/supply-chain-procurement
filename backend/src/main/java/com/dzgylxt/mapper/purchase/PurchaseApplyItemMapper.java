@@ -5,7 +5,9 @@ import com.dzgylxt.entity.purchase.PurchaseApplyItem;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /** 采购申请明细 Mapper（含下单余量扣减的行锁查询）。 */
@@ -30,4 +32,25 @@ public interface PurchaseApplyItemMapper extends BaseMapper<PurchaseApplyItem> {
             + " <foreach collection='ids' item='id' open='(' separator=',' close=')' >#{id}</foreach>"
             + " ORDER BY id FOR UPDATE</script>")
     List<PurchaseApplyItem> selectForUpdateByIds(@Param("ids") List<Long> ids);
+
+    /**
+     * 条件扣减申请余量（乐观版本兜底，主防=行锁）。
+     *
+     * <p>SQL 条件 {@code version=? AND remain_qty >= qty} 双重保护：
+     * 行锁遗漏的极端场景下不超量，返回 0 行表示冲突/不足。</p>
+     */
+    @Update("UPDATE purchase_apply_item SET ordered_qty = ordered_qty + #{qty},"
+            + " remain_qty = remain_qty - #{qty}, version = version + 1"
+            + " WHERE id = #{id} AND version = #{version} AND remain_qty >= #{qty}")
+    int deductRemain(@Param("id") Long id,
+                     @Param("qty") BigDecimal qty,
+                     @Param("version") Integer version);
+
+    /** 回冲申请余量（订单取消/变更差额，乐观版本兜底）。 */
+    @Update("UPDATE purchase_apply_item SET ordered_qty = ordered_qty - #{qty},"
+            + " remain_qty = remain_qty + #{qty}, version = version + 1"
+            + " WHERE id = #{id} AND version = #{version}")
+    int restoreRemain(@Param("id") Long id,
+                      @Param("qty") BigDecimal qty,
+                      @Param("version") Integer version);
 }
