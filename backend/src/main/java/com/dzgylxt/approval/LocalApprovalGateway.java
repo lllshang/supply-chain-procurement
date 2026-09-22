@@ -1,5 +1,7 @@
 package com.dzgylxt.approval;
 
+import com.dzgylxt.common.BizException;
+import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.approval.ApprovalTask;
 import com.dzgylxt.enums.ApprovalStatus;
 import com.dzgylxt.mapper.approval.ApprovalTaskMapper;
@@ -73,7 +75,9 @@ public class LocalApprovalGateway implements ApprovalGateway {
     public void callback(Long taskId, ApprovalDecision decision, String comment) {
         ApprovalTask task = approvalTaskMapper.selectById(taskId);
         if (task == null) {
-            return;
+            // QA #29：不存在的任务必须显式失败（原静默返回造成"幽灵成功"，
+            // 与前端 ID 精度问题叠加时 UI 显示成功而 DB 无流转）
+            throw new BizException(ResultCode.NOT_FOUND, "审批任务不存在：" + taskId);
         }
         // 幂等：仅 CREATED / IN_PROGRESS 可流转，终态重复回调忽略（不重复推进业务状态机）
         if (task.getStatus() != ApprovalStatus.CREATED
