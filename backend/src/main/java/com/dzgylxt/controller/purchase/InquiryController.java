@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
-import com.dzgylxt.controller.BaseController;
 import com.dzgylxt.entity.purchase.Inquiry;
 import com.dzgylxt.entity.purchase.InquirySupplier;
 import com.dzgylxt.service.IInquiryService;
@@ -29,10 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 询价管理（设计 §5.2：/api/v1/inquiries，含供应商范围与比价）。 */
+/** 询价管理（设计 §5.2：/api/v1/inquiries，含供应商范围与比价；独立控制器）。 */
 @RestController
 @RequestMapping("/api/v1/inquiries")
-public class InquiryController extends BaseController<IInquiryService, Inquiry> {
+public class InquiryController {
 
     @Autowired
     private IInquiryService inquiryService;
@@ -43,15 +42,22 @@ public class InquiryController extends BaseController<IInquiryService, Inquiry> 
     @Autowired
     private IQuotationService quotationService;
 
-    @Override
+    /** 分页（id 倒序）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/page")
     public R<PageResult<Inquiry>> page(@RequestParam(defaultValue = "1") long current,
-                                       @RequestParam(defaultValue = "10") long size) {
+                                        @RequestParam(defaultValue = "10") long size) {
         Page<Inquiry> page = new Page<>(current, size);
-        IPage<Inquiry> result = service.page(page,
+        IPage<Inquiry> result = inquiryService.page(page,
                 new LambdaQueryWrapper<Inquiry>().orderByDesc(Inquiry::getId));
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 单据详情。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/{id}")
+    public R<Inquiry> getById(@PathVariable Long id) {
+        return R.ok(inquiryService.getById(id));
     }
 
     /** 创建询价（仅 APPROVED 申请）。 */

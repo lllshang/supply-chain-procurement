@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
-import com.dzgylxt.controller.BaseController;
 import com.dzgylxt.entity.order.OrderChange;
 import com.dzgylxt.entity.order.OrderItem;
 import com.dzgylxt.entity.order.PurchaseOrder;
@@ -25,10 +24,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 采购订单管理（设计 §5.5：/api/v1/orders，三重校验事务入口）。 */
+/** 采购订单管理（设计 §5.5：/api/v1/orders，三重校验事务入口；独立控制器）。 */
 @RestController
 @RequestMapping("/api/v1/orders")
-public class PurchaseOrderController extends BaseController<IOrderService, PurchaseOrder> {
+public class PurchaseOrderController {
 
     @Autowired
     private IOrderService orderService;
@@ -36,15 +35,22 @@ public class PurchaseOrderController extends BaseController<IOrderService, Purch
     @Autowired
     private OrderChangeMapper orderChangeMapper;
 
-    @Override
+    /** 分页（id 倒序）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/page")
     public R<PageResult<PurchaseOrder>> page(@RequestParam(defaultValue = "1") long current,
-                                             @RequestParam(defaultValue = "10") long size) {
+                                   @RequestParam(defaultValue = "10") long size) {
         Page<PurchaseOrder> page = new Page<>(current, size);
-        IPage<PurchaseOrder> result = service.page(page,
+        IPage<PurchaseOrder> result = orderService.page(page,
                 new LambdaQueryWrapper<PurchaseOrder>().orderByDesc(PurchaseOrder::getId));
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 单据详情。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/{id}")
+    public R<PurchaseOrder> getById(@PathVariable Long id) {
+        return R.ok(orderService.getById(id));
     }
 
     /** 下单（三重校验事务；物料/服务拆单，返回订单 id 列表）。 */

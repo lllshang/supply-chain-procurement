@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
-import com.dzgylxt.controller.BaseController;
 import com.dzgylxt.entity.contract.Contract;
 import com.dzgylxt.service.IContractService;
 import com.dzgylxt.vo.contract.ContractRenewReqVO;
@@ -24,23 +23,30 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 合同管理（设计 §5.4：/api/v1/contracts）。 */
+/** 合同管理（设计 §5.4：/api/v1/contracts；独立控制器）。 */
 @RestController
 @RequestMapping("/api/v1/contracts")
-public class ContractController extends BaseController<IContractService, Contract> {
+public class ContractController {
 
     @Autowired
     private IContractService contractService;
 
-    @Override
+    /** 分页（id 倒序）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/page")
     public R<PageResult<Contract>> page(@RequestParam(defaultValue = "1") long current,
                                         @RequestParam(defaultValue = "10") long size) {
         Page<Contract> page = new Page<>(current, size);
-        IPage<Contract> result = service.page(page,
+        IPage<Contract> result = contractService.page(page,
                 new LambdaQueryWrapper<Contract>().orderByDesc(Contract::getId));
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 单据详情。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/{id}")
+    public R<Contract> getById(@PathVariable Long id) {
+        return R.ok(contractService.getById(id));
     }
 
     /** 合同登记（准入校验 + 定标金额核对）。 */

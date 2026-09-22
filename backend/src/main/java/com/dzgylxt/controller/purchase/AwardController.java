@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
-import com.dzgylxt.controller.BaseController;
 import com.dzgylxt.entity.purchase.Award;
 import com.dzgylxt.entity.purchase.AwardItem;
 import com.dzgylxt.service.IAwardService;
@@ -23,23 +22,30 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 定标管理（设计 §5.3：/api/v1/awards）。 */
+/** 定标管理（设计 §5.3：/api/v1/awards；独立控制器）。 */
 @RestController
 @RequestMapping("/api/v1/awards")
-public class AwardController extends BaseController<IAwardService, Award> {
+public class AwardController {
 
     @Autowired
     private IAwardService awardService;
 
-    @Override
+    /** 分页（id 倒序）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/page")
     public R<PageResult<Award>> page(@RequestParam(defaultValue = "1") long current,
-                                     @RequestParam(defaultValue = "10") long size) {
+                                        @RequestParam(defaultValue = "10") long size) {
         Page<Award> page = new Page<>(current, size);
-        IPage<Award> result = service.page(page,
+        IPage<Award> result = awardService.page(page,
                 new LambdaQueryWrapper<Award>().orderByDesc(Award::getId));
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 单据详情。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/{id}")
+    public R<Award> getById(@PathVariable Long id) {
+        return R.ok(awardService.getById(id));
     }
 
     /** 创建定标（仅已截标询价；按 SKU 可拆多供应商）。 */

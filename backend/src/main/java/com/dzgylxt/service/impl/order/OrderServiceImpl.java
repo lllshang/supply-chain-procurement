@@ -145,10 +145,10 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
             Long supplierId = req.getSupplierId() == null ? contract.getSupplierId() : req.getSupplierId();
 
-            // ③ apply_item 行锁（按 id 排序加锁，杜绝交叉死锁）
+            // ③ apply_item 行锁（调用方排序去重，配合主键 IN 扫描保证锁序一致，杜绝交叉死锁）
             List<Long> itemIds = req.getItems().stream()
                     .map(OrderCreateReqVO.OrderItemReqVO::getApplyItemId)
-                    .toList();
+                    .distinct().sorted().toList();
             List<PurchaseApplyItem> lockedItems = applyItemMapper.selectForUpdateByIds(itemIds);
             Map<Long, PurchaseApplyItem> itemMap = new LinkedHashMap<>();
             for (PurchaseApplyItem locked : lockedItems) {

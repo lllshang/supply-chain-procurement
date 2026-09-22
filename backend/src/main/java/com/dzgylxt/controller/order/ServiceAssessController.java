@@ -1,8 +1,10 @@
 package com.dzgylxt.controller.order;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
-import com.dzgylxt.controller.BaseController;
 import com.dzgylxt.entity.order.ServiceAssess;
 import com.dzgylxt.service.IServiceAssessService;
 import com.dzgylxt.vo.order.ServiceAssessSaveReqVO;
@@ -13,17 +15,36 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 服务验收考核（设计 §5.5：/api/v1/orders/{orderId}/service-assess 口径；扣款供 P3 结算 D8）。 */
+/** 服务验收考核（设计 §5.5：扣款供 P3 结算取数 D8；独立控制器）。 */
 @RestController
 @RequestMapping("/api/v1/service-assesses")
-public class ServiceAssessController extends BaseController<IServiceAssessService, ServiceAssess> {
+public class ServiceAssessController {
 
     @Autowired
     private IServiceAssessService assessService;
+
+    /** 分页（id 倒序）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/page")
+    public R<PageResult<ServiceAssess>> page(@RequestParam(defaultValue = "1") long current,
+                                   @RequestParam(defaultValue = "10") long size) {
+        Page<ServiceAssess> page = new Page<>(current, size);
+        IPage<ServiceAssess> result = assessService.page(page,
+                new LambdaQueryWrapper<ServiceAssess>().orderByDesc(ServiceAssess::getId));
+        return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 单据详情。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/{id}")
+    public R<ServiceAssess> getById(@PathVariable Long id) {
+        return R.ok(assessService.getById(id));
+    }
 
     /** 登记考核（仅服务订单 order_type=1）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")

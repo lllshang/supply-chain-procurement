@@ -95,6 +95,8 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         award.setStatus(AwardStatus.PENDING_APPROVAL);
         award.setRemark(req.getRemark());
         award.setAmount(BigDecimal.ZERO);
+        // 单头供应商（列 NOT NULL）：主供应商（金额最大明细），明细为准；insert 前必须落值
+        award.setSupplierId(mainSupplierOf(req.getItems()));
         save(award);
 
         BigDecimal amount = replaceItems(award, req);
@@ -179,12 +181,33 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
                 .eq(AwardItem::getAwardId, awardId).orderByAsc(AwardItem::getId));
     }
 
+    /** 主供应商 = 定标明细中金额最大（price × qty 快照前口径即可，仅用于单头落值）行的供应商。 */
+    private Long mainSupplierOf(List<AwardSaveReqVO.AwardItemVO> items) {
+        BigDecimal best = BigDecimal.valueOf(-1);
+        Long supplierId = null;
+        for (AwardSaveReqVO.AwardItemVO vo : items) {
+            if (vo.getSupplierId() == null) {
+                throw new BizException(ResultCode.PARAM_ERROR, "定标明细行的供应商必填");
+            }
+            BigDecimal lineAmount = (vo.getPrice() == null ? BigDecimal.ZERO : vo.getPrice())
+                    .multiply(vo.getQty() == null ? BigDecimal.ZERO : vo.getQty());
+            if (lineAmount.compareTo(best) > 0) {
+                best = lineAmount;
+                supplierId = vo.getSupplierId();
+            }
+        }
+        return supplierId;
+    }
+
     /** 落定标明细（含换算快照），返回定标总金额 = Σ price(基本单位口径) × qty_in_base_unit。 */
     private BigDecimal replaceItems(Award award, AwardSaveReqVO req) {
         awardItemMapper.delete(Wrappers.<AwardItem>lambdaQuery()
                 .eq(AwardItem::getAwardId, award.getId()));
         LocalDateTime now = LocalDateTime.now();
         BigDecimal amount = BigDecimal.ZERO;
+        // 单头供应商（列 NOT NULL）：按 SKU 拆多供应商时记金额最大的主供应商，明细为准
+        BigDecimal mainAmount = BigDecimal.valueOf(-1);
+        Long mainSupplierId = null;
         for (AwardSaveReqVO.AwardItemVO vo : req.getItems()) {
             if (vo.getSkuId() == null || vo.getSupplierId() == null
                     || vo.getPrice() == null || vo.getQty() == null
@@ -212,8 +235,14 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
             item.setRemark(vo.getRemark());
             awardItemMapper.insert(item);
 
-            amount = amount.add(vo.getPrice().multiply(qtyBase));
+            BigDecimal lineAmount = vo.getPrice().multiply(qtyBase);
+            if (lineAmount.compareTo(mainAmount) > 0) {
+                mainAmount = lineAmount;
+                mainSupplierId = vo.getSupplierId();
+            }
+            amount = amount.add(lineAmount);
         }
+        award.setSupplierId(mainSupplierId);
         return amount.setScale(2, RoundingMode.HALF_UP);
     }
 

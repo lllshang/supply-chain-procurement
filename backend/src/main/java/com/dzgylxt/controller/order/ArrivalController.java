@@ -1,8 +1,10 @@
 package com.dzgylxt.controller.order;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
-import com.dzgylxt.controller.BaseController;
 import com.dzgylxt.entity.order.Arrival;
 import com.dzgylxt.entity.order.ArrivalItem;
 import com.dzgylxt.enums.HandleType;
@@ -19,16 +21,35 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-/** 到货验收管理（设计 §5.5：/api/v1/arrivals）。 */
+/** 到货验收管理（设计 §5.5：/api/v1/arrivals；独立控制器）。 */
 @RestController
 @RequestMapping("/api/v1/arrivals")
-public class ArrivalController extends BaseController<IArrivalService, Arrival> {
+public class ArrivalController {
 
     @Autowired
     private IArrivalService arrivalService;
+
+    /** 分页（id 倒序）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/page")
+    public R<PageResult<Arrival>> page(@RequestParam(defaultValue = "1") long current,
+                                   @RequestParam(defaultValue = "10") long size) {
+        Page<Arrival> page = new Page<>(current, size);
+        IPage<Arrival> result = arrivalService.page(page,
+                new LambdaQueryWrapper<Arrival>().orderByDesc(Arrival::getId));
+        return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 单据详情。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/{id}")
+    public R<Arrival> getById(@PathVariable Long id) {
+        return R.ok(arrivalService.getById(id));
+    }
 
     /** 到货登记（按订单展开明细，应收=未入库余量）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
@@ -76,13 +97,13 @@ public class ArrivalController extends BaseController<IArrivalService, Arrival> 
 
     /** 入库请求体。 */
     public static class StoreReq {
-        private java.math.BigDecimal qtyStored;
+        private BigDecimal qtyStored;
 
-        public java.math.BigDecimal getQtyStored() {
+        public BigDecimal getQtyStored() {
             return qtyStored;
         }
 
-        public void setQtyStored(java.math.BigDecimal qtyStored) {
+        public void setQtyStored(BigDecimal qtyStored) {
             this.qtyStored = qtyStored;
         }
     }

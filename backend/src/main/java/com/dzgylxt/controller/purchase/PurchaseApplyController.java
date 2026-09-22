@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
-import com.dzgylxt.controller.BaseController;
 import com.dzgylxt.entity.purchase.PurchaseApply;
 import com.dzgylxt.service.IPurchaseApplyService;
 import com.dzgylxt.vo.purchase.ApplyDetailRespVO;
@@ -24,37 +23,36 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
-
 /**
  * 采购申请管理（设计 §5.1：/api/v1/purchase-requests）。
  *
- * <p>POST/PUT 接收 {@link ApplySaveReqVO}；兼容 P1 前端仅建头的
- * {@code {title, type}} 表单（items 可空，提交前必须补明细）。</p>
+ * <p>POST/PUT 接收 {@link ApplySaveReqVO}；兼容 P1 前端仅建头的 {@code {title, type}}
+ * 表单（items 可空，提交前必须补明细）。独立控制器（不走 BaseController 通用 save，
+ * 避免实体直落与 VO 创建的映射冲突）。</p>
  */
 @RestController
 @RequestMapping("/api/v1/purchase-requests")
-public class PurchaseApplyController extends BaseController<IPurchaseApplyService, PurchaseApply> {
+public class PurchaseApplyController {
 
     @Autowired
     private IPurchaseApplyService applyService;
 
-    @Override
+    /** 分页（id 倒序）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/page")
     public R<PageResult<PurchaseApply>> page(@RequestParam(defaultValue = "1") long current,
                                              @RequestParam(defaultValue = "10") long size) {
         Page<PurchaseApply> page = new Page<>(current, size);
-        IPage<PurchaseApply> result = service.page(page,
+        IPage<PurchaseApply> result = applyService.page(page,
                 new LambdaQueryWrapper<PurchaseApply>().orderByDesc(PurchaseApply::getId));
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
     }
 
-    @Override
+    /** 单头。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/{id}")
     public R<PurchaseApply> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+        return R.ok(applyService.getById(id));
     }
 
     /** 详情（头 + 明细含换算快照列）。 */
@@ -96,6 +94,6 @@ public class PurchaseApplyController extends BaseController<IPurchaseApplyServic
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + filename)
                 .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
-                .body(new String(bytes, StandardCharsets.UTF_8).getBytes(StandardCharsets.UTF_8));
+                .body(bytes);
     }
 }

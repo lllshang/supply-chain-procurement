@@ -26,11 +26,14 @@ public interface PurchaseApplyItemMapper extends BaseMapper<PurchaseApplyItem> {
     /**
      * 按明细 ID 集合锁行（FOR UPDATE，本单涉及的申请明细行）。
      *
-     * <p>对 IN 列表先排序后加锁，保证多线程对同一批明细的加锁顺序一致。</p>
+     * <p>注意：此处<b>不可写 {@code ORDER BY ... FOR UPDATE}</b>——项目 SQL 拦截器
+     * （JSqlParser）会重排为 {@code FOR UPDATE ORDER BY ...} 导致语法错误。
+     * 主键 IN 扫描本身按主键升序加锁，天然保证多线程锁序一致；
+     * 调用方须传入排序去重后的 ID 列表（见 OrderServiceImpl）。</p>
      */
     @Select("<script>SELECT * FROM purchase_apply_item WHERE deleted = 0 AND id IN"
             + " <foreach collection='ids' item='id' open='(' separator=',' close=')' >#{id}</foreach>"
-            + " ORDER BY id FOR UPDATE</script>")
+            + " FOR UPDATE</script>")
     List<PurchaseApplyItem> selectForUpdateByIds(@Param("ids") List<Long> ids);
 
     /**
