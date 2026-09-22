@@ -1,0 +1,199 @@
+/* ==========================================================================
+   全局主题层 —— 对齐原型 scm.16u.cc（后台管理端原型）
+   仅样式：设计令牌 + Element Plus 变量/组件观感覆盖，不含任何业务逻辑。
+   令牌均以 --app-* 前缀暴露，供布局与业务页复用。
+   ========================================================================== */
+
+:root {
+  /* ---- 品牌色 ---- */
+  --app-color-primary: #409eff;
+  --app-color-primary-hover: #1677ff;
+  --app-gradient-header: linear-gradient(90deg, #3fa2ff 0%, #409eff 58%, #2e91f6 100%);
+  --app-gradient-brand: linear-gradient(135deg, #3da1ff 0%, #409eff 100%);
+
+  /* ---- 文本 ---- */
+  --app-text-primary: #1f2937;
+  --app-text-regular: #374151;
+  --app-text-secondary: #6b7280;
+  --app-text-muted: #596577;
+  --app-text-weak: #7b8797;
+
+  /* ---- 背景与边框 ---- */
+  --app-bg-page: #f0f4f9;
+  --app-bg-card: #ffffff;
+  --app-bg-menu-hover: #eef6ff;
+  --app-bg-table-head: #f7f9fc;
+  --app-bg-stripe: #fafbfd;
+  --app-border: #e5e7eb;
+  --app-border-card: #e7edf5;
+  --app-border-table: #e2e8f0;
+  --app-border-aside: #e6eef8;
+
+  /* ---- 圆角 / 尺寸 ---- */
+  --app-radius: 8px;
+  --app-header-height: 60px;
+  --app-sidebar-width: 224px;
+
+  /* ---- Element Plus 变量对齐 ---- */
+  --el-text-color-primary: #1f2937;
+  --el-text-color-regular: #374151;
+  --el-border-radius-base: 4px;
+  --el-font-family: Inter, PingFang SC, Microsoft YaHei, system-ui, -apple-system, sans-serif;
+  --el-color-primary: #409eff;
+  --el-color-primary-light-3: #79bbff;
+  --el-color-primary-light-5: #a0cfff;
+  --el-color-primary-light-7: #c6e2ff;
+  --el-color-primary-light-8: #d9ecff;
+  --el-color-primary-light-9: #ecf5ff;
+  --el-color-primary-dark-2: #337ecc;
+  --el-bg-color-page: #f0f4f9;
+  --el-card-border-radius: 8px;
+}
+
+/* ---- 基础排版 ---- */
+body {
+  color: var(--app-text-primary);
+  background: var(--app-bg-page);
+  font-family: Inter, PingFang SC, Microsoft YaHei, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizelegibility;
+}
+
+/* ---- 全局细滚动条 ---- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c9d8ea;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #afc6e0;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ==========================================================================
+   卡片 / 面板
+   ========================================================================== */
+.el-card {
+  border-color: var(--app-border-card);
+  border-radius: var(--app-radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.el-card__body {
+  padding: 18px;
+}
+.el-card__header {
+  padding: 14px 18px;
+  border-bottom-color: var(--app-border-card);
+  color: var(--app-text-primary);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   表格：表头浅灰底 + 次级文字色，行高与斑马纹对齐原型
+   ========================================================================== */
+.el-table {
+  --el-table-border-color: var(--app-border-table);
+  --el-table-header-bg-color: var(--app-bg-table-head);
+  --el-table-header-text-color: var(--app-text-muted);
+  --el-table-row-hover-bg-color: #f5f9ff;
+  --el-table-text-color: var(--app-text-regular);
+  font-size: 13px;
+}
+.el-table th.el-table__cell {
+  height: 46px;
+  font-weight: 600;
+}
+.el-table .el-table__row td.el-table__cell {
+  padding: 11px 0;
+}
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: var(--app-bg-stripe);
+}
+
+/* ==========================================================================
+   表单 / 输入
+   ========================================================================== */
+.el-form-item__label {
+  color: var(--app-text-regular);
+  font-weight: 500;
+}
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  box-shadow: 0 0 0 1px #dbe3ec inset;
+}
+.el-input__wrapper:hover,
+.el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px #93c5fd inset;
+}
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px #3b82f6 inset !important;
+}
+
+/* ==========================================================================
+   弹层：对话框 / 抽屉 / 消息框
+   ========================================================================== */
+.el-dialog {
+  border-radius: var(--app-radius);
+}
+.el-dialog__title {
+  color: var(--app-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+.el-drawer {
+  --el-drawer-padding-primary: 20px;
+}
+.el-drawer__header {
+  margin-bottom: 16px;
+  color: var(--app-text-primary);
+  font-weight: 600;
+}
+.el-message-box {
+  border-radius: var(--app-radius);
+}
+
+/* ==========================================================================
+   标签 / 分页
+   ========================================================================== */
+.el-tag {
+  border-radius: 4px;
+  font-weight: 500;
+}
+.el-pagination {
+  --el-pagination-text-color: var(--app-text-secondary);
+  --el-pagination-hover-color: var(--app-color-primary);
+}
+
+/* ==========================================================================
+   通用页面元素（与各业务页既有 class 约定配合，不改变行为）
+   ========================================================================== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.toolbar .el-button + .el-button {
+  margin-left: 0;
+}
+.pager {
+  margin-top: 16px;
+  justify-content: flex-end;
+  display: flex;
+}
+
+/* 卡片内的筛选行 */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
