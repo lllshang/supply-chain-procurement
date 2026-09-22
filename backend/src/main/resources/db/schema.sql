@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS spu (
     spec       VARCHAR(255) NULL,
     base_unit  VARCHAR(20)  NULL,
     status     TINYINT      NOT NULL DEFAULT 0,
+    image_file_key VARCHAR(255) NULL COMMENT '主图 file_key（引用 file_meta.file_key）',
+    description    TEXT         NULL COMMENT '商品简介',
     remark     VARCHAR(255) NULL,
     created_by BIGINT       NULL,
     created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
@@ -135,6 +137,11 @@ CREATE TABLE IF NOT EXISTS sku (
     base_unit  VARCHAR(20)  NULL,
     spec       VARCHAR(255) NULL,
     status     TINYINT      NOT NULL DEFAULT 0,
+    purchase_unit   VARCHAR(32)   NULL COMMENT '采购单位（引用 unit.code）',
+    reference_price DECIMAL(18,2) NULL COMMENT '参考价（≥0）',
+    standard_price  DECIMAL(18,2) NULL COMMENT '标准价（≥0）',
+    valuation_type  TINYINT       NULL COMMENT '计价方式：0计件 1计重',
+    image_file_key  VARCHAR(255)  NULL COMMENT '主图 file_key（引用 file_meta.file_key）',
     created_by BIGINT       NULL,
     created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
     updated_by BIGINT       NULL,
@@ -162,8 +169,12 @@ CREATE TABLE IF NOT EXISTS supplier (
     name          VARCHAR(200) NOT NULL,
     credit_code   VARCHAR(50)  NULL COMMENT '统一社会信用代码',
     level         VARCHAR(20)  NULL,
-    category      VARCHAR(50)  NULL,
-    status        TINYINT      NOT NULL DEFAULT 0 COMMENT '0审核中 1通过 2驳回',
+    category      VARCHAR(50)  NULL COMMENT '遗留自由文本分类',
+    supplier_category_id BIGINT NULL COMMENT '供应商分类ID（引用 supplier_category）',
+    status        TINYINT      NOT NULL DEFAULT 0 COMMENT '资质状态：0审核中 1通过 2驳回',
+    coop_status   TINYINT      NOT NULL DEFAULT 0 COMMENT '合作状态：0正常 1停用 2冻结',
+    is_blacklist  TINYINT      NOT NULL DEFAULT 0 COMMENT '黑名单：0否 1是',
+    source        TINYINT      NOT NULL DEFAULT 0 COMMENT '来源：0平台录入 1H5提交 2导入',
     legal_person  VARCHAR(50)  NULL,
     business_scope VARCHAR(500) NULL,
     contact       VARCHAR(50)  NULL,
@@ -181,9 +192,13 @@ CREATE TABLE IF NOT EXISTS supplier_qual (
     id         BIGINT     NOT NULL PRIMARY KEY,
     supplier_id BIGINT     NOT NULL,
     type       VARCHAR(50) NULL,
+    qual_name  VARCHAR(128) NULL COMMENT '资质名称',
     file_key   VARCHAR(200) NULL,
     expire_at  DATETIME    NULL,
     status     TINYINT    NOT NULL DEFAULT 0 COMMENT '0待审 1通过 2驳回',
+    reject_reason VARCHAR(512) NULL COMMENT '驳回原因（驳回时必填）',
+    reviewed_by   BIGINT       NULL COMMENT '审核人ID',
+    reviewed_at   DATETIME     NULL COMMENT '审核时间',
     created_by BIGINT     NULL,
     created_at DATETIME   DEFAULT CURRENT_TIMESTAMP,
     updated_by BIGINT     NULL,
@@ -195,7 +210,11 @@ CREATE TABLE IF NOT EXISTS supplier_sku (
     id         BIGINT      NOT NULL PRIMARY KEY,
     supplier_id BIGINT      NOT NULL,
     sku_id     BIGINT      NOT NULL,
-    price_range VARCHAR(100) NULL,
+    supplier_sku_code VARCHAR(64) NULL COMMENT '供应商货号',
+    price_range VARCHAR(100) NULL COMMENT '遗留价格区间（保留兼容）',
+    supply_price DECIMAL(18,2) NULL COMMENT '供货价（≥0，以本字段为准）',
+    package_unit VARCHAR(32) NULL COMMENT '包装单位（引用 unit.code）',
+    bind_scope TINYINT     NOT NULL DEFAULT 0 COMMENT '绑定范围：0不限定 1限定报价接单',
     status     TINYINT     NOT NULL DEFAULT 0,
     created_by BIGINT      NULL,
     created_at DATETIME    DEFAULT CURRENT_TIMESTAMP,
@@ -223,6 +242,7 @@ CREATE TABLE IF NOT EXISTS budget_line (
     id         BIGINT        NOT NULL PRIMARY KEY,
     header_id  BIGINT        NOT NULL,
     subject_id BIGINT        NOT NULL,
+    project_id BIGINT        NULL COMMENT '预算项目ID（可选，引用 budget_project）',
     period     INT           NOT NULL DEFAULT 0 COMMENT '0=年度 1-12=月份',
     amount     DECIMAL(18,2) NOT NULL DEFAULT 0,
     used_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
@@ -495,5 +515,155 @@ CREATE TABLE IF NOT EXISTS file_meta (
     updated_at    DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted       TINYINT      NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='文件元数据';
+
+-- ---------------- P1 主数据 / 基础配置（catalog） ----------------
+CREATE TABLE IF NOT EXISTS product_category (
+    id         BIGINT       NOT NULL PRIMARY KEY,
+    parent_id  BIGINT       NOT NULL DEFAULT 0 COMMENT '父节点ID，0=根',
+    level      TINYINT      NOT NULL COMMENT '层级：1/2/3',
+    code       VARCHAR(64)  NOT NULL COMMENT '品类编码（有效期内唯一）',
+    name       VARCHAR(128) NOT NULL COMMENT '品类名称',
+    tree_path  VARCHAR(512) NOT NULL DEFAULT '' COMMENT '祖先路径，如 /1/3/7',
+    status     TINYINT      NOT NULL DEFAULT 0 COMMENT '0=有效 1=无效',
+    created_by BIGINT       NULL,
+    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT       NULL,
+    updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    INT          NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_code (code, deleted),
+    KEY idx_parent (parent_id),
+    KEY idx_tree_path (tree_path)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='商品三级品类';
+
+CREATE TABLE IF NOT EXISTS unit (
+    id         BIGINT      NOT NULL PRIMARY KEY,
+    code       VARCHAR(32) NOT NULL COMMENT '单位编码（有效期内唯一），如 PCS/BOX/KG',
+    name       VARCHAR(64) NOT NULL COMMENT '单位名称，如 个/箱/千克',
+    status     TINYINT     NOT NULL DEFAULT 0 COMMENT '0=有效 1=无效',
+    created_by BIGINT      NULL,
+    created_at DATETIME    DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT      NULL,
+    updated_at DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    INT         NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_code (code, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='计量单位字典';
+
+CREATE TABLE IF NOT EXISTS spec_option (
+    id         BIGINT       NOT NULL PRIMARY KEY,
+    spec_name  VARCHAR(64)  NOT NULL COMMENT '规格名，如 颜色/尺寸',
+    spec_value VARCHAR(128) NOT NULL COMMENT '规格值，如 红/S',
+    status     TINYINT      NOT NULL DEFAULT 0 COMMENT '0=有效 1=无效',
+    created_by BIGINT       NULL,
+    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT       NULL,
+    updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    INT          NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_name_value (spec_name, spec_value, deleted),
+    KEY idx_spec_name (spec_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='规格维度可选值';
+
+CREATE TABLE IF NOT EXISTS price_rule (
+    id         BIGINT        NOT NULL PRIMARY KEY,
+    rule_type  TINYINT       NOT NULL COMMENT '1=最低限价 2=最高限价 3=区间 4=公式',
+    ref_type   TINYINT       NOT NULL COMMENT '引用类型：1=商品(SPU) 2=品类',
+    ref_id     BIGINT        NULL COMMENT '引用对象ID（spu.id 或 product_category.id）',
+    min_price  DECIMAL(18,2) NULL COMMENT '最低价/区间下界',
+    max_price  DECIMAL(18,2) NULL COMMENT '最高价/区间上界',
+    expression VARCHAR(512)  NULL COMMENT '公式表达式（rule_type=4 时使用）',
+    status     TINYINT       NOT NULL DEFAULT 0 COMMENT '0=有效 1=无效',
+    created_by BIGINT        NULL,
+    created_at DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT        NULL,
+    updated_at DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    INT           NOT NULL DEFAULT 0,
+    KEY idx_ref (ref_type, ref_id),
+    KEY idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='价格规则';
+
+CREATE TABLE IF NOT EXISTS supplier_category (
+    id         BIGINT       NOT NULL PRIMARY KEY,
+    parent_id  BIGINT       NOT NULL DEFAULT 0 COMMENT '父节点ID，0=根',
+    level      TINYINT      NOT NULL COMMENT '层级：1/2/3',
+    code       VARCHAR(64)  NOT NULL COMMENT '分类编码（有效期内唯一）',
+    name       VARCHAR(128) NOT NULL COMMENT '分类名称',
+    tree_path  VARCHAR(512) NOT NULL DEFAULT '' COMMENT '祖先路径，如 /1/3/7',
+    status     TINYINT      NOT NULL DEFAULT 0 COMMENT '0=有效 1=无效',
+    created_by BIGINT       NULL,
+    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT       NULL,
+    updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    INT          NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_code (code, deleted),
+    KEY idx_parent (parent_id),
+    KEY idx_tree_path (tree_path)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='供应商三级分类';
+
+-- ---------------- P1 主数据 / 基础配置（budget） ----------------
+CREATE TABLE IF NOT EXISTS budget_subject (
+    id           BIGINT       NOT NULL PRIMARY KEY,
+    code         VARCHAR(64)  NOT NULL COMMENT '科目编码（有效期内唯一）',
+    name         VARCHAR(128) NOT NULL COMMENT '科目名称',
+    parent_id    BIGINT       NOT NULL DEFAULT 0 COMMENT '父科目ID，0=根',
+    subject_type TINYINT      NOT NULL COMMENT '1=支出 2=收入',
+    status       TINYINT      NOT NULL DEFAULT 0 COMMENT '0=有效 1=无效',
+    created_by   BIGINT       NULL,
+    created_at   DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by   BIGINT       NULL,
+    updated_at   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted      INT          NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_code (code, deleted),
+    KEY idx_parent (parent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='预算科目';
+
+CREATE TABLE IF NOT EXISTS budget_project (
+    id         BIGINT       NOT NULL PRIMARY KEY,
+    code       VARCHAR(64)  NOT NULL COMMENT '项目编码（有效期内唯一）',
+    name       VARCHAR(128) NOT NULL COMMENT '项目名称',
+    year       INT          NOT NULL COMMENT '所属年份，如 2026',
+    status     TINYINT      NOT NULL DEFAULT 0 COMMENT '0=有效 1=无效',
+    created_by BIGINT       NULL,
+    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT       NULL,
+    updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    INT          NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_code (code, deleted),
+    KEY idx_year (year)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='预算项目（可选维度）';
+
+-- ---------------- P1 存量表加字段迁移（幂等说明） ----------------
+-- 说明：新建库时上述 CREATE TABLE 已含新列，以下 ALTER 会因"列已存在"报 1060，
+-- 由 spring.sql.init.continue-on-error=true 忽略；存量库则由这些 ALTER 补齐新列。
+-- 更严谨的幂等迁移脚本见 scripts/sql/p1_alter.sql。
+ALTER TABLE `spu`
+  ADD COLUMN `image_file_key` VARCHAR(255) NULL COMMENT '主图 file_key（引用 file_meta.file_key）' AFTER `status`,
+  ADD COLUMN `description`    TEXT         NULL COMMENT '商品简介' AFTER `image_file_key`;
+
+ALTER TABLE `sku`
+  ADD COLUMN `purchase_unit`   VARCHAR(32)   NULL COMMENT '采购单位（引用 unit.code）'        AFTER `spec`,
+  ADD COLUMN `reference_price` DECIMAL(18,2) NULL COMMENT '参考价（≥0）'                     AFTER `purchase_unit`,
+  ADD COLUMN `standard_price`  DECIMAL(18,2) NULL COMMENT '标准价（≥0）'                     AFTER `reference_price`,
+  ADD COLUMN `valuation_type`  TINYINT       NULL COMMENT '计价方式：0=计件 1=计重'           AFTER `standard_price`,
+  ADD COLUMN `image_file_key`  VARCHAR(255)  NULL COMMENT '主图 file_key（引用 file_meta.file_key）' AFTER `valuation_type`;
+
+ALTER TABLE `supplier`
+  ADD COLUMN `supplier_category_id` BIGINT  NULL     DEFAULT NULL COMMENT '供应商分类ID（引用 supplier_category）' AFTER `category`,
+  ADD COLUMN `coop_status`          TINYINT NOT NULL DEFAULT 0    COMMENT '合作状态：0=正常 1=停用 2=冻结'      AFTER `status`,
+  ADD COLUMN `is_blacklist`         TINYINT NOT NULL DEFAULT 0    COMMENT '黑名单：0=否 1=是'                     AFTER `coop_status`,
+  ADD COLUMN `source`               TINYINT NOT NULL DEFAULT 0    COMMENT '来源：0=平台录入 1=H5提交 2=导入'      AFTER `is_blacklist`;
+
+ALTER TABLE `supplier_qual`
+  ADD COLUMN `qual_name`     VARCHAR(128) NULL COMMENT '资质名称'              AFTER `type`,
+  ADD COLUMN `reject_reason` VARCHAR(512) NULL COMMENT '驳回原因（驳回时必填）' AFTER `status`,
+  ADD COLUMN `reviewed_by`   BIGINT       NULL COMMENT '审核人ID'              AFTER `reject_reason`,
+  ADD COLUMN `reviewed_at`   DATETIME     NULL COMMENT '审核时间'              AFTER `reviewed_by`;
+
+ALTER TABLE `supplier_sku`
+  ADD COLUMN `supplier_sku_code` VARCHAR(64)   NULL     COMMENT '供应商货号'                    AFTER `sku_id`,
+  ADD COLUMN `supply_price`      DECIMAL(18,2) NULL     COMMENT '供货价（≥0，以本字段为准）'     AFTER `price_range`,
+  ADD COLUMN `package_unit`      VARCHAR(32)   NULL     COMMENT '包装单位（引用 unit.code）'     AFTER `supply_price`,
+  ADD COLUMN `bind_scope`        TINYINT       NOT NULL DEFAULT 0 COMMENT '绑定范围：0=不限定 1=限定报价接单' AFTER `package_unit`;
+
+ALTER TABLE `budget_line`
+  ADD COLUMN `project_id` BIGINT NULL DEFAULT NULL COMMENT '预算项目ID（可选，引用 budget_project；NULL=未启用项目维度）' AFTER `subject_id`;
 
 SET FOREIGN_KEY_CHECKS = 1;

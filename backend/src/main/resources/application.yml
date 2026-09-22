@@ -107,6 +107,9 @@ app:
     allowed-headers: "*"
     allow-credentials: true
     max-age: 3600
+  supplier:
+    # 资质到期预警提前天数（R-SUP-04，默认 30）
+    qual-warn-days: 30
 
 logging:
   level:

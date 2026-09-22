@@ -7,7 +7,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
 
 /**
  * 商品 SPU（商品定义：名称/分类/规格）。
@@ -24,5 +23,9 @@ public class Spu extends BaseEntity implements Serializable {
     private String baseUnit;
     /** 0=正常，1=停用 */
     private Integer status;
+    /** 主图 file_key（引用 file_meta.file_key） */
+    private String imageFileKey;
+    /** 商品简介 */
+    private String description;
     private String remark;
 }

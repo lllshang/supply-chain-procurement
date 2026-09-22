@@ -52,4 +52,28 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 (11, 1, 11, NOW(), NOW(), 0),
 (12, 1, 12, NOW(), NOW(), 0);
 
+-- ---------------- P1 计量单位字典（基础种子，幂等） ----------------
+INSERT IGNORE INTO unit (id, code, name, status, created_at, updated_at, deleted) VALUES
+(1, 'PCS', '个',   0, NOW(), NOW(), 0),
+(2, 'BOX', '箱',   0, NOW(), NOW(), 0),
+(3, 'KG',  '千克', 0, NOW(), NOW(), 0),
+(4, 'M',   '米',   0, NOW(), NOW(), 0);
+
+-- ---------------- P1 商品品类（示例三级树，幂等） ----------------
+INSERT IGNORE INTO product_category (id, parent_id, level, code, name, tree_path, status, created_at, updated_at, deleted) VALUES
+(1, 0, 1, 'CAT_L1_BASE', '原材料', '/1',   0, NOW(), NOW(), 0),
+(2, 1, 2, 'CAT_L2_METAL', '金属',  '/1/2', 0, NOW(), NOW(), 0),
+(3, 2, 3, 'CAT_L3_STEEL', '钢材',  '/1/2/3', 0, NOW(), NOW(), 0);
+
+-- ---------------- P1 供应商分类（示例三级树，幂等） ----------------
+INSERT IGNORE INTO supplier_category (id, parent_id, level, code, name, tree_path, status, created_at, updated_at, deleted) VALUES
+(1, 0, 1, 'SUP_L1_MFG', '制造商', '/1',   0, NOW(), NOW(), 0),
+(2, 1, 2, 'SUP_L2_METAL', '金属制品', '/1/2', 0, NOW(), NOW(), 0),
+(3, 2, 3, 'SUP_L3_STEEL', '钢材制造', '/1/2/3', 0, NOW(), NOW(), 0);
+
+-- ---------------- P1 预算科目（示例，幂等） ----------------
+INSERT IGNORE INTO budget_subject (id, code, name, parent_id, subject_type, status, created_at, updated_at, deleted) VALUES
+(1, 'BS_EXPENSE', '支出', 0, 1, 0, NOW(), NOW(), 0),
+(2, 'BS_RAW',     '原材料费', 1, 1, 0, NOW(), NOW(), 0);
+
 SET FOREIGN_KEY_CHECKS = 1;
