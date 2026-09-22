@@ -32,6 +32,20 @@ public class GlobalExceptionHandler {
         return R.fail(e.getCode(), e.getMessage());
     }
 
+    /**
+     * 参数校验业务异常：HTTP 400 / code 4000（P3-20）。
+     *
+     * <p>{@link ParamException} 是 {@link BizException} 的子类，异常解析按最具体类型
+     * 优先命中本处理器；通用 {@link #handleBiz} 行为不变（其余业务异常仍为 HTTP 200
+     * + 业务码，如登录失败 2010）。响应体仍为统一 {@code {code, message, data, traceId}}。</p>
+     */
+    @ExceptionHandler(ParamException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public R<Void> handleParam(ParamException e) {
+        log.warn("参数错误: {}", e.getMessage());
+        return R.fail(e.getCode(), e.getMessage());
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public R<Void> handleAuth(AuthenticationException e) {
