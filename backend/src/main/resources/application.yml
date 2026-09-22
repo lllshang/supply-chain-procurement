@@ -91,7 +91,7 @@ app:
     refresh-token-validity-in-seconds: 1209600  # 14d
     issuer: dzgylxt
     # 白名单（放行，无需 JWT）—— 逗号分隔字符串，由 SecurityConfig 按 "," 解析
-    permit-urls: "/api/v1/auth/login,/api/v1/auth/refresh,/h5/api/v1/auth/login,/v3/api-docs/**,/swagger-ui/**,/swagger-ui.html,/doc.html,/actuator/**,/error,/favicon.ico"
+    permit-urls: "/api/v1/auth/login,/h5/api/v1/auth/login,/v3/api-docs/**,/swagger-ui/**,/swagger-ui.html,/doc.html,/actuator/**,/error,/favicon.ico"
   minio:
     endpoint: http://127.0.0.1:9000
     access-key: minioadmin

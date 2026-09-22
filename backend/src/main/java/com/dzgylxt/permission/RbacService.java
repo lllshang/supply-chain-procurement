@@ -1,14 +1,14 @@
 package com.dzgylxt.permission;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.dzgylxt.entity.SysMenu;
-import com.dzgylxt.entity.SysRole;
-import com.dzgylxt.entity.SysRoleMenu;
-import com.dzgylxt.entity.SysUserRole;
-import com.dzgylxt.mapper.SysMenuMapper;
-import com.dzgylxt.mapper.SysRoleMapper;
-import com.dzgylxt.mapper.SysRoleMenuMapper;
-import com.dzgylxt.mapper.SysUserRoleMapper;
+import com.dzgylxt.entity.identity.SysMenu;
+import com.dzgylxt.entity.identity.SysRole;
+import com.dzgylxt.entity.identity.SysRoleMenu;
+import com.dzgylxt.entity.identity.SysUserRole;
+import com.dzgylxt.mapper.identity.SysMenuMapper;
+import com.dzgylxt.mapper.identity.SysRoleMapper;
+import com.dzgylxt.mapper.identity.SysRoleMenuMapper;
+import com.dzgylxt.mapper.identity.SysUserRoleMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
