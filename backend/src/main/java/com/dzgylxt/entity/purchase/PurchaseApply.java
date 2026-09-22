@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 
 /**
  * 采购申请。
@@ -26,5 +27,7 @@ public class PurchaseApply extends BaseEntity implements Serializable {
     /** 预算状态：0=未校验，1=通过，2=超预算 */
     private Integer budgetStatus;
     private Long applicantId;
+    /** 期望到货日期（P2 §1.3.1） */
+    private LocalDate expectedDate;
     private String remark;
 }

@@ -12,6 +12,8 @@ import java.math.BigDecimal;
 
 /**
  * 报价（线下 Excel 导入）。
+ *
+ * <p>P2 §1.3.4：批次维度管理——新批次导入后同询价旧批次 {@code invalid=1}（不物理删）。</p>
  */
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -19,9 +21,21 @@ import java.math.BigDecimal;
 public class Quotation extends BaseEntity implements Serializable {
 
     private Long inquiryId;
+    /** 报价批次 BJ-{inquiry_no}-{seq2}（P2 新增） */
+    private String batchNo;
     private Long supplierId;
     private Long skuId;
+    /** 报价单位（unit.code，P2 新增） */
+    private String purchaseUnit;
+    /** 基本单位数量（导入单位换算所得，P2 新增） */
+    private BigDecimal qtyInBaseUnit;
+    /** 原始报价附件（file_meta.file_key，P2 新增） */
+    private String fileKey;
     private BigDecimal price;
+    /** @deprecated P2 起弃用停写（仅历史展示），换算改用 purchase_unit + qty_in_base_unit 结构化口径。 */
+    @Deprecated
     private String convSnapshot;
     private QuotationStatus status;
+    /** 0=有效 1=已失效（新批次导入后旧批次置 1，P2 新增） */
+    private Integer invalid;
 }

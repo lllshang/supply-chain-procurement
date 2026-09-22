@@ -19,6 +19,8 @@ import java.math.BigDecimal;
 public class Arrival extends BaseEntity implements Serializable {
 
     private Long orderId;
+    /** 到货单号 DH-{order_no}-{seq2}（全局唯一，P2 §1.3.9） */
+    private String arrivalNo;
     private BigDecimal actualQty;
     private BigDecimal diffQty;
     private String voucherFileKey;
