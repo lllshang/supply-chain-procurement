@@ -29,6 +29,27 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (11,0, '报表中心',   1, '/report',    'report/index',  'chart',    'report:view',    11, 0, NOW(), NOW(), 0),
 (12,0, '基础设置',   1, '/setting',   'setting/index', 'tools',    'setting:view',   12, 0, NOW(), NOW(), 0);
 
+-- ---------------- P1 二级菜单（商品库/供应商/预算，parent_id 指向一级菜单；幂等） ----------------
+-- perms 同时含 read 与 write 键，RbacService.getUserPerms 汇总后供前端 v-permission 使用。
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
+-- 商品库管理（parent_id = 2）
+(201, 2, '品类配置', 2, '/catalog/category',   'catalog/category/index',  'list',   'catalog:category:read,catalog:category:write', 1, 0, NOW(), NOW(), 0),
+(202, 2, '单位配置', 2, '/catalog/unit',       'catalog/unit/index',      'scale-to-original', 'catalog:unit:read,catalog:unit:write', 2, 0, NOW(), NOW(), 0),
+(203, 2, '规格配置', 2, '/catalog/spec',       'catalog/spec/index',      'operation','catalog:spec:read,catalog:spec:write',       3, 0, NOW(), NOW(), 0),
+(204, 2, '价格规则', 2, '/catalog/price-rule', 'catalog/price/index',     'price-tag','catalog:price:read,catalog:price:write',     4, 0, NOW(), NOW(), 0),
+(205, 2, '产品库',   2, '/catalog/product',    'catalog/product/index',   'goods',   'catalog:spu:read,catalog:spu:write',          5, 0, NOW(), NOW(), 0),
+(206, 2, '产品导入', 2, '/catalog/import',     'catalog/import/index',    'upload',  'catalog:import',                              6, 0, NOW(), NOW(), 0),
+-- 供应商管理（parent_id = 3）
+(301, 3, '供应商分类', 2, '/supplier/category', 'supplier/category/index','share',   'supplier:read,supplier:write',                1, 0, NOW(), NOW(), 0),
+(302, 3, '供应商档案', 2, '/supplier/list',    'supplier/list/index',     'shop',    'supplier:read,supplier:write',                2, 0, NOW(), NOW(), 0),
+(303, 3, '产品绑定',   2, '/supplier/bind',    'supplier/bind/index',     'link',    'supplier:read,supplier:write',                3, 0, NOW(), NOW(), 0),
+(304, 3, '资质管理',   2, '/supplier/qual',    'supplier/qual/index',     'medal',   'supplier:read,supplier:write',                4, 0, NOW(), NOW(), 0),
+-- 预算管理（parent_id = 5）
+(501, 5, '预算科目',   2, '/budget/subject', 'budget/subject/index', 'notebook','budget:subject:read,budget:subject:write', 1, 0, NOW(), NOW(), 0),
+(502, 5, '预算项目',   2, '/budget/project', 'budget/project/index', 'folder',  'budget:project:read,budget:project:write', 2, 0, NOW(), NOW(), 0),
+(503, 5, '年度预算导入', 2, '/budget/import','budget/import/index',  'upload',  'budget:import',                            3, 0, NOW(), NOW(), 0),
+(504, 5, '预算台账',   2, '/budget/ledger',  'budget/ledger/index',  'money',   'budget:read',                              4, 0, NOW(), NOW(), 0);
+
 -- ---------------- 管理员用户（密码 admin123，BCrypt $2a$10$） ----------------
 INSERT IGNORE INTO sys_user (id, username, password_hash, nickname, main_dept_id, status, created_at, updated_at, deleted)
 VALUES (1, 'admin', '$2a$10$pxjuW3BEyUH2EunQavbwWOTURXWJ/fLDpzVNrkKgjhsisXNhR8iwK', '管理员', 1, 0, NOW(), NOW(), 0);
@@ -50,7 +71,22 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 (9,  1, 9,  NOW(), NOW(), 0),
 (10, 1, 10, NOW(), NOW(), 0),
 (11, 1, 11, NOW(), NOW(), 0),
-(12, 1, 12, NOW(), NOW(), 0);
+(12, 1, 12, NOW(), NOW(), 0),
+-- P1 二级菜单授权（超级管理员）
+(13, 1, 201, NOW(), NOW(), 0),
+(14, 1, 202, NOW(), NOW(), 0),
+(15, 1, 203, NOW(), NOW(), 0),
+(16, 1, 204, NOW(), NOW(), 0),
+(17, 1, 205, NOW(), NOW(), 0),
+(18, 1, 206, NOW(), NOW(), 0),
+(19, 1, 301, NOW(), NOW(), 0),
+(20, 1, 302, NOW(), NOW(), 0),
+(21, 1, 303, NOW(), NOW(), 0),
+(22, 1, 304, NOW(), NOW(), 0),
+(23, 1, 501, NOW(), NOW(), 0),
+(24, 1, 502, NOW(), NOW(), 0),
+(25, 1, 503, NOW(), NOW(), 0),
+(26, 1, 504, NOW(), NOW(), 0);
 
 -- ---------------- P1 计量单位字典（基础种子，幂等） ----------------
 INSERT IGNORE INTO unit (id, code, name, status, created_at, updated_at, deleted) VALUES

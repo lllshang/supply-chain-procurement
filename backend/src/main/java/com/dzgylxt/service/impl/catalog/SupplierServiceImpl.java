@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -119,9 +120,13 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
 
         List<Long> categoryIds = result.getRecords().stream()
                 .map(Supplier::getSupplierCategoryId).filter(java.util.Objects::nonNull).distinct().toList();
-        Map<Long, String> nameMap = categoryIds.isEmpty() ? Map.of()
-                : supplierCategoryMapper.selectBatchIds(categoryIds).stream()
-                .collect(Collectors.toMap(SupplierCategory::getId, SupplierCategory::getName, (a, b) -> a));
+        // 注意：必须使用可变 HashMap 而非 Map.of()——当本次分页无分类时，
+        // 后续若用 null 作 key 查询，Map.of() 会抛 NullPointerException（回归 #12）。
+        Map<Long, String> nameMap = new HashMap<>();
+        if (!categoryIds.isEmpty()) {
+            nameMap.putAll(supplierCategoryMapper.selectBatchIds(categoryIds).stream()
+                    .collect(Collectors.toMap(SupplierCategory::getId, SupplierCategory::getName, (a, b) -> a)));
+        }
 
         List<SupplierPageRespVO> records = new ArrayList<>();
         for (Supplier s : result.getRecords()) {
@@ -131,7 +136,8 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
             vo.setCreditCode(s.getCreditCode());
             vo.setLevel(s.getLevel());
             vo.setSupplierCategoryId(s.getSupplierCategoryId());
-            vo.setCategoryName(nameMap.get(s.getSupplierCategoryId()));
+            // 分类可能为空（supplier_category_id = NULL），需判空避免以 null 查询映射。
+            vo.setCategoryName(s.getSupplierCategoryId() == null ? null : nameMap.get(s.getSupplierCategoryId()));
             vo.setCoopStatus(s.getCoopStatus() == null ? null : s.getCoopStatus().getValue());
             vo.setIsBlacklist(s.getIsBlacklist() == null ? null : s.getIsBlacklist().getValue());
             vo.setSource(s.getSource() == null ? null : s.getSource().getValue());
