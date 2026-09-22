@@ -29,7 +29,7 @@
         background
         layout="total, prev, pager, next"
         :total="total"
-        :current-page="current"
+        v-model:current-page="current"
         :page-size="pageSize"
         @current-change="handlePage"
       />

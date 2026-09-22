@@ -17,7 +17,7 @@
           <template #default="{ row }">
             <el-button link type="primary" @click="openItems(row)">明细</el-button>
             <el-button v-if="row.status === 'REJECTED'" link type="primary" v-permission="'purchase:award:write'" @click="openCreate(row)">调整重提</el-button>
-            <el-button v-if="['DRAFT', 'REJECTED'].includes(row.status)" link type="warning" v-permission="'purchase:award:submit'" @click="onSubmit(row)">提交审批</el-button>
+            <el-button v-if="['PENDING_APPROVAL', 'REJECTED'].includes(row.status)" link type="warning" v-permission="'purchase:award:submit'" @click="onSubmit(row)">提交审批</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -26,7 +26,7 @@
         background
         layout="total, prev, pager, next"
         :total="total"
-        :current-page="current"
+        v-model:current-page="current"
         :page-size="pageSize"
         @current-change="handlePage"
       />

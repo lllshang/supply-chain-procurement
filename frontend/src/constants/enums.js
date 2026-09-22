@@ -75,6 +75,11 @@ export const ENUMS = {
     { value: 0, label: '草稿', type: 'info' },
     { value: 1, label: '生效', type: 'success' },
     { value: 2, label: '归档', type: 'warning' }
+  ],
+  // 合同类型（ContractSaveReqVO.contractType 为 Integer，须提交数值 #33①）
+  contractType: [
+    { value: 0, label: '物料' },
+    { value: 1, label: '服务' }
   ]
 }
 

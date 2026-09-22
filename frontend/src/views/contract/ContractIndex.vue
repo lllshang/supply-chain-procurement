@@ -28,7 +28,7 @@
         background
         layout="total, prev, pager, next"
         :total="total"
-        :current-page="current"
+        v-model:current-page="current"
         :page-size="pageSize"
         @current-change="handlePage"
       />
@@ -41,7 +41,8 @@
         <el-form-item label="来源定标 ID"><el-input v-model="form.awardId" placeholder="线下补录可空" /></el-form-item>
         <el-form-item label="合同名称" required><el-input v-model="form.title" /></el-form-item>
         <el-form-item label="合同类型">
-          <EnumSelect v-model="form.contractType" enum-key="itemType" :clearable="false" placeholder="0=物料 / 1=服务" />
+          <!-- #33①：contractType 后端为 Integer，须提交数值（0=物料 / 1=服务），不能传枚举名 -->
+          <EnumSelect v-model="form.contractType" enum-key="contractType" :clearable="false" />
         </el-form-item>
         <el-form-item label="合同金额" required><el-input-number v-model="form.amount" :min="0.01" :controls="false" style="width: 180px" /></el-form-item>
         <el-form-item label="有效期">
@@ -95,9 +96,9 @@ function handlePage(p) {
 // ---- 登记 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ supplierId: '', awardId: '', title: '', contractType: 'MATERIAL', amount: 0, validRange: null })
+const form = reactive({ supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, validRange: null })
 function openCreate() {
-  Object.assign(form, { supplierId: '', awardId: '', title: '', contractType: 'MATERIAL', amount: 0, validRange: null })
+  Object.assign(form, { supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, validRange: null })
   formVisible.value = true
 }
 async function onSave() {
