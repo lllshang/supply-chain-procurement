@@ -86,6 +86,110 @@ export const STRING_ENUMS = {
     { value: 'EXPIRING', label: '即将到期', type: 'warning' },
     { value: 'EXPIRED', label: '已过期', type: 'danger' },
     { value: 'NONE', label: '无', type: 'info' }
+  ],
+  // ---- P2 采购主链路（后端 IEnum 以枚举名序列化，故为字符串枚举） ----
+  // 采购申请状态机
+  applyStatus: [
+    { value: 'DRAFT', label: '草稿', type: 'info' },
+    { value: 'BUDGET_PENDING', label: '预算待审', type: 'warning' },
+    { value: 'PURCHASE_PENDING', label: '采购待审', type: 'warning' },
+    { value: 'APPROVED', label: '已审批', type: 'success' },
+    { value: 'REJECTED', label: '已驳回', type: 'danger' },
+    { value: 'PARTIAL_ORDER', label: '部分转单', type: 'warning' },
+    { value: 'FULL_ORDER', label: '全部转单', type: 'success' }
+  ],
+  // 申请类型
+  applyType: [
+    { value: 'STANDARD', label: '标准/项目采购' },
+    { value: 'DAILY', label: '日常/框架采购' },
+    { value: 'OFFLINE', label: '线下补录' }
+  ],
+  // 审批任务状态
+  approvalStatus: [
+    { value: 'CREATED', label: '待审批', type: 'warning' },
+    { value: 'IN_PROGRESS', label: '审批中', type: 'warning' },
+    { value: 'APPROVED', label: '通过', type: 'success' },
+    { value: 'REJECTED', label: '驳回', type: 'danger' },
+    { value: 'CALLBACK_DONE', label: '已完成', type: 'success' }
+  ],
+  // 审批业务类型
+  approvalBizType: [
+    { value: 'PURCHASE_APPLY', label: '采购申请' },
+    { value: 'AWARD', label: '定标' },
+    { value: 'CONTRACT', label: '合同' },
+    { value: 'FULFILLMENT_ADJUST', label: '履约调整' }
+  ],
+  // 询价状态
+  inquiryStatus: [
+    { value: 'DRAFT', label: '草稿', type: 'info' },
+    { value: 'PUBLISHED', label: '已发布', type: 'success' },
+    { value: 'CLOSED', label: '已截标', type: 'warning' },
+    { value: 'CANCELLED', label: '已取消', type: 'danger' }
+  ],
+  // 报价状态
+  quotationStatus: [
+    { value: 'SUBMITTED', label: '已提交', type: 'info' },
+    { value: 'ACCEPTED', label: '已采纳', type: 'success' },
+    { value: 'REJECTED', label: '已否决', type: 'danger' }
+  ],
+  // 定标状态
+  awardStatus: [
+    { value: 'PENDING_APPROVAL', label: '待审批', type: 'warning' },
+    { value: 'APPROVED', label: '已审批', type: 'success' },
+    { value: 'REJECTED', label: '已驳回', type: 'danger' }
+  ],
+  // 合同状态
+  contractStatus: [
+    { value: 'DRAFT', label: '草稿', type: 'info' },
+    { value: 'PENDING_APPROVAL', label: '待审批', type: 'warning' },
+    { value: 'EFFECTIVE', label: '生效中', type: 'success' },
+    { value: 'EXPIRED', label: '已过期', type: 'danger' },
+    { value: 'TERMINATED', label: '已终止', type: 'danger' }
+  ],
+  // 订单状态
+  orderStatus: [
+    { value: 'CREATED', label: '已创建', type: 'warning' },
+    { value: 'PARTIAL_RECEIVED', label: '部分到货', type: 'warning' },
+    { value: 'RECEIVED', label: '已到货', type: 'success' },
+    { value: 'SETTLED', label: '已结算', type: 'success' },
+    { value: 'CANCELLED', label: '已取消', type: 'danger' },
+    { value: 'PAID', label: '已付款', type: 'success' }
+  ],
+  // 到货验收状态
+  arrivalStatus: [
+    { value: 'ARRIVAL_CONFIRMED', label: '到货确认', type: 'warning' },
+    { value: 'PARTIAL_STORED', label: '部分入库', type: 'warning' },
+    { value: 'STORED', label: '已入库', type: 'success' }
+  ],
+  // 差异处理方式
+  handleType: [
+    { value: 'ACCEPT', label: '接受' },
+    { value: 'RETURN', label: '退货' },
+    { value: 'REPLENISH', label: '补货' }
+  ],
+  // 履约调整状态
+  adjustStatus: [
+    { value: 'DRAFT', label: '草稿', type: 'info' },
+    { value: 'IN_APPROVAL', label: '审批中', type: 'warning' },
+    { value: 'EFFECTIVE', label: '生效', type: 'success' },
+    { value: 'REJECTED', label: '驳回', type: 'danger' }
+  ],
+  // 履约调整类型
+  adjustType: [
+    { value: 'DIFF', label: '差异' },
+    { value: 'RETURN', label: '退货' },
+    { value: 'REPLENISH', label: '补货' },
+    { value: 'CHANGE', label: '变更' }
+  ],
+  // 履约调整业务类型
+  adjustBizType: [
+    { value: 'ORDER', label: '订单' },
+    { value: 'ARRIVAL', label: '到货' }
+  ],
+  // 行级类型（物料/服务）
+  itemType: [
+    { value: 'MATERIAL', label: '物料' },
+    { value: 'SERVICE', label: '服务' }
   ]
 }
 

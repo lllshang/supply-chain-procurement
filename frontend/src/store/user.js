@@ -37,7 +37,21 @@ export const fallbackMenus = [
       { id: 304, parentId: 3, menuName: '资质管理', icon: 'medal', path: '/supplier/qual', menuType: 2, perms: 'supplier:read,supplier:write' }
     ]
   },
-  { id: 4, parentId: 0, menuName: '采购管理', icon: 'shopping', path: '/purchase', menuType: 1 },
+  {
+    id: 4,
+    parentId: 0,
+    menuName: '采购管理',
+    icon: 'shopping',
+    path: '/purchase',
+    menuType: 1,
+    children: [
+      { id: 401, parentId: 4, menuName: '采购申请', icon: 'list', path: '/purchase/apply', menuType: 2, perms: 'purchase:apply:read,purchase:apply:write,purchase:apply:export' },
+      { id: 402, parentId: 4, menuName: '常购清单', icon: 'goods', path: '/purchase/frequent', menuType: 2, perms: 'purchase:frequent:read,purchase:frequent:write' },
+      { id: 403, parentId: 4, menuName: '询价管理', icon: 'trend', path: '/purchase/inquiry', menuType: 2, perms: 'purchase:inquiry:read,purchase:inquiry:write' },
+      { id: 404, parentId: 4, menuName: '报价管理', icon: 'upload', path: '/purchase/quotation', menuType: 2, perms: 'purchase:quotation:read,purchase:quotation:write' },
+      { id: 405, parentId: 4, menuName: '比价定标', icon: 'medal', path: '/purchase/award', menuType: 2, perms: 'purchase:award:read,purchase:award:write,purchase:award:submit' }
+    ]
+  },
   {
     id: 5,
     parentId: 0,
@@ -54,7 +68,21 @@ export const fallbackMenus = [
   },
   { id: 6, parentId: 0, menuName: '合同管理', icon: 'document', path: '/contract', menuType: 1 },
   { id: 7, parentId: 0, menuName: '报价定标', icon: 'trend', path: '/quotation', menuType: 1 },
-  { id: 8, parentId: 0, menuName: '订单与验收', icon: 'list', path: '/order', menuType: 1 },
+  {
+    id: 8,
+    parentId: 0,
+    menuName: '订单与验收',
+    icon: 'list',
+    path: '/order',
+    menuType: 1,
+    children: [
+      { id: 801, parentId: 8, menuName: '采购订单', icon: 'list', path: '/order/list', menuType: 2, perms: 'order:read,order:write,order:change' },
+      { id: 802, parentId: 8, menuName: '到货验收', icon: 'box', path: '/order/arrival', menuType: 2, perms: 'arrival:read,arrival:write,arrival:confirm' },
+      { id: 803, parentId: 8, menuName: '入库台账', icon: 'money', path: '/order/ledger', menuType: 2, perms: 'arrival:read' },
+      { id: 804, parentId: 8, menuName: '履约调整', icon: 'tools', path: '/order/adjust', menuType: 2, perms: 'adjust:read,adjust:write' },
+      { id: 805, parentId: 8, menuName: '服务考核', icon: 'audit', path: '/order/assess', menuType: 2, perms: 'order:assess:read,order:assess:write' }
+    ]
+  },
   { id: 9, parentId: 0, menuName: '结算与付款', icon: 'credit-card', path: '/settlement', menuType: 1 },
   { id: 10, parentId: 0, menuName: '审批中心', icon: 'audit', path: '/approval', menuType: 1 },
   { id: 11, parentId: 0, menuName: '报表中心', icon: 'chart', path: '/report', menuType: 1 },
