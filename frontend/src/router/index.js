@@ -49,15 +49,29 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const token = localStorage.getItem('token')
   if (!token && !to.meta.public) {
     next('/login')
-  } else if (to.path === '/login' && token) {
-    next('/')
-  } else {
-    next()
+    return
   }
+  if (to.path === '/login' && token) {
+    next('/')
+    return
+  }
+  // 【修复 #11】进入受保护路由前确保用户信息（含 perms）已就绪：
+  // 否则整页刷新时视图先挂载、perms 后到达，导致 v-permission 判定不确定。
+  if (token && !to.meta.public) {
+    const userStore = useUserStore()
+    if (!userStore.userInfo) {
+      try {
+        await userStore.fetchUserInfo()
+      } catch (e) {
+        // 后端不可用时忽略；按钮权限按“放行”兜底（真实拦截在后端）
+      }
+    }
+  }
+  next()
 })
 
 export default router

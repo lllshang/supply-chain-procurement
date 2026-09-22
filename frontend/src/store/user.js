@@ -3,6 +3,8 @@ import request from '@/utils/request'
 
 // 后端不可用时的本地兜底菜单（与后端 /api/v1/menu 契约一致）
 // P1：为商品库/供应商/预算三组补充二级 children（parentId 指向父项 id），叶子带 perms。
+// perms 同时含 read/write 键，与 backend db/data.sql 的 sys_menu 种子保持一致，
+// 供 v-permission 判定（缺 write 键会导致写按钮被隐藏）。
 export const fallbackMenus = [
   { id: 1, parentId: 0, menuName: '系统管理', path: '/system', menuType: 1 },
   {
@@ -12,11 +14,11 @@ export const fallbackMenus = [
     path: '/catalog',
     menuType: 1,
     children: [
-      { id: 201, parentId: 2, menuName: '品类配置', path: '/catalog/category', menuType: 2, perms: 'catalog:category:read' },
-      { id: 202, parentId: 2, menuName: '单位配置', path: '/catalog/unit', menuType: 2, perms: 'catalog:unit:read' },
-      { id: 203, parentId: 2, menuName: '规格配置', path: '/catalog/spec', menuType: 2, perms: 'catalog:spec:read' },
-      { id: 204, parentId: 2, menuName: '价格规则', path: '/catalog/price-rule', menuType: 2, perms: 'catalog:price:read' },
-      { id: 205, parentId: 2, menuName: '产品库', path: '/catalog/product', menuType: 2, perms: 'catalog:spu:read' },
+      { id: 201, parentId: 2, menuName: '品类配置', path: '/catalog/category', menuType: 2, perms: 'catalog:category:read,catalog:category:write' },
+      { id: 202, parentId: 2, menuName: '单位配置', path: '/catalog/unit', menuType: 2, perms: 'catalog:unit:read,catalog:unit:write' },
+      { id: 203, parentId: 2, menuName: '规格配置', path: '/catalog/spec', menuType: 2, perms: 'catalog:spec:read,catalog:spec:write' },
+      { id: 204, parentId: 2, menuName: '价格规则', path: '/catalog/price-rule', menuType: 2, perms: 'catalog:price:read,catalog:price:write' },
+      { id: 205, parentId: 2, menuName: '产品库', path: '/catalog/product', menuType: 2, perms: 'catalog:spu:read,catalog:spu:write' },
       { id: 206, parentId: 2, menuName: '产品导入', path: '/catalog/import', menuType: 2, perms: 'catalog:import' }
     ]
   },
@@ -27,10 +29,10 @@ export const fallbackMenus = [
     path: '/supplier',
     menuType: 1,
     children: [
-      { id: 301, parentId: 3, menuName: '供应商分类', path: '/supplier/category', menuType: 2, perms: 'supplier:read' },
-      { id: 302, parentId: 3, menuName: '供应商档案', path: '/supplier/list', menuType: 2, perms: 'supplier:read' },
-      { id: 303, parentId: 3, menuName: '产品绑定', path: '/supplier/bind', menuType: 2, perms: 'supplier:read' },
-      { id: 304, parentId: 3, menuName: '资质管理', path: '/supplier/qual', menuType: 2, perms: 'supplier:read' }
+      { id: 301, parentId: 3, menuName: '供应商分类', path: '/supplier/category', menuType: 2, perms: 'supplier:read,supplier:write' },
+      { id: 302, parentId: 3, menuName: '供应商档案', path: '/supplier/list', menuType: 2, perms: 'supplier:read,supplier:write' },
+      { id: 303, parentId: 3, menuName: '产品绑定', path: '/supplier/bind', menuType: 2, perms: 'supplier:read,supplier:write' },
+      { id: 304, parentId: 3, menuName: '资质管理', path: '/supplier/qual', menuType: 2, perms: 'supplier:read,supplier:write' }
     ]
   },
   { id: 4, parentId: 0, menuName: '采购管理', path: '/purchase', menuType: 1 },
@@ -41,8 +43,8 @@ export const fallbackMenus = [
     path: '/budget',
     menuType: 1,
     children: [
-      { id: 501, parentId: 5, menuName: '预算科目', path: '/budget/subject', menuType: 2, perms: 'budget:subject:read' },
-      { id: 502, parentId: 5, menuName: '预算项目', path: '/budget/project', menuType: 2, perms: 'budget:project:read' },
+      { id: 501, parentId: 5, menuName: '预算科目', path: '/budget/subject', menuType: 2, perms: 'budget:subject:read,budget:subject:write' },
+      { id: 502, parentId: 5, menuName: '预算项目', path: '/budget/project', menuType: 2, perms: 'budget:project:read,budget:project:write' },
       { id: 503, parentId: 5, menuName: '年度预算导入', path: '/budget/import', menuType: 2, perms: 'budget:import' },
       { id: 504, parentId: 5, menuName: '预算台账', path: '/budget/ledger', menuType: 2, perms: 'budget:read' }
     ]
