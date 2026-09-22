@@ -220,7 +220,8 @@ CREATE TABLE IF NOT EXISTS supplier_sku (
     created_at DATETIME    DEFAULT CURRENT_TIMESTAMP,
     updated_by BIGINT      NULL,
     updated_at DATETIME    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted    TINYINT     NOT NULL DEFAULT 0
+    deleted    TINYINT     NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_sup_sku (supplier_id, sku_id, deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='供应商-商品绑定';
 
 -- ---------------- 预算（budget） ----------------
@@ -665,5 +666,11 @@ ALTER TABLE `supplier_sku`
 
 ALTER TABLE `budget_line`
   ADD COLUMN `project_id` BIGINT NULL DEFAULT NULL COMMENT '预算项目ID（可选，引用 budget_project；NULL=未启用项目维度）' AFTER `subject_id`;
+
+-- P2-4：supplier_sku 唯一约束（设计 §1.3.5）——同一 (supplier_id, sku_id) 仅允许一条未删除记录。
+-- 幂等：新建库已在 CREATE TABLE 内联该索引，此处 ALTER 会因"索引已存在"报 1061，
+-- 由 spring.sql.init.continue-on-error=true 忽略；存量库由此补齐。更严谨见 scripts/sql/p1_alter.sql。
+ALTER TABLE `supplier_sku`
+  ADD UNIQUE KEY `uk_sup_sku` (`supplier_id`, `sku_id`, `deleted`);
 
 SET FOREIGN_KEY_CHECKS = 1;

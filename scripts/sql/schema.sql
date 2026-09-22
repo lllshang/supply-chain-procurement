@@ -191,3 +191,26 @@ CALL p1_add_column('budget_line', 'project_id',
     '`project_id` BIGINT NULL DEFAULT NULL COMMENT ''预算项目ID（可选，引用 budget_project）'' AFTER `subject_id`');
 
 DROP PROCEDURE IF EXISTS p1_add_column;
+
+-- ============ 三、存量表加唯一索引（ALTER TABLE，P2-4） ============
+-- supplier_sku 唯一约束（设计 §1.3.5）：uk_sup_sku(supplier_id, sku_id, deleted)
+-- 幂等加索引过程（information_schema.STATISTICS 判存）
+DROP PROCEDURE IF EXISTS p1_add_index;
+DELIMITER $$
+CREATE PROCEDURE p1_add_index(IN p_table VARCHAR(64), IN p_index VARCHAR(64), IN p_cols VARCHAR(255))
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = p_table AND INDEX_NAME = p_index
+    ) THEN
+        SET @ddl = CONCAT('ALTER TABLE `', p_table, '` ADD UNIQUE KEY `', p_index, '` (', p_cols, ')');
+        PREPARE stmt FROM @ddl;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
+
+CALL p1_add_index('supplier_sku', 'uk_sup_sku', '`supplier_id`, `sku_id`, `deleted`');
+
+DROP PROCEDURE IF EXISTS p1_add_index;

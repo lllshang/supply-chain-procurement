@@ -19,6 +19,7 @@ import com.dzgylxt.vo.supplier.BatchBindItemVO;
 import com.dzgylxt.vo.supplier.BatchBindRespVO;
 import com.dzgylxt.vo.supplier.SupplierSkuRespVO;
 import com.dzgylxt.vo.supplier.SupplierSkuSaveReqVO;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -155,7 +156,13 @@ public class SupplierSkuServiceImpl extends ServiceImpl<SupplierSkuMapper, Suppl
         entity.setPackageUnit(req.getPackageUnit());
         entity.setBindScope(toBindScope(req.getBindScope()));
         entity.setStatus(STATUS_NORMAL);
-        save(entity);
+        try {
+            save(entity);
+        } catch (DuplicateKeyException e) {
+            // DB 唯一约束 uk_sup_sku(supplier_id, sku_id, deleted) 兜底并发/竞态下的重复绑定，
+            // 转为与前置 existsBind 校验一致的友好提示。
+            throw new BizException(ResultCode.DATA_CONFLICT, "该供应商与 SKU 已存在有效绑定");
+        }
         return entity.getId();
     }
 
