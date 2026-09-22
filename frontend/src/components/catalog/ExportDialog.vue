@@ -114,6 +114,6 @@ function saveBlob(blob, filename) {
 </script>
 
 <style scoped>
-.state { margin-top: 12px; color: #666; font-size: 13px; }
-.file { color: #999; }
+.state { margin-top: 12px; color: var(--app-text-secondary, #6b7280); font-size: 13px; }
+.file { color: var(--app-text-weak, #7b8797); }
 </style>

@@ -231,5 +231,5 @@ onMounted(reload)
 
 <style scoped>
 .toolbar { margin-bottom: 12px; display: flex; gap: 12px; }
-.preview-tip { color: #999; font-size: 12px; margin: 4px 0 0 90px; }
+.preview-tip { color: var(--app-text-weak, #7b8797); font-size: 12px; margin: 4px 0 0 90px; }
 </style>

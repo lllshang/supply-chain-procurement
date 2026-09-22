@@ -142,10 +142,10 @@ watch(
 .section-title { font-weight: 600; margin: 18px 0 10px; }
 .admission-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ml { margin-left: 8px; }
-.reasons { margin-top: 8px; color: #f56c6c; }
+.reasons { margin-top: 8px; color: var(--el-color-danger, #f56c6c); }
 .reasons-title { font-weight: 600; }
 .reasons ul { margin: 4px 0 0; padding-left: 20px; }
-.ok { margin-top: 8px; color: #67c23a; }
-.note { margin-top: 8px; color: #999; font-size: 12px; }
+.ok { margin-top: 8px; color: var(--el-color-success, #67c23a); }
+.note { margin-top: 8px; color: var(--app-text-weak, #7b8797); font-size: 12px; }
 .ops { margin-top: 8px; }
 </style>

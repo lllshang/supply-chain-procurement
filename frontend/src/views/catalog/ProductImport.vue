@@ -61,7 +61,7 @@ const mode = ref('single')
 
 <style scoped>
 .toolbar { margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
-.hint { color: #999; font-size: 12px; }
-.preview .meta { display: flex; gap: 20px; margin-bottom: 10px; color: #666; font-size: 13px; }
-.more { color: #999; font-size: 12px; margin-top: 6px; }
+.hint { color: var(--app-text-weak, #7b8797); font-size: 12px; }
+.preview .meta { display: flex; gap: 20px; margin-bottom: 10px; color: var(--app-text-secondary, #6b7280); font-size: 13px; }
+.more { color: var(--app-text-weak, #7b8797); font-size: 12px; margin-top: 6px; }
 </style>

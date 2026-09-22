@@ -111,7 +111,7 @@ onMounted(reload)
 .ledger-card { margin-top: 16px; }
 .ledger-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .title { font-weight: 600; }
-.sub { color: #666; font-size: 13px; }
+.sub { color: var(--app-text-secondary, #6b7280); font-size: 13px; }
 .show-project { margin-left: auto; }
-.note { margin-top: 10px; color: #999; font-size: 12px; }
+.note { margin-top: 10px; color: var(--app-text-weak, #7b8797); font-size: 12px; }
 </style>

@@ -10,7 +10,7 @@
     :loading="loading"
     node-key="id"
     value-key="id"
-    style="width: 100%"
+    :style="{ width: 'var(--filter-width, 100%)' }"
     @update:model-value="onChange"
   />
 </template>

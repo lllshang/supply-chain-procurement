@@ -56,5 +56,5 @@ async function onChange(uploadFileObj) {
 <style scoped>
 .file-upload { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .key { display: inline-flex; align-items: center; gap: 6px; }
-.tip { color: #999; font-size: 12px; }
+.tip { color: var(--app-text-weak, #7b8797); font-size: 12px; }
 </style>

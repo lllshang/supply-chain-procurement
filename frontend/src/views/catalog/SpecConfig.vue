@@ -163,10 +163,11 @@ onMounted(reload)
 
 <style scoped>
 .toolbar { margin-bottom: 12px; display: flex; gap: 12px; align-items: center; }
-.filter { width: 220px; }
+.filter { width: 220px; --filter-width: 220px; }
 .grouped { display: flex; flex-wrap: wrap; gap: 12px; }
-.group-card { min-width: 240px; }
-.group-title { font-weight: 600; margin-bottom: 8px; }
+.group-card { min-width: 240px; border-color: var(--app-border-card, #e7edf5); border-radius: var(--app-radius, 8px); }
+.group-card :deep(.el-card__body) { padding: 14px 16px; }
+.group-title { color: var(--app-text-primary, #1f2937); font-weight: 600; margin-bottom: 8px; }
 .group-values { display: flex; flex-wrap: wrap; gap: 6px; }
 .group-tag { margin: 0; }
 </style>

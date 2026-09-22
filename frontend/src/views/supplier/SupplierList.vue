@@ -167,8 +167,8 @@ onMounted(reload)
 
 <style scoped>
 .toolbar { margin-bottom: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.filter { width: 180px; }
-.filter-sm { width: 120px; }
+.filter { width: 180px; --filter-width: 180px; }
+.filter-sm { width: 120px; --filter-width: 120px; }
 .spacer { flex: 1; }
 .pager { margin-top: 16px; justify-content: flex-end; display: flex; }
 </style>

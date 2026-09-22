@@ -46,7 +46,7 @@ import { previewBudgetImport, importBudget, budgetImportTask } from '@/api/budge
 </script>
 
 <style scoped>
-.tip-box { margin-bottom: 16px; color: #666; font-size: 13px; background: #f5f7fa; padding: 10px 12px; border-radius: 4px; }
-.preview .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 10px; color: #666; font-size: 13px; }
-.more { color: #999; font-size: 12px; margin-top: 6px; }
+.tip-box { margin-bottom: 16px; color: var(--app-text-secondary, #6b7280); font-size: 13px; background: var(--app-bg-table-head, #f7f9fc); border: 1px solid var(--app-border-card, #e7edf5); border-radius: var(--app-radius, 8px); padding: 10px 12px; }
+.preview .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 10px; color: var(--app-text-secondary, #6b7280); font-size: 13px; }
+.more { color: var(--app-text-weak, #7b8797); font-size: 12px; margin-top: 6px; }
 </style>

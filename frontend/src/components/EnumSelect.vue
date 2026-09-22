@@ -4,7 +4,7 @@
     :clearable="clearable"
     :placeholder="placeholder"
     :disabled="disabled"
-    style="width: 100%"
+    :style="{ width: 'var(--filter-width, 100%)' }"
     @update:model-value="onChange"
   >
     <el-option v-for="opt in options" :key="opt.value" :label="opt.label" :value="opt.value" />
