@@ -9,13 +9,16 @@
         <template v-for="m in menus" :key="m.id">
           <el-sub-menu v-if="m.children && m.children.length" :index="m.path || String(m.id)">
             <template #title>
+              <el-icon class="menu-icon"><component :is="menuIcon(m.icon)" /></el-icon>
               <span>{{ m.menuName }}</span>
             </template>
             <el-menu-item v-for="c in m.children" :key="c.id" :index="c.path">
+              <el-icon class="menu-icon"><component :is="menuIcon(c.icon)" /></el-icon>
               <span>{{ c.menuName }}</span>
             </el-menu-item>
           </el-sub-menu>
           <el-menu-item v-else :index="m.path">
+            <el-icon class="menu-icon"><component :is="menuIcon(m.icon)" /></el-icon>
             <span>{{ m.menuName }}</span>
           </el-menu-item>
         </template>
@@ -23,20 +26,29 @@
     </el-aside>
     <el-container class="layout-body">
       <el-header class="header" height="60px">
-        <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
-          <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
-        </el-breadcrumb>
-        <el-dropdown @command="onCommand">
-          <span class="user-trigger">
-            {{ userStore.userInfo?.username || '管理员' }}<el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="header-left">
+          <!-- 样式占位，功能未实现：折叠按钮仅还原原型观感，不触发任何动作 -->
+          <span class="collapse-button" aria-hidden="true"><el-icon><Fold /></el-icon></span>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
+        <div class="header-right">
+          <!-- 样式占位，功能未实现：胶囊按钮仅还原原型观感，不触发任何动作 -->
+          <el-button class="header-pill" size="small" round>演示数据</el-button>
+          <el-button class="header-pill" size="small" round>供应商H5示例</el-button>
+          <el-dropdown @command="onCommand">
+            <span class="user-trigger">
+              {{ userStore.userInfo?.username || '管理员' }}<el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
       <el-main class="main">
         <!-- 页头标题（对齐原型：左侧 3px 主色竖条 + 22px 标题） -->
@@ -52,8 +64,68 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDown } from '@element-plus/icons-vue'
+import {
+  ArrowDown,
+  Fold,
+  Setting,
+  Box,
+  Shop,
+  ShoppingCart,
+  Money,
+  Document,
+  TrendCharts,
+  List,
+  CreditCard,
+  DocumentChecked,
+  DataAnalysis,
+  Tools,
+  Menu as MenuIcon,
+  Goods,
+  Upload,
+  Link,
+  Medal,
+  Notebook,
+  Folder,
+  PriceTag,
+  Share,
+  ScaleToOriginal,
+  Operation
+} from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
+
+// sys_menu.icon -> Element Plus 图标映射（对齐原型菜单图标观感）。
+// 键与 backend db/data.sql 的 icon 值一致；映射不到时使用默认图标。
+const ICON_MAP = {
+  setting: Setting,
+  box: Box,
+  shop: Shop,
+  shopping: ShoppingCart,
+  money: Money,
+  document: Document,
+  trend: TrendCharts,
+  list: List,
+  'credit-card': CreditCard,
+  audit: DocumentChecked,
+  chart: DataAnalysis,
+  tools: Tools,
+  // P1 二级菜单
+  goods: Goods,
+  upload: Upload,
+  link: Link,
+  medal: Medal,
+  notebook: Notebook,
+  folder: Folder,
+  'price-tag': PriceTag,
+  share: Share,
+  'scale-to-original': ScaleToOriginal,
+  operation: Operation
+}
+const DEFAULT_ICON = MenuIcon
+
+/** 菜单图标解析：未知 icon 回落默认图标，保证每项都有图标。 */
+function menuIcon(name) {
+  return (name && ICON_MAP[name]) || DEFAULT_ICON
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -154,6 +226,11 @@ function onCommand(cmd) {
 .side-menu :deep(.el-menu--inline) {
   background: #fff;
 }
+.side-menu :deep(.el-menu-item .menu-icon),
+.side-menu :deep(.el-sub-menu__title .menu-icon) {
+  margin-right: 6px;
+  width: 18px;
+}
 
 /* ---- 顶栏 ---- */
 .layout-body { min-width: 0; height: 100%; }
@@ -172,6 +249,34 @@ function onCommand(cmd) {
 }
 .header :deep(.el-breadcrumb__inner.is-link:hover) {
   color: #fff;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.collapse-button {
+  display: inline-flex;
+  color: #fff;
+  font-size: 18px;
+  cursor: default;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header-pill {
+  border: none;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+}
+.header-pill:hover,
+.header-pill:focus {
+  border: none;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.24);
 }
 .user-trigger {
   display: flex;

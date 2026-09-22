@@ -2,7 +2,7 @@
   <div class="login-page">
     <div class="login-card">
       <div class="brand-mark">供</div>
-      <h1 class="login-title">供应链采购协同中台</h1>
+      <h1 class="login-title">供应链系统</h1>
       <p class="login-sub">后台管理端</p>
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top" @keyup.enter="onSubmit">
         <el-form-item prop="username" label="账号">
