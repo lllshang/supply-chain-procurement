@@ -70,7 +70,8 @@ async function load() {
   try {
     const res = await pagePurchaseRequests({ current: page.current, size: page.size })
     list.value = res.data?.records || []
-    total.value = res.data?.total || 0
+    // #34c：#28 后 total 为字符串，el-pagination 要求 Number
+    total.value = Number(res.data?.total) || 0
   } catch (e) {
     // 后端未联通时使用空列表（契约已打通）
   } finally {
