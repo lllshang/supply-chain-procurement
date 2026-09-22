@@ -61,11 +61,16 @@ public class SupplierSkuServiceImpl extends ServiceImpl<SupplierSkuMapper, Suppl
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void unbind(Long id) {
         SupplierSku entity = getById(id);
         if (entity == null) {
             throw new BizException(ResultCode.DATA_NOT_FOUND, "绑定不存在：" + id);
         }
+        // P3-8：唯一约束 uk_sup_sku(supplier_id, sku_id, deleted) 中 deleted 为常量删除值(1)，
+        // 同一 (supplier_id, sku_id) 至多只允许 1 条已删行。为使"解绑→重绑→再解绑"可反复进行，
+        // 解绑前先【物理清除】该组合下已存在的 deleted=1 历史行（每对仅保留 1 条已删行），再执行逻辑删除。
+        baseMapper.physicalDeleteDeletedByPair(entity.getSupplierId(), entity.getSkuId());
         removeById(id);
     }
 

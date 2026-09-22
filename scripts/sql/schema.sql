@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS budget_project (
     KEY idx_year (year)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='预算项目（可选维度）';
 
--- ============ 二、存量表加字段（ALTER TABLE，6 张表 21 列） ============
+-- ============ 二、存量表加字段（ALTER TABLE，6 张表 20 列） ============
 -- 幂等加列过程（information_schema 判存）
 DROP PROCEDURE IF EXISTS p1_add_column;
 DELIMITER $$
