@@ -329,7 +329,8 @@ CREATE TABLE IF NOT EXISTS award (
     updated_by   BIGINT        NULL,
     updated_at   DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted      TINYINT      NOT NULL DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='定标';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='定标（R2：一询价单一中标供应商）';
+-- R2 唯一索引 uk_award_inquiry(inquiry_id, deleted) 由 scripts/sql/p3_r2_migration.sql 幂等补建。
 
 -- ---------------- 合同 / 订单（contract / order） ----------------
 CREATE TABLE IF NOT EXISTS contract (
@@ -682,7 +683,7 @@ CREATE TABLE IF NOT EXISTS `award_item` (
   `id`                 BIGINT        NOT NULL,
   `award_id`           BIGINT        NOT NULL                COMMENT '定标单ID（逻辑外键 award.id）',
   `sku_id`             BIGINT        NOT NULL                COMMENT 'SKU（逻辑外键 sku.id）',
-  `supplier_id`        BIGINT        NOT NULL                COMMENT '中标供应商（按 SKU 可拆分多家）',
+  `supplier_id`        BIGINT        NOT NULL                COMMENT '中标供应商（R2：单中标，全明细行同供应商）',
   `price`              DECIMAL(18,2) NOT NULL                COMMENT '定标单价（基本单位口径）',
   `qty`                DECIMAL(18,4) NOT NULL                COMMENT '定标数量（采购单位）',
   `qty_in_base_unit`   DECIMAL(18,4) NOT NULL                COMMENT '基本单位数量 = qty × conv_rate_snapshot',

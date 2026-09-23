@@ -43,22 +43,26 @@
             <el-form-item label="来源申请ID"><el-input v-model="form.applyId" :disabled="!!form.editId" /></el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-form-item label="定标供应商" required>
+              <el-input v-model="form.supplierId" placeholder="单一中标供应商ID" />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="定标明细">
           <el-button size="small" :icon="Plus" @click="addItem">加行</el-button>
-          <span class="hint">同一 SKU 可拆多供应商；单头主供应商自动取金额最大者。</span>
+          <span class="hint">R2：一询价单一中标供应商——明细行统一使用上方供应商，不再按 SKU 拆多供应商。</span>
         </el-form-item>
         <el-table :data="form.items" stripe size="small">
-          <el-table-column label="SKU ID" width="200">
+          <el-table-column label="SKU ID" width="240">
             <template #default="{ row }"><el-input v-model="row.skuId" /></template>
           </el-table-column>
-          <el-table-column label="供应商 ID" width="200">
-            <template #default="{ row }"><el-input v-model="row.supplierId" /></template>
+          <el-table-column label="单价(基本单位)" width="150">
+            <template #default="{ row }"><el-input-number v-model="row.price" :min="0.01" :controls="false" style="width: 130px" /></template>
           </el-table-column>
-          <el-table-column label="单价(基本单位)" width="140">
-            <template #default="{ row }"><el-input-number v-model="row.price" :min="0.01" :controls="false" style="width: 120px" /></template>
-          </el-table-column>
-          <el-table-column label="数量(采购单位)" width="150">
-            <template #default="{ row }"><el-input-number v-model="row.qty" :min="0.01" :controls="false" style="width: 130px" /></template>
+          <el-table-column label="数量(采购单位)" width="160">
+            <template #default="{ row }"><el-input-number v-model="row.qty" :min="0.01" :controls="false" style="width: 140px" /></template>
           </el-table-column>
           <el-table-column label="" width="60">
             <template #default="$index_scope"><el-button link type="danger" @click="form.items.splice($index_scope.$index, 1)">删</el-button></template>
@@ -110,20 +114,21 @@ function handlePage(p) {
 // ---- 新建 / 调整 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ editId: null, inquiryId: '', applyId: '', remark: '', items: [] })
+const form = reactive({ editId: null, inquiryId: '', applyId: '', supplierId: '', remark: '', items: [] })
 
 function emptyItem() {
-  return { skuId: '', supplierId: '', price: 0, qty: 1 }
+  return { skuId: '', price: 0, qty: 1 }
 }
 function addItem() {
   form.items.push(emptyItem())
 }
 function openCreate(row) {
-  // row 传参 = REJECTED 调整重提（带出原询价/申请）
+  // row 传参 = REJECTED 调整重提（带出原询价/申请/供应商）
   Object.assign(form, {
     editId: row && row.status === 'REJECTED' ? row.id : null,
     inquiryId: row ? String(row.inquiryId || '') : '',
     applyId: row ? String(row.applyId || '') : '',
+    supplierId: row && row.supplierId ? String(row.supplierId) : '',
     remark: '',
     items: [emptyItem()]
   })
@@ -131,11 +136,12 @@ function openCreate(row) {
 }
 
 async function onSave() {
-  const items = form.items.filter((i) => i.skuId && i.supplierId).map((i) => ({
-    skuId: i.skuId, supplierId: i.supplierId, price: i.price, qty: i.qty
+  // R2：单一中标供应商——表头统一选择，逐行注入
+  const items = form.items.filter((i) => i.skuId).map((i) => ({
+    skuId: i.skuId, supplierId: form.supplierId, price: i.price, qty: i.qty
   }))
-  if (!form.inquiryId || !items.length) {
-    ElMessage.warning('请填写询价 ID 与完整明细')
+  if (!form.inquiryId || !form.supplierId || !items.length) {
+    ElMessage.warning('请填写询价 ID、定标供应商与完整明细')
     return
   }
   saving.value = true

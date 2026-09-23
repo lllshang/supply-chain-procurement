@@ -41,10 +41,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 定标服务实现（设计 §2.4 + §7.1）。
+ * 定标服务实现（设计 §2.4 + §7.1；R2 修订：一询价单一中标供应商）。
  *
  * <p>状态机：PENDING_APPROVAL →(通过) APPROVED（可登记合同）；
  * →(驳回) REJECTED →(调整重提) PENDING_APPROVAL。定标只驱动合同，不生成订单。</p>
+ *
+ * <p>R2 回退拆标：{@code award} 按 inquiry 唯一中标（单数语义恢复）；
+ * {@code award_item} 仅保留同供应商明细行，不再支持按 SKU 拆多供应商；
+ * 合同金额 = 定标金额（可校验），无"份额"概念（审计 #14 连带简化）。</p>
  */
 @Service
 public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements IAwardService {
@@ -93,6 +97,12 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         if (inquiry == null || inquiry.getStatus() != InquiryStatus.CLOSED) {
             throw new BizException(ResultCode.STATUS_INVALID, "仅已截标询价可定标");
         }
+        // R2：award 按 inquiry 唯一中标（单数语义恢复）
+        Long existed = count(Wrappers.<Award>lambdaQuery()
+                .eq(Award::getInquiryId, req.getInquiryId()));
+        if (existed != null && existed > 0) {
+            throw new BizException(ResultCode.STATUS_INVALID, "该询价已存在定标单（一询价单一中标供应商）");
+        }
         Award award = new Award();
         award.setInquiryId(req.getInquiryId());
         award.setApplyId(req.getApplyId() == null ? inquiry.getApplyId() : req.getApplyId());
@@ -100,8 +110,8 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         award.setStatus(AwardStatus.PENDING_APPROVAL);
         award.setRemark(req.getRemark());
         award.setAmount(BigDecimal.ZERO);
-        // 单头供应商（列 NOT NULL）：主供应商（金额最大明细），明细为准；insert 前必须落值
-        award.setSupplierId(mainSupplierOf(req.getItems()));
+        // R2：单中标供应商（全明细行同供应商），insert 前必须落值
+        award.setSupplierId(singleSupplierOf(req.getItems()));
         save(award);
 
         BigDecimal amount = replaceItems(award, req);
@@ -186,19 +196,18 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
                 .eq(AwardItem::getAwardId, awardId).orderByAsc(AwardItem::getId));
     }
 
-    /** 主供应商 = 定标明细中金额最大（price × qty 快照前口径即可，仅用于单头落值）行的供应商。 */
-    private Long mainSupplierOf(List<AwardSaveReqVO.AwardItemVO> items) {
-        BigDecimal best = BigDecimal.valueOf(-1);
+    /** R2 单中标供应商：全部明细行必须同一供应商，返回该供应商（否则拒绝）。 */
+    private Long singleSupplierOf(List<AwardSaveReqVO.AwardItemVO> items) {
         Long supplierId = null;
         for (AwardSaveReqVO.AwardItemVO vo : items) {
             if (vo.getSupplierId() == null) {
                 throw new BizException(ResultCode.PARAM_ERROR, "定标明细行的供应商必填");
             }
-            BigDecimal lineAmount = (vo.getPrice() == null ? BigDecimal.ZERO : vo.getPrice())
-                    .multiply(vo.getQty() == null ? BigDecimal.ZERO : vo.getQty());
-            if (lineAmount.compareTo(best) > 0) {
-                best = lineAmount;
+            if (supplierId == null) {
                 supplierId = vo.getSupplierId();
+            } else if (!supplierId.equals(vo.getSupplierId())) {
+                throw new BizException(ResultCode.PARAM_ERROR,
+                        "一询价单一中标供应商（R2）：定标明细必须同一供应商，跨供应商请另行询价定标");
             }
         }
         return supplierId;
@@ -206,19 +215,18 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
 
     /** 落定标明细（含换算快照），返回定标总金额 = Σ price(基本单位口径) × qty_in_base_unit。 */
     private BigDecimal replaceItems(Award award, AwardSaveReqVO req) {
+        // R2：明细行仅同供应商（单数语义），跨供应商行直接拒绝
+        award.setSupplierId(singleSupplierOf(req.getItems()));
         awardItemMapper.delete(Wrappers.<AwardItem>lambdaQuery()
                 .eq(AwardItem::getAwardId, award.getId()));
         LocalDateTime now = LocalDateTime.now();
         BigDecimal amount = BigDecimal.ZERO;
-        // 单头供应商（列 NOT NULL）：按 SKU 拆多供应商时记金额最大的主供应商，明细为准
-        BigDecimal mainAmount = BigDecimal.valueOf(-1);
-        Long mainSupplierId = null;
         for (AwardSaveReqVO.AwardItemVO vo : req.getItems()) {
-            if (vo.getSkuId() == null || vo.getSupplierId() == null
+            if (vo.getSkuId() == null
                     || vo.getPrice() == null || vo.getQty() == null
                     || vo.getPrice().compareTo(BigDecimal.ZERO) <= 0
                     || vo.getQty().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new BizException(ResultCode.PARAM_ERROR, "定标明细行的供应商/SKU/数量/单价均必填且为正数");
+                throw new BizException(ResultCode.PARAM_ERROR, "定标明细行的SKU/数量/单价均必填且为正数");
             }
             Sku sku = skuMapper.selectById(vo.getSkuId());
             if (sku == null || sku.getStatus() == null || sku.getStatus() != ProductStatus.NORMAL) {
@@ -240,14 +248,8 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
             item.setRemark(vo.getRemark());
             awardItemMapper.insert(item);
 
-            BigDecimal lineAmount = vo.getPrice().multiply(qtyBase);
-            if (lineAmount.compareTo(mainAmount) > 0) {
-                mainAmount = lineAmount;
-                mainSupplierId = vo.getSupplierId();
-            }
-            amount = amount.add(lineAmount);
+            amount = amount.add(vo.getPrice().multiply(qtyBase));
         }
-        award.setSupplierId(mainSupplierId);
         return amount.setScale(2, RoundingMode.HALF_UP);
     }
 

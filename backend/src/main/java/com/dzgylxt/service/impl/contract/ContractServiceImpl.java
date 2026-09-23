@@ -78,20 +78,19 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
             String reason = admission == null ? "供应商不存在" : String.join("；", admission.getReasons());
             throw new BizException(ResultCode.PARAM_ERROR, "合同登记准入校验未通过：" + reason);
         }
-        // 来源定标时校验金额 = Σ 该供应商的定标明细（基本单位口径；QA #22：
-        // 按 SKU 拆多供应商时各家按真实份额登记，而非定标单总额，否则敞口翻倍；
+        // 来源定标时校验金额 = 定标金额（R2 单中标供应商：合同金额=定标金额，可校验；
+        // 原"按 award_item 供应商份额校验"（审计 #14 拆标衍生补丁）随 R2 删除；
         // <!-- D2 --> 无来源可手填）
         BigDecimal amount = req.getAmount();
         if (req.getAwardId() != null) {
             BigDecimal awardTotal = awardItemMapper.selectList(Wrappers.<AwardItem>lambdaQuery()
-                            .eq(AwardItem::getAwardId, req.getAwardId())
-                            .eq(AwardItem::getSupplierId, req.getSupplierId())).stream()
+                            .eq(AwardItem::getAwardId, req.getAwardId())).stream()
                     .map(i -> i.getPrice().multiply(i.getQtyInBaseUnit()))
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .setScale(2, RoundingMode.HALF_UP);
             if (amount.compareTo(awardTotal) != 0) {
                 throw new BizException(ResultCode.PARAM_ERROR,
-                        "合同金额必须等于 Σ 该供应商定标明细金额：" + awardTotal);
+                        "合同金额必须等于定标金额：" + awardTotal);
             }
         }
         if (req.getValidFrom() == null || req.getValidTo() == null

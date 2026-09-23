@@ -1,18 +1,19 @@
 package com.dzgylxt.service.impl.purchase;
 
+import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.entity.catalog.Sku;
 import com.dzgylxt.entity.purchase.Award;
 import com.dzgylxt.entity.purchase.Inquiry;
-import com.dzgylxt.entity.purchase.PurchaseApplyItem;
 import com.dzgylxt.enums.InquiryStatus;
+import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.mapper.catalog.SkuMapper;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.purchase.AwardItemMapper;
+import com.dzgylxt.mapper.purchase.AwardMapper;
 import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.vo.purchase.AwardSaveReqVO;
 import org.junit.jupiter.api.BeforeEach;
-import com.dzgylxt.enums.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,6 +28,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -35,12 +38,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 定标单头主供应商口径单测（QA #27 修复锁定）：
- * 多供应商拆分时 award.supplier_id 落金额最大的主供应商（明细为准）。
+ * R2 定标单中标供应商单测（审计修正 R2 锁定）：
+ * 一询价单一中标供应商——跨供应商明细拒绝；单头 supplier_id = 唯一中标供应商；
+ * 同一询价禁止重复定标。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-class AwardMainSupplierTest {
+class AwardSingleSupplierTest {
 
     private static final long INQUIRY_ID = 700001L;
     private static final long SKU_ID = 2102245024849907713L;
@@ -60,6 +64,9 @@ class AwardMainSupplierTest {
     private AwardItemMapper awardItemMapper;
 
     @Mock
+    private AwardMapper awardMapper;
+
+    @Mock
     private BusinessNoGenerator businessNoGenerator;
 
     private AwardServiceImpl service;
@@ -72,12 +79,15 @@ class AwardMainSupplierTest {
         ReflectionTestUtils.setField(service, "unitConversionMapper", unitConversionMapper);
         ReflectionTestUtils.setField(service, "awardItemMapper", awardItemMapper);
         ReflectionTestUtils.setField(service, "businessNoGenerator", businessNoGenerator);
+        // ServiceImpl.count() 走 baseMapper.selectCount（R2 唯一中标查重）
+        ReflectionTestUtils.setField(service, "baseMapper", awardMapper);
 
         Inquiry inquiry = new Inquiry();
         inquiry.setId(INQUIRY_ID);
         inquiry.setStatus(InquiryStatus.CLOSED);
         inquiry.setApplyId(1L);
         when(inquiryMapper.selectById(INQUIRY_ID)).thenReturn(inquiry);
+        when(awardMapper.selectCount(any())).thenReturn(0L);
 
         Sku sku = new Sku();
         sku.setId(SKU_ID);
@@ -85,6 +95,7 @@ class AwardMainSupplierTest {
         sku.setBaseUnit("PCS");
         sku.setPurchaseUnit("BOX");
         when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(skuMapper.selectById(anyLong())).thenReturn(sku);
         when(unitConversionMapper.selectCurrentEffective(anyLong(), anyString(), any())).thenReturn(null);
         when(businessNoGenerator.nextNo(anyString())).thenReturn("DB-202609-000001");
         when(awardItemMapper.insert(any(com.dzgylxt.entity.purchase.AwardItem.class))).thenReturn(1);
@@ -92,28 +103,51 @@ class AwardMainSupplierTest {
         doReturn(true).when(service).updateById(any(Award.class));
     }
 
-    /** 两家拆分（A 88×12=1056 / B 90×12=1080）→ 单头落金额最大的 B，而非最后一家偶然值。 */
+    /** R2：按 SKU 拆多供应商（A/B 混排）→ 拒绝（一询价单一中标供应商）。 */
     @Test
-    void createAward_multiSupplier_headerIsMaxAmountSupplier() {
+    void createAward_multiSupplier_rejected() {
         AwardSaveReqVO req = new AwardSaveReqVO();
         req.setInquiryId(INQUIRY_ID);
         req.setItems(List.of(
-                item(SUPPLIER_A, new BigDecimal("88")),
-                item(SUPPLIER_B, new BigDecimal("90"))));
+                item(SKU_ID, SUPPLIER_A, new BigDecimal("88")),
+                item(2102245024849907714L, SUPPLIER_B, new BigDecimal("90"))));
+
+        BizException e = assertThrows(BizException.class, () -> service.createAward(req));
+        assertTrue(e.getMessage().contains("一询价单一中标供应商"), e.getMessage());
+    }
+
+    /** R2：单供应商多明细行 → 单头 supplier_id = 唯一中标供应商，金额 = Σ 明细（基本单位口径）。 */
+    @Test
+    void createAward_singleSupplier_headerIsTheSupplier() {
+        AwardSaveReqVO req = new AwardSaveReqVO();
+        req.setInquiryId(INQUIRY_ID);
+        req.setItems(List.of(
+                item(SKU_ID, SUPPLIER_A, new BigDecimal("88")),
+                item(2102245024849907714L, SUPPLIER_A, new BigDecimal("90"))));
 
         service.createAward(req);
 
         ArgumentCaptor<Award> captor = ArgumentCaptor.forClass(Award.class);
         verify(service).save(captor.capture());
-        assertEquals(SUPPLIER_B, captor.getValue().getSupplierId(),
-                "定标单头 supplier_id 必须为金额最大的主供应商（QA #27）");
-        // 定标总金额 = Σ 基本单位口径（88+90）×12 = 2136
-        verify(service).updateById(any(Award.class));
+        assertEquals(SUPPLIER_A, captor.getValue().getSupplierId(),
+                "R2：单头 supplier_id = 唯一中标供应商");
     }
 
-    private AwardSaveReqVO.AwardItemVO item(long supplierId, BigDecimal price) {
+    /** R2：同一询价已存在定标 → 重复定标拒绝。 */
+    @Test
+    void createAward_duplicateInquiry_rejected() {
+        when(awardMapper.selectCount(any())).thenReturn(1L);
+        AwardSaveReqVO req = new AwardSaveReqVO();
+        req.setInquiryId(INQUIRY_ID);
+        req.setItems(List.of(item(SKU_ID, SUPPLIER_A, new BigDecimal("88"))));
+
+        BizException e = assertThrows(BizException.class, () -> service.createAward(req));
+        assertTrue(e.getMessage().contains("已存在定标单"), e.getMessage());
+    }
+
+    private AwardSaveReqVO.AwardItemVO item(long skuId, long supplierId, BigDecimal price) {
         AwardSaveReqVO.AwardItemVO vo = new AwardSaveReqVO.AwardItemVO();
-        vo.setSkuId(SKU_ID);
+        vo.setSkuId(skuId);
         vo.setSupplierId(supplierId);
         vo.setPrice(price);
         vo.setQty(BigDecimal.valueOf(12));
