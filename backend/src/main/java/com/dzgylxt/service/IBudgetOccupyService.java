@@ -26,6 +26,12 @@ public interface IBudgetOccupyService {
     /** 校验+占用+写 log（同事务；多行按 budget_line.id 升序加锁；余额不足返回 available=false 且零写入）。 */
     OccupyResultVO occupy(BudgetOccupyCmd cmd);
 
+    /**
+     * R7 只读再校验：定标提交/确认时二次校验预算（部门×科目×月，同锁链读月度行），
+     * <b>仅校验不占用</b>——不写 used_amount、不写 log。
+     */
+    OccupyResultVO checkOnly(BudgetOccupyCmd cmd);
+
     /** 释放（≤该 biz 累计占用余额；不足按余额释放并告警）。 */
     OccupyResultVO release(BudgetOccupyCmd cmd);
 
@@ -36,11 +42,11 @@ public interface IBudgetOccupyService {
     OccupyResultVO transfer(BudgetTransferCmd cmd);
 
     /**
-     * 月度调整：调增直生效；调减校验 {@code newAmount ≥ used_amount}；
-     * 变幅超阈值（{@code app.budget.adjust-threshold}，默认 20%）走 BUDGET 审批，
-     * 返回 {@code pendingApproval=true} 且不落库（审批通过后由回调生效）。
+     * 月度调整（R8 修订）：调增/调减<b>一律走 BUDGET 审批</b>（20% 免审阈值作废）；
+     * 调减校验 {@code newAmount ≥ used_amount}；前后值留痕（payload + 审批通过后 ADJUST log）。
      *
-     * @return pendingApproval=true 表示已发 BUDGET 升级审批、本次未生效
+     * @return 恒为 {@code pendingApproval=true}（一律审批，本次不落库；
+     *         审批通过后由 BudgetApprovalHandler 回调生效）
      */
     boolean adjustAmount(Long budgetLineId, BigDecimal newAmount, String reason);
 

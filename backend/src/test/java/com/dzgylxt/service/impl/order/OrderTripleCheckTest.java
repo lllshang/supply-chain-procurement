@@ -8,6 +8,7 @@ import com.dzgylxt.entity.purchase.PurchaseApply;
 import com.dzgylxt.entity.purchase.PurchaseApplyItem;
 import com.dzgylxt.enums.ContractStatus;
 import com.dzgylxt.enums.ItemType;
+import com.dzgylxt.enums.OrderStatus;
 import com.dzgylxt.enums.PurchaseApplyStatus;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.contract.ContractMapper;
@@ -381,5 +382,93 @@ class OrderTripleCheckTest {
         assertEquals(0, itemRow.remainQty.compareTo(new BigDecimal("40")));
         assertEquals(0, contractRow.availableAmount.compareTo(new BigDecimal("400")));
         assertTrue(r1 || r2);
+    }
+
+    // ---------------- #48 申请头状态闸门 ----------------
+
+    /** #48：作废（CLOSED）/驳回等非有效状态申请不可下单。 */
+    @Test
+    void createOrder_closedApply_rejected() {
+        PurchaseApply closed = new PurchaseApply();
+        closed.setId(APPLY_ID);
+        closed.setStatus(PurchaseApplyStatus.CLOSED);
+        when(applyMapper.selectById(APPLY_ID)).thenReturn(closed);
+        var e = org.junit.jupiter.api.Assertions.assertThrows(BizException.class,
+                () -> service.createOrder(createReq(BigDecimal.ONE, BigDecimal.ONE)));
+        assertTrue(e.getMessage().contains("申请状态不允许下单"), e.getMessage());
+    }
+
+    /** #48：驳回（REJECTED）申请不可下单。 */
+    @Test
+    void createOrder_rejectedApply_rejected() {
+        PurchaseApply rejected = new PurchaseApply();
+        rejected.setId(APPLY_ID);
+        rejected.setStatus(PurchaseApplyStatus.REJECTED);
+        when(applyMapper.selectById(APPLY_ID)).thenReturn(rejected);
+        var e = org.junit.jupiter.api.Assertions.assertThrows(BizException.class,
+                () -> service.createOrder(createReq(BigDecimal.ONE, BigDecimal.ONE)));
+        assertTrue(e.getMessage().contains("申请状态不允许下单"), e.getMessage());
+    }
+
+    // ---------------- #47 变更增额预算拦截升级 ----------------
+
+    /** #47：变更增额被预算拦截 → 拦截 + 生成 BUDGET 升级审批任务（非纯拦截）。 */
+    @Test
+    void changeOrder_budgetBlocked_createsBudgetUpgradeTask() {
+        com.dzgylxt.approval.ApprovalGateway gateway =
+                org.mockito.Mockito.mock(com.dzgylxt.approval.ApprovalGateway.class);
+        ReflectionTestUtils.setField(service, "approvalGateway", gateway);
+
+        // 订单：CREATED、budgetOccupied=600、apply 上下文齐全
+        com.dzgylxt.entity.order.PurchaseOrder order = new com.dzgylxt.entity.order.PurchaseOrder();
+        order.setId(700L);
+        order.setOrderNo("DD-TEST-000070");
+        order.setContractId(CONTRACT_ID);
+        order.setApplyId(APPLY_ID);
+        order.setStatus(OrderStatus.CREATED);
+        order.setBudgetOccupied(new BigDecimal("600"));
+        when(purchaseOrderMapper.selectById(700L)).thenReturn(order);
+
+        com.dzgylxt.entity.order.OrderItem oi = new com.dzgylxt.entity.order.OrderItem();
+        oi.setId(4001L);
+        oi.setOrderId(700L);
+        oi.setSkuId(9L);
+        oi.setApplyItemId(APPLY_ITEM_ID);
+        oi.setPrice(new BigDecimal("10"));
+        oi.setQtyPurchase(new BigDecimal("10"));
+        oi.setQtyBase(new BigDecimal("10"));
+        oi.setConvSnapshot("{\"rate\":1}");
+        when(orderItemMapper.selectList(any())).thenReturn(List.of(oi));
+
+        PurchaseApply apply = new PurchaseApply();
+        apply.setId(APPLY_ID);
+        apply.setStatus(PurchaseApplyStatus.PARTIAL_ORDER);
+        apply.setDeptId(1L);
+        when(applyMapper.selectById(APPLY_ID)).thenReturn(apply);
+
+        // 变更余量充足（40），仅预算拦截
+        itemRow.remainQty = new BigDecimal("40");
+        when(budgetOccupyService.occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.blocked(
+                        new BigDecimal("400"), new BigDecimal("100"), "当月预算余额不足"));
+
+        com.dzgylxt.vo.order.OrderChangeReqVO req = new com.dzgylxt.vo.order.OrderChangeReqVO();
+        com.dzgylxt.vo.order.OrderChangeReqVO.ItemChange change =
+                new com.dzgylxt.vo.order.OrderChangeReqVO.ItemChange();
+        change.setOrderItemId(4001L);
+        change.setNewQty(new BigDecimal("20"));
+        req.setItems(List.of(change));
+        req.setReason("增量变更");
+
+        var e = org.junit.jupiter.api.Assertions.assertThrows(BizException.class,
+                () -> service.changeOrder(700L, req));
+        assertTrue(e.getMessage().contains("已生成 BUDGET 升级审批"), e.getMessage());
+        // 升级任务已生成（bizType=BUDGET，payload 带 orderChange 标记）
+        org.mockito.ArgumentCaptor<com.dzgylxt.approval.ApprovalTaskSpec> spec =
+                org.mockito.ArgumentCaptor.forClass(com.dzgylxt.approval.ApprovalTaskSpec.class);
+        org.mockito.Mockito.verify(gateway).create(spec.capture());
+        assertEquals("BUDGET", spec.getValue().getBizType());
+        assertTrue(spec.getValue().getPayloadJson().contains("orderChange"),
+                "payload 应带 orderChange 升级标记");
     }
 }

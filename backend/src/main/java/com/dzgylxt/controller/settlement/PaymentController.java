@@ -74,14 +74,7 @@ public class PaymentController {
         return R.ok(true);
     }
 
-    /** 提交 PAYMENT 审批（财务审核）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
-    @PostMapping("/{id}/submit")
-    public R<Long> submit(@PathVariable Long id) {
-        return R.ok(paymentService.submit(id));
-    }
-
-    /** 线下付款登记确认（凭证+日期）→ PAID。 */
+    /** 线下付款登记确认（R6：免审批，财务直接登记；凭证+日期）→ PAID。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @PostMapping("/{id}/confirm")
     public R<Boolean> confirm(@PathVariable Long id, @RequestBody ConfirmReq req) {

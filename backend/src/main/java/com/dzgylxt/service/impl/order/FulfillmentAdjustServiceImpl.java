@@ -11,32 +11,33 @@ import com.dzgylxt.approval.ApprovalTaskSpec;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.ResultCode;
-import com.dzgylxt.entity.contract.Contract;
 import com.dzgylxt.entity.order.FulfillmentAdjust;
 import com.dzgylxt.entity.order.PurchaseOrder;
 import com.dzgylxt.enums.AdjustStatus;
 import com.dzgylxt.enums.AdjustType;
-import com.dzgylxt.enums.ContractStatus;
-import com.dzgylxt.mapper.contract.ContractMapper;
+import com.dzgylxt.enums.OrderStatus;
 import com.dzgylxt.mapper.order.FulfillmentAdjustMapper;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IFulfillmentAdjustService;
 import com.dzgylxt.vo.order.AdjustSaveReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 /**
- * 履约调整服务实现（设计 §2.8）。
+ * 履约调整服务实现（设计 §2.8；R3 修订）。
  *
- * <p>状态机：DRAFT →(免审，金额 ≤ 合同金额×5%) 生效(2)；或 DRAFT →(超阈值)
- * 审批中(1) → 生效(2) / 驳回(3)→DRAFT。生效时"回写相关单据"由差异/退货/补货
- * 台账闭环承接（Q8 只记台账与跟踪项）。</p>
+ * <p>R3（审计 §6.7.3 L776/L774）：</p>
+ * <ul>
+ *   <li><b>取消 5% 免审阈值</b>——调整一律进审批单据中心（bizType=FULFILLMENT_ADJUST）；
+ *       状态机：DRAFT →(提交) IN_APPROVAL → 生效(2) / 驳回(3)→DRAFT；</li>
+ *   <li><b>放开"部分到货可调整"</b>——仅"全部完成（RECEIVED）/已结算（SETTLED/PAID）/
+ *       已取消（CANCELLED）"不可调整，PARTIAL_RECEIVED 仍可调整；</li>
+ *   <li>超付预付款退款/转余额/抵扣本轮不做（已登记 D10/P3b）。</li>
+ * </ul>
  */
 @Service
 public class FulfillmentAdjustServiceImpl extends ServiceImpl<FulfillmentAdjustMapper, FulfillmentAdjust>
@@ -49,17 +50,10 @@ public class FulfillmentAdjustServiceImpl extends ServiceImpl<FulfillmentAdjustM
     private PurchaseOrderMapper orderMapper;
 
     @Autowired
-    private ContractMapper contractMapper;
-
-    @Autowired
     private ApprovalGateway approvalGateway;
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
-
-    /** 免审阈值占合同金额比例（%），默认 5（Q5）。 */
-    @Value("${app.adjust.approve-threshold-percent:5}")
-    private Integer approveThresholdPercent;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -72,6 +66,7 @@ public class FulfillmentAdjustServiceImpl extends ServiceImpl<FulfillmentAdjustM
         if (order == null) {
             throw new BizException(ResultCode.DATA_NOT_FOUND, "订单不存在：" + req.getOrderId());
         }
+        checkAdjustable(order);
         FulfillmentAdjust adjust = new FulfillmentAdjust();
         adjust.setAdjustNo(businessNoGenerator.nextNo("LY"));
         adjust.setBizType(req.getBizType());
@@ -108,29 +103,24 @@ public class FulfillmentAdjustServiceImpl extends ServiceImpl<FulfillmentAdjustM
         if (order == null) {
             throw new BizException(ResultCode.DATA_NOT_FOUND, "订单不存在：" + adjust.getOrderId());
         }
+        checkAdjustable(order);
 
-        // 阈值判定：|涉及金额| ≤ 合同金额×5% 免审直接生效
+        // R3：取消 5% 免审——调整一律进审批单据中心（bizType=FULFILLMENT_ADJUST）
         BigDecimal adjustAmount = adjustAmountOf(adjust);
-        BigDecimal threshold = thresholdOf(order);
-        boolean withinThreshold = adjustAmount.compareTo(threshold) <= 0;
-        if (withinThreshold) {
-            adjust.setStatus(AdjustStatus.EFFECTIVE);
-        } else {
-            adjust.setStatus(AdjustStatus.IN_APPROVAL);
-            ApprovalTaskSpec spec = new ApprovalTaskSpec();
-            spec.setBizType(BIZ_TYPE);
-            spec.setBizId(adjust.getId());
-            spec.setTitle("履约调整-" + adjust.getAdjustNo());
-            spec.setApplicant(UserContext.getCurrentUsername());
-            spec.setPayloadJson(JSONUtil.toJsonStr(new Object() {
-                public final int adjustType = adjust.getAdjustType() == null ? 0 : adjust.getAdjustType().getValue();
-                public final BigDecimal involvedAmount = adjustAmount;
-                public final BigDecimal beforeAmount = order.getBudgetOccupied();
-                public final BigDecimal afterAmount = order.getBudgetOccupied() == null
-                        ? adjustAmount : order.getBudgetOccupied().add(adjustAmount);
-            }));
-            approvalGateway.create(spec);
-        }
+        adjust.setStatus(AdjustStatus.IN_APPROVAL);
+        ApprovalTaskSpec spec = new ApprovalTaskSpec();
+        spec.setBizType(BIZ_TYPE);
+        spec.setBizId(adjust.getId());
+        spec.setTitle("履约调整-" + adjust.getAdjustNo());
+        spec.setApplicant(UserContext.getCurrentUsername());
+        spec.setPayloadJson(JSONUtil.toJsonStr(new Object() {
+            public final int adjustType = adjust.getAdjustType() == null ? 0 : adjust.getAdjustType().getValue();
+            public final BigDecimal involvedAmount = adjustAmount;
+            public final BigDecimal beforeAmount = order.getBudgetOccupied();
+            public final BigDecimal afterAmount = order.getBudgetOccupied() == null
+                    ? adjustAmount : order.getBudgetOccupied().add(adjustAmount);
+        }));
+        approvalGateway.create(spec);
         updateById(adjust);
         return adjust.getId();
     }
@@ -147,7 +137,7 @@ public class FulfillmentAdjustServiceImpl extends ServiceImpl<FulfillmentAdjustM
         return page(new Page<>(current, size), wrapper.orderByDesc(FulfillmentAdjust::getId));
     }
 
-    /** 调整涉及金额（after 快照 amount 字段，缺省 0 → 台账类调整免审直接生效）。 */
+    /** 调整涉及金额（after 快照 amount 字段，缺省 0；仅作审批 payload 展示口径）。 */
     private BigDecimal adjustAmountOf(FulfillmentAdjust adjust) {
         if (adjust.getAfterJson() == null || adjust.getAfterJson().isBlank()) {
             return BigDecimal.ZERO;
@@ -157,19 +147,18 @@ public class FulfillmentAdjustServiceImpl extends ServiceImpl<FulfillmentAdjustM
         return amount == null ? BigDecimal.ZERO : amount;
     }
 
-    /** 免审阈值 = 订单合同金额 × percent%（合同非生效态按 0 兜底，必走审批）。 */
-    private BigDecimal thresholdOf(PurchaseOrder order) {
-        if (order.getContractId() == null) {
-            return BigDecimal.ZERO;
+    /**
+     * 可调整性校验（R3，PRD L774/L777）：仅"全部完成/已结算部分"不可调整——
+     * REJECTED/RECEIVED（全部完成）、SETTLED/PAID（已结算）不可调整；
+     * CREATED/PARTIAL_RECEIVED（含部分到货）可调整。
+     */
+    private void checkAdjustable(PurchaseOrder order) {
+        OrderStatus status = order.getStatus();
+        if (status == OrderStatus.RECEIVED || status == OrderStatus.SETTLED
+                || status == OrderStatus.PAID || status == OrderStatus.CANCELLED) {
+            throw new BizException(ResultCode.STATUS_INVALID,
+                    "订单已全部完成/已结算/已取消，不可调整：" + (status == null ? "-" : status.getDesc()));
         }
-        Contract contract = contractMapper.selectById(order.getContractId());
-        if (contract == null || contract.getStatus() != ContractStatus.EFFECTIVE
-                || contract.getAmount() == null) {
-            return BigDecimal.ZERO;
-        }
-        return contract.getAmount()
-                .multiply(BigDecimal.valueOf(approveThresholdPercent))
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
     }
 
     // ---------------- ApprovalCallbackHandler（bizType=FULFILLMENT_ADJUST） ----------------

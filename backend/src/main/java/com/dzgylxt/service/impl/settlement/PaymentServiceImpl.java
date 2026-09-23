@@ -5,8 +5,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.dzgylxt.approval.ApprovalGateway;
-import com.dzgylxt.approval.ApprovalTaskSpec;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.ResultCode;
@@ -25,7 +23,6 @@ import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IPaymentService;
 import com.dzgylxt.vo.settlement.PaymentSaveReqVO;
 import com.dzgylxt.vo.settlement.StatementVO;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,20 +33,16 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 付款登记服务实现（P3 设计 §2.2 / T05+T06）。
+ * 付款登记服务实现（P3 设计 §2.2 / T05+T06；R6 修订：付款登记免审批）。
  *
- * <p>两阶段付款：PAYMENT 审批通过（财务审，reviewed_by/at 落）→ 线下付款后
- * {@link #confirmPayment} 登记凭证确认 → PAID + 结算单已付累计回写 +
- * 结算单全部付清 → 订单 {@code PAID}。付款确认无预算动作（核销已在结算完成，
- * 规格 §5 行 12）。</p>
+ * <p>R6（PRD §6.11.1 L903）：取消 PAYMENT bizType 与 submit 审批流——付款创建后
+ * 直接待登记，财务线下付款后 {@link #confirmPayment} 登记凭证确认 → PAID +
+ * 结算单已付累计回写 + 结算单全部付清 → 订单 {@code PAID}。{@code reviewed_by/at}
+ * 停用保留兼容。付款确认无预算动作（核销已在结算完成，规格 §5 行 12）。</p>
  */
 @Service
 public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
         implements IPaymentService {
-
-    private static final String BIZ_TYPE = "PAYMENT";
-
-    private final ApprovalGateway approvalGateway;
 
     @Autowired
     private SettlementMapper settlementMapper;
@@ -62,10 +55,6 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
-
-    public PaymentServiceImpl(ObjectProvider<ApprovalGateway> gatewayProvider) {
-        this.approvalGateway = gatewayProvider.getIfAvailable();
-    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -100,8 +89,8 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
     @Transactional(rollbackFor = Exception.class)
     public void updatePayment(Long id, PaymentSaveReqVO req) {
         Payment p = requirePayment(id);
-        if (p.getStatus() != PaymentStatus.REJECTED && p.getStatus() != PaymentStatus.UNPAID) {
-            throw new BizException(ResultCode.STATUS_INVALID, "仅未确认付款可修改");
+        if (p.getStatus() != PaymentStatus.UNPAID) {
+            throw new BizException(ResultCode.STATUS_INVALID, "仅未确认付款单可修改");
         }
         if (req.getPayAmount() != null) {
             p.setPayAmount(req.getPayAmount());
@@ -112,55 +101,6 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
         if (req.getRemark() != null) {
             p.setRemark(req.getRemark());
         }
-        if (p.getStatus() == PaymentStatus.REJECTED) {
-            p.setStatus(PaymentStatus.UNPAID);
-        }
-        updateById(p);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public Long submit(Long id) {
-        Payment p = requirePayment(id);
-        if (p.getStatus() != PaymentStatus.UNPAID || p.getReviewedAt() != null) {
-            throw new BizException(ResultCode.STATUS_INVALID, "仅待财务审付款单可提交");
-        }
-        if (approvalGateway == null) {
-            throw new BizException(ResultCode.BIZ_ERROR, "审批网关不可用");
-        }
-        ApprovalTaskSpec spec = new ApprovalTaskSpec();
-        spec.setBizType(BIZ_TYPE);
-        spec.setBizId(p.getId());
-        spec.setTitle("付款审批-" + p.getPayNo());
-        spec.setApplicant(UserContext.getCurrentUsername());
-        JSONObject payload = new JSONObject();
-        payload.set("payNo", p.getPayNo());
-        payload.set("payAmount", p.getPayAmount());
-        payload.set("settlementId", p.getSettlementId());
-        spec.setPayloadJson(payload.toString());
-        return approvalGateway.create(spec);
-    }
-
-    /** PAYMENT 审批通过（由 PaymentApprovalHandler 委托）：财务审核落人落时间，仍待登记确认。 */
-    @Transactional(rollbackFor = Exception.class)
-    public void handleApproved(Long taskId, Long bizId) {
-        Payment p = getById(bizId);
-        if (p == null || p.getStatus() != PaymentStatus.UNPAID || p.getReviewedAt() != null) {
-            return;
-        }
-        p.setReviewedBy(UserContext.getCurrentUserId());
-        p.setReviewedAt(java.time.LocalDateTime.now());
-        updateById(p);
-    }
-
-    /** PAYMENT 审批驳回：REJECTED（可修改重提）。 */
-    @Transactional(rollbackFor = Exception.class)
-    public void handleRejected(Long taskId, Long bizId) {
-        Payment p = getById(bizId);
-        if (p == null || p.getStatus() != PaymentStatus.UNPAID) {
-            return;
-        }
-        p.setStatus(PaymentStatus.REJECTED);
         updateById(p);
     }
 
@@ -168,8 +108,9 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
     @Transactional(rollbackFor = Exception.class)
     public void confirmPayment(Long id, String voucherFile, LocalDate payDate) {
         Payment p = requirePayment(id);
-        if (p.getStatus() != PaymentStatus.UNPAID || p.getReviewedAt() == null) {
-            throw new BizException(ResultCode.STATUS_INVALID, "仅财务审核通过的付款单可登记确认");
+        // R6：付款免审批——创建后即可登记确认（reviewed_by/at 停用保留兼容）
+        if (p.getStatus() != PaymentStatus.UNPAID) {
+            throw new BizException(ResultCode.STATUS_INVALID, "仅待登记付款单可登记确认");
         }
         if (voucherFile == null || voucherFile.isBlank()) {
             throw new BizException(ResultCode.PARAM_ERROR, "登记确认必须上传付款凭证");

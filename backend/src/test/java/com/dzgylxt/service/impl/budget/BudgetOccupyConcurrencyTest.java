@@ -100,7 +100,6 @@ class BudgetOccupyConcurrencyTest {
         org.springframework.test.util.ReflectionTestUtils.setField(service, "budgetLineMapper", budgetLineMapper);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "occupyLogMapper", occupyLogMapper);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "redisLockUtil", redisLockUtil);
-        org.springframework.test.util.ReflectionTestUtils.setField(service, "adjustThreshold", new BigDecimal("0.2"));
         org.springframework.test.util.ReflectionTestUtils.setField(service, "gatewayProvider", gatewayProvider);
 
         lenient().when(redisLockUtil.tryLock(anyString(), anyLong())).thenReturn("tok");
@@ -324,26 +323,29 @@ class BudgetOccupyConcurrencyTest {
         assertEquals(0, usedAmount().compareTo(BigDecimal.ZERO));
     }
 
-    /** 合规⑥：月度调整——调减低于已占用拦截；守恒不被调整破坏（used_amount 不变）。 */
+    /**
+     * 合规⑥（R8 修订）：月度调整——调减低于已占用拦截；<b>调增/调减一律走 BUDGET 审批</b>
+     * （20% 免审阈值作废），本次不落库、used_amount 不变（守恒不被调整破坏）。
+     */
     @Test
-    void adjustAmount_usedAmountUntouched() {
+    void adjustAmount_alwaysApproval_usedAmountUntouched() {
         service.occupy(cmd(new BigDecimal("400"), BudgetBizType.APPLY, 601L));
 
-        // 调减低于已占用 → 拒绝
-        IllegalArgumentException.class.getName();
+        // 调减低于已占用 → 拒绝（约束保留）
         try {
             service.adjustAmount(LINE_ID, new BigDecimal("100"), "调减测试");
             org.junit.jupiter.api.Assertions.fail("调减低于已占用应拒绝");
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("不能低于已占用"));
         }
-        // 调增（阈值内：delta 100 ≤ 1000×20%）直生效，used_amount 不变（Σlog 守恒不破坏）
-        boolean pending = service.adjustAmount(LINE_ID, new BigDecimal("1100"), "调增测试");
-        assertFalse(pending, "未超阈值直接生效");
+        // R8：调增一律走 BUDGET 审批（免审直通已删除）——pendingApproval=true 且不落库
+        assertTrue(service.adjustAmount(LINE_ID, new BigDecimal("1100"), "小幅调增"),
+                "R8：小幅调整也一律审批");
+        assertTrue(service.adjustAmount(LINE_ID, new BigDecimal("2000"), "大幅调增"),
+                "R8：大幅调整一律审批");
+        // 未落库：无直接 amount 更新、无 ADJUST log，used_amount 不变
+        org.mockito.Mockito.verify(budgetLineMapper, never())
+                .adjustAmount(anyLong(), any(BigDecimal.class), anyInt());
         assertEquals(0, usedAmount().compareTo(new BigDecimal("400")), "调整不改 used_amount");
-
-        // 调增超阈值 → 走 BUDGET 审批、本次不生效（pendingApproval=true）
-        assertTrue(service.adjustAmount(LINE_ID, new BigDecimal("2000"), "超阈值调增"),
-                "超阈值应发 BUDGET 审批且不落库");
     }
 }

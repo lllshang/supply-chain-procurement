@@ -124,6 +124,18 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     @Autowired
     private IBudgetOccupyService budgetOccupyService;
 
+    /** #47：预算拦截升级审批网关（可选依赖，单测可缺省）。 */
+    @Autowired(required = false)
+    private ApprovalGateway approvalGateway;
+
+    /** #47：REQUIRES_NEW 落审批任务用事务管理器（拦截回滚后任务仍需留存）。 */
+    @Autowired(required = false)
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    /** #47：预算升级任务放行标记消费查询。 */
+    @Autowired(required = false)
+    private com.dzgylxt.mapper.approval.ApprovalTaskMapper approvalTaskMapper;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<Long> createOrder(OrderCreateReqVO req) {
@@ -137,6 +149,19 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                     || item.getPrice() == null || item.getPrice().compareTo(BigDecimal.ZERO) < 0) {
                 throw new BizException(ResultCode.PARAM_ERROR, "下单明细行的申请明细/SKU/数量/单价非法");
             }
+        }
+
+        // #48 申请头状态闸门：作废（CLOSED）/驳回等非有效状态申请不可下单
+        // （仅 APPROVED / PARTIAL_ORDER 为可下单有效态；FULL_ORDER 无余量、DRAFT/BUDGET_PENDING/
+        //   PURCHASE_PENDING 未审结、REJECTED/CLOSED 非有效——统一拦截）
+        PurchaseApply applyHead = applyMapper.selectById(req.getApplyId());
+        if (applyHead == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "采购申请不存在：" + req.getApplyId());
+        }
+        if (applyHead.getStatus() != PurchaseApplyStatus.APPROVED
+                && applyHead.getStatus() != PurchaseApplyStatus.PARTIAL_ORDER) {
+            throw new BizException(ResultCode.STATUS_INVALID, "申请状态不允许下单："
+                    + applyHead.getStatus().getDesc() + "（仅已审批/部分转单可下单）");
         }
 
         // ① Redis 锁（顺序固定 contract → apply；获取失败快速失败）
@@ -426,32 +451,44 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
                 contractMapper.releaseAvailable(contract.getId(), amountDelta.abs(), contract.getVersion());
             }
-            // P3 §3 行7：变更对冲（仅对存在真实预算占用的订单生效；无申请来源
-            // 订单 budget_occupied=0 且无预算上下文，跳过占用/释放，快照不虚增）
+            // P3 §3 行7/行8（#47 修订）：变更对冲（仅对存在真实预算占用的订单生效）；
+            // 增量被预算拦截时 → 拦截 + 生成 BUDGET 升级审批任务（非纯拦截），
+            // 升级通过后 force 占用生效，重提变更时消费放行标记
             if (order.getBudgetOccupied() != null
                     && order.getBudgetOccupied().compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal newOccupied = order.getBudgetOccupied().add(amountDelta);
                 if (amountDelta.compareTo(BigDecimal.ZERO) > 0) {
-                    BudgetOccupyCmd occupyCmd = new BudgetOccupyCmd();
-                    // QA #35：与 submit/createOrder 同源回填控制维度（dept×subject×period），
-                    // 否则服务端校验「预算占用命令非法」；无申请来源的订单无预算上下文，不占用
-                    if (order.getApplyId() != null) {
-                        PurchaseApply srcApply = applyMapper.selectById(order.getApplyId());
-                        if (srcApply != null) {
-                            occupyCmd.setDeptId(srcApply.getDeptId());
-                            occupyCmd.setExpectedDate(srcApply.getExpectedDate());
+                    // #47 放行标记：存在已审批未消费的变更升级任务 → 消费并跳过占用
+                    //（升级通过时已 force 预挂占用，正常占用会重复计账）
+                    boolean upgradeCovered = consumeApprovedBudgetUpgrade(order, amountDelta);
+                    if (!upgradeCovered) {
+                        BudgetOccupyCmd occupyCmd = new BudgetOccupyCmd();
+                        // QA #35：与 submit/createOrder 同源回填控制维度（dept×subject×period），
+                        // 否则服务端校验「预算占用命令非法」；无申请来源的订单无预算上下文，不占用
+                        if (order.getApplyId() != null) {
+                            PurchaseApply srcApply = applyMapper.selectById(order.getApplyId());
+                            if (srcApply != null) {
+                                occupyCmd.setDeptId(srcApply.getDeptId());
+                                occupyCmd.setExpectedDate(srcApply.getExpectedDate());
+                            }
                         }
-                    }
-                    occupyCmd.setAmount(amountDelta);
-                    occupyCmd.setBizType(BudgetBizType.ORDER);
-                    occupyCmd.setBizId(id);
-                    occupyCmd.setRemark("订单变更增额");
-                    if (occupyCmd.getDeptId() != null) {
-                        OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
-                        if (!result.isAvailable()) {
-                            throw new BizException(ResultCode.BIZ_ERROR,
-                                    "变更增额超出预算余额：" + result.getMessage());
+                        occupyCmd.setAmount(amountDelta);
+                        occupyCmd.setBizType(BudgetBizType.ORDER);
+                        occupyCmd.setBizId(id);
+                        occupyCmd.setRemark("订单变更增额");
+                        if (occupyCmd.getDeptId() != null) {
+                            OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
+                            if (!result.isAvailable()) {
+                                // #47：拦截 + 升级——生成 BUDGET 升级审批任务后回滚本次变更
+                                createBudgetUpgradeTask(order, amountDelta, occupyCmd, result);
+                                throw new BizException(ResultCode.BIZ_ERROR,
+                                        "变更增额超出预算余额：" + result.getMessage()
+                                                + "；已生成 BUDGET 升级审批，通过后请重提变更");
+                            }
                         }
+                    } else {
+                        // 升级占用已预挂（含 budgetOccupied 增量），重提不再重复累加
+                        newOccupied = order.getBudgetOccupied();
                     }
                 } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
                     BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
@@ -532,6 +569,85 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     }
 
     // ---------------- 内部方法 ----------------
+
+    /**
+     * #47：变更增额被预算拦截时生成 BUDGET 升级审批任务。
+     *
+     * <p>任务必须在本事务回滚后留存（拦截即回滚）——经 REQUIRES_NEW 独立事务落库；
+     * payload 标记 orderChange=true，升级通过后由 BudgetApprovalHandler force 占用生效。</p>
+     */
+    private void createBudgetUpgradeTask(PurchaseOrder order, BigDecimal amountDelta,
+                                         BudgetOccupyCmd occupyCmd, OccupyResultVO blocked) {
+        if (approvalGateway == null) {
+            return;
+        }
+        cn.hutool.json.JSONObject payload = new cn.hutool.json.JSONObject();
+        payload.set("orderChange", true);
+        payload.set("orderId", order.getId());
+        payload.set("applyId", order.getApplyId());
+        payload.set("deptId", occupyCmd.getDeptId());
+        payload.set("expectedDate", occupyCmd.getExpectedDate() == null
+                ? null : occupyCmd.getExpectedDate().toString());
+        payload.set("amount", amountDelta);
+        payload.set("overAmount", blocked.getOverAmount());
+        payload.set("balance", blocked.getBalance());
+        payload.set("budgetStatus", 2);
+        com.dzgylxt.approval.ApprovalTaskSpec spec = new com.dzgylxt.approval.ApprovalTaskSpec();
+        spec.setBizType("BUDGET");
+        spec.setBizId(order.getApplyId() == null ? order.getId() : order.getApplyId());
+        spec.setTitle("预算升级-订单变更" + order.getOrderNo());
+        spec.setPayloadJson(payload.toString());
+        if (transactionManager != null) {
+            // REQUIRES_NEW：拦截变更回滚后任务留存
+            org.springframework.transaction.support.TransactionTemplate template =
+                    new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            template.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            template.executeWithoutResult(status -> approvalGateway.create(spec));
+        } else {
+            approvalGateway.create(spec);
+        }
+    }
+
+    /**
+     * #47：消费"已审批未消费"的订单变更升级任务（放行标记）。
+     *
+     * <p>升级通过时差额已 force 占用（budgetOccupied 已累加），重提变更据此跳过正常
+     * 占用与增量累加，避免双计；按 金额+订单 精确匹配且一次性消费（consumed 标记）。</p>
+     *
+     * @return true=存在匹配任务并已消费（调用方跳过占用）
+     */
+    private boolean consumeApprovedBudgetUpgrade(PurchaseOrder order, BigDecimal amountDelta) {
+        if (approvalTaskMapper == null || order.getApplyId() == null) {
+            return false;
+        }
+        List<com.dzgylxt.entity.approval.ApprovalTask> tasks = approvalTaskMapper.selectList(
+                Wrappers.<com.dzgylxt.entity.approval.ApprovalTask>lambdaQuery()
+                        .eq(com.dzgylxt.entity.approval.ApprovalTask::getBizType, "BUDGET")
+                        .eq(com.dzgylxt.entity.approval.ApprovalTask::getBizId, order.getApplyId())
+                        .eq(com.dzgylxt.entity.approval.ApprovalTask::getStatus,
+                                com.dzgylxt.enums.ApprovalStatus.APPROVED)
+                        .orderByDesc(com.dzgylxt.entity.approval.ApprovalTask::getId));
+        for (com.dzgylxt.entity.approval.ApprovalTask task : tasks) {
+            if (task.getPayloadJson() == null || task.getPayloadJson().isBlank()) {
+                continue;
+            }
+            JSONObject payload = JSONUtil.parseObj(task.getPayloadJson());
+            if (!payload.getBool("orderChange", false)
+                    || !order.getId().equals(payload.getLong("orderId"))
+                    || payload.getBool("consumed", false)) {
+                continue;
+            }
+            BigDecimal amount = payload.getBigDecimal("amount");
+            if (amount == null || amount.compareTo(amountDelta) != 0) {
+                continue;
+            }
+            payload.set("consumed", true);
+            task.setPayloadJson(payload.toString());
+            approvalTaskMapper.updateById(task);
+            return true;
+        }
+        return false;
+    }
 
     /** 校验①：合同 EFFECTIVE 且 valid_from ≤ today ≤ valid_to。 */
     private void checkContractValid(Contract contract) {

@@ -91,7 +91,8 @@ class SettlementPaymentTest {
         ReflectionTestUtils.setField(settlementService, "baseMapper", settlementMapper);
         ReflectionTestUtils.setField(settlementService, "budgetOccupyService", budgetOccupyService);
 
-        paymentService = new PaymentServiceImpl(gatewayProvider);
+        // R6：付款免审批——PaymentServiceImpl 无审批网关依赖
+        paymentService = new PaymentServiceImpl();
         ReflectionTestUtils.setField(paymentService, "settlementMapper", settlementMapper);
         ReflectionTestUtils.setField(paymentService, "orderMapper", orderMapper);
         ReflectionTestUtils.setField(paymentService, "orderItemMapper", orderItemMapper);

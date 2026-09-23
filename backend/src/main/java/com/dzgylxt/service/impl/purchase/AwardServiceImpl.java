@@ -26,10 +26,14 @@ import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.mapper.purchase.QuotationMapper;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IAwardService;
+import com.dzgylxt.service.IBudgetOccupyService;
 import com.dzgylxt.service.IPriceHistoryService;
 import com.dzgylxt.service.ISupplierService;
+import com.dzgylxt.vo.budget.BudgetOccupyCmd;
+import com.dzgylxt.vo.budget.OccupyResultVO;
 import com.dzgylxt.vo.purchase.AwardSaveReqVO;
 import com.dzgylxt.vo.supplier.SupplierAdmissionVO;
+import com.dzgylxt.enums.BudgetBizType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -73,6 +77,12 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
 
     @Autowired
     private ISupplierService supplierService;
+
+    @Autowired
+    private com.dzgylxt.mapper.purchase.PurchaseApplyMapper applyMapper;
+
+    @Autowired
+    private IBudgetOccupyService budgetOccupyService;
 
     @Autowired
     private ApprovalGateway approvalGateway;
@@ -174,6 +184,50 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         award.setStatus(AwardStatus.PENDING_APPROVAL);
         updateById(award);
 
+        // R7 定标预算再校验（BR-04 L1079 / §6.4.3 L634）：部门×科目×提交当月，
+        // 仅校验不重复占用（占用锚在申请）；不足→拦截提交，转 BUDGET 升级审批（通过后放行确认）
+        if (award.getApplyId() != null) {
+            com.dzgylxt.entity.purchase.PurchaseApply apply = applyMapper.selectById(award.getApplyId());
+            if (apply != null && apply.getDeptId() != null) {
+                BudgetOccupyCmd checkCmd = new BudgetOccupyCmd();
+                checkCmd.setDeptId(apply.getDeptId());
+                checkCmd.setAmount(award.getAmount() == null ? BigDecimal.ZERO : award.getAmount());
+                checkCmd.setBizType(BudgetBizType.AWARD);
+                checkCmd.setBizId(award.getId());
+                checkCmd.setRemark("定标预算再校验-" + award.getAwardNo());
+                OccupyResultVO check = budgetOccupyService.checkOnly(checkCmd);
+                if (!check.isAvailable()) {
+                    String hold = (award.getRemark() == null || award.getRemark().isBlank()
+                            ? "" : award.getRemark() + "；") + "[预算升级] " + check.getMessage();
+                    award.setRemark(hold);
+                    updateById(award);
+                    cn.hutool.json.JSONObject payload = new cn.hutool.json.JSONObject();
+                    payload.set("award", true);
+                    payload.set("awardId", award.getId());
+                    payload.set("applyId", award.getApplyId());
+                    payload.set("deptId", apply.getDeptId());
+                    payload.set("amount", award.getAmount());
+                    payload.set("overAmount", check.getOverAmount());
+                    payload.set("balance", check.getBalance());
+                    payload.set("budgetStatus", 2);
+                    ApprovalTaskSpec budgetSpec = new ApprovalTaskSpec();
+                    budgetSpec.setBizType("BUDGET");
+                    budgetSpec.setBizId(award.getId());
+                    budgetSpec.setTitle("预算升级-定标" + award.getAwardNo());
+                    budgetSpec.setApplicant(UserContext.getCurrentUsername());
+                    budgetSpec.setPayloadJson(payload.toString());
+                    approvalGateway.create(budgetSpec);
+                    return award.getId();
+                }
+            }
+        }
+
+        createAwardApprovalTask(award, items);
+        return award.getId();
+    }
+
+    /** 发起 AWARD 审批（submit 与 R7 预算升级放行共用）。 */
+    private void createAwardApprovalTask(Award award, List<AwardItem> items) {
         ApprovalTaskSpec spec = new ApprovalTaskSpec();
         spec.setBizType(BIZ_TYPE);
         spec.setBizId(award.getId());
@@ -187,7 +241,19 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
                     public final BigDecimal qty = i.getQty();
                 }).toList()));
         approvalGateway.create(spec);
-        return award.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void releaseAfterBudgetApproval(Long awardId) {
+        // R7 放行确认：BUDGET 升级审批通过 → 补发 AWARD 审批（预算仅校验不占用，无回滚动作）
+        Award award = getById(awardId);
+        if (award == null || award.getStatus() != AwardStatus.PENDING_APPROVAL) {
+            return;
+        }
+        List<AwardItem> items = awardItemMapper.selectList(Wrappers.<AwardItem>lambdaQuery()
+                .eq(AwardItem::getAwardId, awardId));
+        createAwardApprovalTask(award, items);
     }
 
     @Override

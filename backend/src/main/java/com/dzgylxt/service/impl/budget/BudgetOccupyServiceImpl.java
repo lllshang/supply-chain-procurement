@@ -23,7 +23,6 @@ import com.dzgylxt.vo.budget.OccupyResultVO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,13 +66,9 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
     @Autowired
     private ApprovalTaskMapper approvalTaskMapper;
 
-    /** BUDGET 超阈值调整审批入口（ObjectProvider 防循环依赖：网关→回调→本服务）。 */
+    /** BUDGET 升级审批入口（ObjectProvider 防循环依赖：网关→回调→本服务）。 */
     @Autowired
     private org.springframework.beans.factory.ObjectProvider<com.dzgylxt.approval.ApprovalGateway> gatewayProvider;
-
-    /** 月度调整超阈值走 BUDGET 审批（Q4，比例）。 */
-    @Value("${app.budget.adjust-threshold:0.2}")
-    private BigDecimal adjustThreshold;
 
     // ---------------- 占用 ----------------
 
@@ -110,6 +105,45 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
             }
             // ③ 分摊写入（force 时末行兜底超支）
             return distribute(cmd, locked, cmd.getAmount(), cmd.isForce());
+        } finally {
+            redisLockUtil.unlock(lockKey, token);
+        }
+    }
+
+    // ---------------- R7 只读再校验 ----------------
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OccupyResultVO checkOnly(BudgetOccupyCmd cmd) {
+        validateCmd(cmd);
+        if (cmd.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "校验金额必须大于 0");
+        }
+        int year = cmd.getYear() == null ? LocalDate.now().getYear() : cmd.getYear();
+        int period = resolvePeriod(cmd);
+        String lockKey = "budget:lock:" + cmd.getDeptId() + ":" + cmd.getSubjectId() + ":" + period;
+        String token = redisLockUtil.tryLock(lockKey, LOCK_WAIT_MILLIS);
+        if (token == null) {
+            throw new BizException(ResultCode.BIZ_ERROR, "预算处理繁忙，请稍后重试");
+        }
+        try {
+            // 与 occupy 同锁链（Redis 锁 + 行锁 FOR UPDATE），但只读：不写 used_amount、不写 log
+            List<BudgetLine> locked = lockMonthlyLines(cmd.getDeptId(), year, cmd.getSubjectId(), period);
+            if (locked.isEmpty()) {
+                return OccupyResultVO.blocked(BigDecimal.ZERO, cmd.getAmount(),
+                        "无当月预算行（部门 " + cmd.getDeptId() + " " + year + "年" + period + "月），需预算升级审批");
+            }
+            BigDecimal totalAvailable = BigDecimal.ZERO;
+            for (BudgetLine line : locked) {
+                totalAvailable = totalAvailable.add(availableOf(line));
+            }
+            if (totalAvailable.compareTo(cmd.getAmount()) < 0) {
+                return OccupyResultVO.blocked(totalAvailable, cmd.getAmount().subtract(totalAvailable),
+                        "当月预算余额不足：可用 " + totalAvailable + "，需 " + cmd.getAmount());
+            }
+            OccupyResultVO vo = OccupyResultVO.ok(BigDecimal.ZERO, locked.stream().map(BudgetLine::getId).toList());
+            vo.setMessage("预算再校验通过（可用 " + totalAvailable + "，仅校验不占用）");
+            return vo;
         } finally {
             redisLockUtil.unlock(lockKey, token);
         }
@@ -284,7 +318,7 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
         }
     }
 
-    // ---------------- 月度调整 ----------------
+    // ---------------- 月度调整（R8：一律走 BUDGET 审批） ----------------
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -300,43 +334,29 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
             throw new BizException(ResultCode.BIZ_ERROR,
                     "调减后额度 " + newAmount + " 不能低于已占用 " + line.getUsedAmount());
         }
+        // R8（PRD §6.4.3 L635：审批通过后更新台账）：取消 20% 免审阈值（Q4 作废）——
+        // 调增/调减一律 create BUDGET 审批；通过后由 BudgetApprovalHandler 按 payload 生效
+        // （前后值留痕：payload + ADJUST log）
         BigDecimal oldAmount = line.getAmount() == null ? BigDecimal.ZERO : line.getAmount();
         BigDecimal delta = newAmount.subtract(oldAmount);
-        BigDecimal base = oldAmount.abs().compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ONE : oldAmount.abs();
-        if (delta.abs().compareTo(base.multiply(adjustThreshold)) > 0) {
-            // 超阈值走 BUDGET 审批（Q4）：本次不落库，回调生效（payload 持久化，回调侧可读）
-            JSONObject payload = new JSONObject();
-            payload.set("adjust", true);
-            payload.set("lineId", budgetLineId);
-            payload.set("newAmount", newAmount);
-            payload.set("oldAmount", oldAmount);
-            com.dzgylxt.approval.ApprovalTaskSpec spec = new com.dzgylxt.approval.ApprovalTaskSpec();
-            spec.setBizType("BUDGET");
-            spec.setBizId(budgetLineId);
-            spec.setTitle("预算月度调整-行" + budgetLineId);
-            spec.setApplicant(UserContext.getCurrentUsername());
-            spec.setPayloadJson(payload.toString());
-            com.dzgylxt.approval.ApprovalGateway gateway = gatewayProvider.getIfAvailable();
-            if (gateway != null) {
-                gateway.create(spec);
-            }
-            return true;
+        JSONObject payload = new JSONObject();
+        payload.set("adjust", true);
+        payload.set("lineId", budgetLineId);
+        payload.set("newAmount", newAmount);
+        payload.set("oldAmount", oldAmount);
+        payload.set("delta", delta);
+        payload.set("reason", reason);
+        com.dzgylxt.approval.ApprovalTaskSpec spec = new com.dzgylxt.approval.ApprovalTaskSpec();
+        spec.setBizType("BUDGET");
+        spec.setBizId(budgetLineId);
+        spec.setTitle("预算月度调整-行" + budgetLineId);
+        spec.setApplicant(UserContext.getCurrentUsername());
+        spec.setPayloadJson(payload.toString());
+        com.dzgylxt.approval.ApprovalGateway gateway = gatewayProvider.getIfAvailable();
+        if (gateway != null) {
+            gateway.create(spec);
         }
-        int updated = budgetLineMapper.adjustAmount(budgetLineId, newAmount, line.getVersion());
-        if (updated == 0) {
-            BudgetLine fresh = budgetLineMapper.selectById(budgetLineId);
-            updated = budgetLineMapper.adjustAmount(budgetLineId, newAmount, fresh.getVersion());
-        }
-        if (updated == 0) {
-            throw new BizException(ResultCode.DATA_CONFLICT, "预算调整并发冲突，请重试");
-        }
-        BudgetOccupyCmd cmd = baseCmdOf(line);
-        cmd.setBizType(BudgetBizType.ADJUST);
-        cmd.setBizId(budgetLineId);
-        cmd.setRemark(reason);
-        BigDecimal usedNow = line.getUsedAmount() == null ? BigDecimal.ZERO : line.getUsedAmount();
-        writeLog(line, cmd, BudgetAction.ADJUST, delta, usedNow, usedNow);
-        return false;
+        return true;
     }
 
     // ---------------- 对账辅助 ----------------

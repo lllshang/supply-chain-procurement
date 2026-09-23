@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 履约调整台账（设计 §5.5：/api/v1/fulfillment-adjusts；阈值内免审；独立控制器）。 */
+/** 履约调整台账（设计 §5.5：/api/v1/fulfillment-adjusts；R3：一律审批，无免审阈值；独立控制器）。 */
 @RestController
 @RequestMapping("/api/v1/fulfillment-adjusts")
 public class FulfillmentAdjustController {
@@ -52,7 +52,7 @@ public class FulfillmentAdjustController {
         return R.ok(adjustService.createAdjust(req));
     }
 
-    /** 提交（阈值内免审生效；超阈值走 FULFILLMENT_ADJUST 审批）。 */
+    /** 提交（R3：一律走 FULFILLMENT_ADJUST 审批，免审阈值已取消）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @PostMapping("/{id}/submit")
     public R<Long> submit(@PathVariable Long id) {

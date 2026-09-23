@@ -13,6 +13,7 @@ import com.dzgylxt.mapper.purchase.AwardItemMapper;
 import com.dzgylxt.mapper.purchase.AwardMapper;
 import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.vo.purchase.AwardSaveReqVO;
+import com.dzgylxt.vo.supplier.SupplierAdmissionVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,6 +68,18 @@ class AwardSingleSupplierTest {
     private AwardMapper awardMapper;
 
     @Mock
+    private com.dzgylxt.mapper.purchase.QuotationMapper quotationMapper;
+
+    @Mock
+    private com.dzgylxt.mapper.purchase.PurchaseApplyMapper applyMapper;
+
+    @Mock
+    private com.dzgylxt.service.IBudgetOccupyService budgetOccupyService;
+
+    @Mock
+    private com.dzgylxt.service.ISupplierService supplierService;
+
+    @Mock
     private BusinessNoGenerator businessNoGenerator;
 
     private AwardServiceImpl service;
@@ -78,6 +91,10 @@ class AwardSingleSupplierTest {
         ReflectionTestUtils.setField(service, "skuMapper", skuMapper);
         ReflectionTestUtils.setField(service, "unitConversionMapper", unitConversionMapper);
         ReflectionTestUtils.setField(service, "awardItemMapper", awardItemMapper);
+        ReflectionTestUtils.setField(service, "quotationMapper", quotationMapper);
+        ReflectionTestUtils.setField(service, "applyMapper", applyMapper);
+        ReflectionTestUtils.setField(service, "budgetOccupyService", budgetOccupyService);
+        ReflectionTestUtils.setField(service, "supplierService", supplierService);
         ReflectionTestUtils.setField(service, "businessNoGenerator", businessNoGenerator);
         // ServiceImpl.count() 走 baseMapper.selectCount（R2 唯一中标查重）
         ReflectionTestUtils.setField(service, "baseMapper", awardMapper);
@@ -143,6 +160,66 @@ class AwardSingleSupplierTest {
 
         BizException e = assertThrows(BizException.class, () -> service.createAward(req));
         assertTrue(e.getMessage().contains("已存在定标单"), e.getMessage());
+    }
+
+    // ---------------- R7 定标预算再校验 ----------------
+
+    /**
+     * R7：提交时预算再校验不足 → 拦截（不发起 AWARD 审批），转 BUDGET 升级审批
+     * （payload 带 award 标记）；仅校验不重复占用。
+     */
+    @Test
+    void submit_budgetShortfall_createsBudgetUpgradeTask_notAwardTask() {
+        com.dzgylxt.approval.ApprovalGateway gateway =
+                org.mockito.Mockito.mock(com.dzgylxt.approval.ApprovalGateway.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "approvalGateway", gateway);
+        when(supplierService.getAdmission(any(Long.class))).thenReturn(okAdmission());
+
+        com.dzgylxt.entity.purchase.Award award = new com.dzgylxt.entity.purchase.Award();
+        award.setId(910L);
+        award.setAwardNo("DB-TEST-000910");
+        award.setInquiryId(INQUIRY_ID);
+        award.setApplyId(1L);
+        award.setSupplierId(SUPPLIER_A);
+        award.setAmount(new BigDecimal("5000"));
+        award.setStatus(com.dzgylxt.enums.AwardStatus.PENDING_APPROVAL);
+        when(awardMapper.selectById(910L)).thenReturn(award);
+
+        com.dzgylxt.entity.purchase.AwardItem ai = new com.dzgylxt.entity.purchase.AwardItem();
+        ai.setAwardId(910L);
+        ai.setSkuId(SKU_ID);
+        ai.setSupplierId(SUPPLIER_A);
+        ai.setPrice(new BigDecimal("88"));
+        ai.setQty(new BigDecimal("12"));
+        ai.setQtyInBaseUnit(new BigDecimal("144"));
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(ai));
+        when(quotationMapper.selectList(any())).thenReturn(List.of());
+
+        com.dzgylxt.entity.purchase.PurchaseApply apply = new com.dzgylxt.entity.purchase.PurchaseApply();
+        apply.setId(1L);
+        apply.setDeptId(1L);
+        when(applyMapper.selectById(1L)).thenReturn(apply);
+        when(budgetOccupyService.checkOnly(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.blocked(
+                        new BigDecimal("1000"), new BigDecimal("4000"), "当月预算余额不足"));
+
+        service.submit(910L);
+
+        // 仅发 BUDGET 升级任务，不发 AWARD 审批；定标维持 PENDING_APPROVAL
+        org.mockito.ArgumentCaptor<com.dzgylxt.approval.ApprovalTaskSpec> spec =
+                org.mockito.ArgumentCaptor.forClass(com.dzgylxt.approval.ApprovalTaskSpec.class);
+        org.mockito.Mockito.verify(gateway).create(spec.capture());
+        assertEquals("BUDGET", spec.getValue().getBizType());
+        assertTrue(spec.getValue().getPayloadJson().contains("award"), "payload 应带 award 标记");
+        verify(budgetOccupyService, org.mockito.Mockito.never())
+                .occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class));
+        assertEquals(com.dzgylxt.enums.AwardStatus.PENDING_APPROVAL, award.getStatus());
+    }
+
+    private SupplierAdmissionVO okAdmission() {
+        SupplierAdmissionVO ok = new SupplierAdmissionVO();
+        ok.setQualified(true);
+        return ok;
     }
 
     private AwardSaveReqVO.AwardItemVO item(long skuId, long supplierId, BigDecimal price) {
