@@ -20,6 +20,7 @@ import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.mapper.purchase.InquirySupplierMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyItemMapper;
 import com.dzgylxt.mapper.purchase.QuotationMapper;
+import com.dzgylxt.service.IPriceHistoryService;
 import com.dzgylxt.service.IQuotationService;
 import com.dzgylxt.vo.purchase.QuotationImportResultVO;
 import lombok.Data;
@@ -77,6 +78,9 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
+
+    @Autowired
+    private IPriceHistoryService priceHistoryService;
 
     /** 直接持有 Mapper 用于批量失效旧批次 update 语句。 */
     @Autowired
@@ -244,7 +248,19 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void accept(Long quotationId) {
-        transition(quotationId, QuotationStatus.ACCEPTED);
+        Quotation quotation = getById(quotationId);
+        if (quotation == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "报价不存在：" + quotationId);
+        }
+        if (quotation.getStatus() != QuotationStatus.SUBMITTED) {
+            throw new BizException(ResultCode.STATUS_INVALID, "报价当前状态不允许流转：" + quotation.getStatus().getDesc());
+        }
+        quotation.setStatus(QuotationStatus.ACCEPTED);
+        updateById(quotation);
+        // 价格库埋点①：报价采纳（P3 §1.4，异常价自动入待审）
+        priceHistoryService.record(quotation.getSkuId(), quotation.getSupplierId(),
+                quotation.getPrice(), com.dzgylxt.enums.PriceSource.QUOTATION,
+                "QUOTATION", quotation.getId(), "报价采纳-" + quotation.getBatchNo());
     }
 
     @Override

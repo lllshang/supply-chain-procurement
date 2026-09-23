@@ -40,6 +40,7 @@ import com.dzgylxt.mapper.purchase.PurchaseApplyItemMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyMapper;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IBudgetOccupyService;
+import com.dzgylxt.service.IPriceHistoryService;
 import com.dzgylxt.enums.BudgetBizType;
 import com.dzgylxt.service.IOrderService;
 import com.dzgylxt.vo.budget.BudgetOccupyCmd;
@@ -116,6 +117,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
+
+    @Autowired
+    private IPriceHistoryService priceHistoryService;
 
     @Autowired
     private IBudgetOccupyService budgetOccupyService;
@@ -572,6 +576,10 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             item.setApplyItemId(line.req.getApplyItemId());
             item.setPlanDate(line.req.getPlanDate());
             orderItemMapper.insert(item);
+            // 价格库埋点③：订单生成（P3 §1.4；价格取基本单位口径 #27）
+            priceHistoryService.record(item.getSkuId(), order.getSupplierId(), item.getPrice(),
+                    com.dzgylxt.enums.PriceSource.ORDER, "ORDER", order.getId(),
+                    "订单生成-" + order.getOrderNo());
         }
 
         // P3 §3 行6：占用主体转移（申请→订单，金额不变；不重复计 used_amount）

@@ -26,6 +26,7 @@ import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.mapper.purchase.QuotationMapper;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IAwardService;
+import com.dzgylxt.service.IPriceHistoryService;
 import com.dzgylxt.service.ISupplierService;
 import com.dzgylxt.vo.purchase.AwardSaveReqVO;
 import com.dzgylxt.vo.supplier.SupplierAdmissionVO;
@@ -74,6 +75,9 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
+
+    @Autowired
+    private IPriceHistoryService priceHistoryService;
 
     /** 异常价判定：定标价低于历史均价该百分比（%）时标记人工复核提示（Q 默认 10）。 */
     @Value("${app.award.abnormal-price-percent:10}")
@@ -292,6 +296,14 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         }
         award.setStatus(AwardStatus.APPROVED);
         updateById(award);
+        // 价格库埋点②：定标审批通过（P3 §1.4，逐明细行）
+        for (com.dzgylxt.entity.purchase.AwardItem item : awardItemMapper.selectList(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<com.dzgylxt.entity.purchase.AwardItem>lambdaQuery()
+                        .eq(com.dzgylxt.entity.purchase.AwardItem::getAwardId, bizId))) {
+            priceHistoryService.record(item.getSkuId(), item.getSupplierId(), item.getPrice(),
+                    com.dzgylxt.enums.PriceSource.AWARD, "AWARD", bizId,
+                    "定标通过-" + award.getAwardNo());
+        }
     }
 
     @Override

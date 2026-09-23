@@ -98,6 +98,8 @@ class OrderTripleCheckTest {
     private RedisLockUtil redisLockUtil;
     @Mock
     private com.dzgylxt.service.IBudgetOccupyService budgetOccupyService;
+    @Mock
+    private com.dzgylxt.service.IPriceHistoryService priceHistoryService;
 
     private FakeRow contractRow;
     private FakeRow itemRow;
@@ -115,6 +117,7 @@ class OrderTripleCheckTest {
         ReflectionTestUtils.setField(service, "awardItemMapper", awardItemMapper);
         ReflectionTestUtils.setField(service, "orderItemMapper", orderItemMapper);
         ReflectionTestUtils.setField(service, "orderChangeMapper", orderChangeMapper);
+        ReflectionTestUtils.setField(service, "priceHistoryService", priceHistoryService);
         ReflectionTestUtils.setField(service, "arrivalMapper",
                 org.mockito.Mockito.mock(com.dzgylxt.mapper.order.ArrivalMapper.class));
         ReflectionTestUtils.setField(service, "arrivalItemMapper",

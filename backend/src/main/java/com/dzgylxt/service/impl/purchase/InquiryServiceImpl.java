@@ -21,6 +21,7 @@ import com.dzgylxt.mapper.purchase.QuotationMapper;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IInquiryService;
 import com.dzgylxt.service.IInquirySupplierService;
+import com.dzgylxt.service.IPriceHistoryService;
 import com.dzgylxt.vo.purchase.InquiryComparisonVO;
 import com.dzgylxt.vo.purchase.InquirySaveReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +48,9 @@ public class InquiryServiceImpl extends ServiceImpl<InquiryMapper, Inquiry> impl
 
     @Autowired
     private QuotationMapper quotationMapper;
+
+    @Autowired
+    private IPriceHistoryService priceHistoryService;
 
     @Autowired
     @Lazy
@@ -191,21 +195,36 @@ public class InquiryServiceImpl extends ServiceImpl<InquiryMapper, Inquiry> impl
                 sc.setMaxPrice(max);
                 sc.setAvgPrice(sum.divide(BigDecimal.valueOf(skuQuotes.size()), 4, RoundingMode.HALF_UP));
             }
-            // 历史价：该 SKU 近 5 次有效报价（跨询价，时间倒序）
-            List<Quotation> history = quotationMapper.selectList(
-                    Wrappers.<Quotation>lambdaQuery()
-                            .eq(Quotation::getSkuId, item.getSkuId())
-                            .eq(Quotation::getInvalid, 0)
-                            .orderByDesc(Quotation::getCreatedAt)
-                            .last("LIMIT " + HISTORY_LIMIT));
-            for (Quotation q : history) {
-                InquiryComparisonVO.PriceHistory h = new InquiryComparisonVO.PriceHistory();
-                h.setSkuId(q.getSkuId());
-                h.setSupplierId(q.getSupplierId());
-                h.setPrice(q.getPrice());
-                h.setSource("quotation");
-                h.setTime(q.getCreatedAt() == null ? null : q.getCreatedAt().toString());
-                sc.getHistory().add(h);
+            // 历史价（P3 T07）：优先价格库 price_history（仅通过价）；
+            // 空库兜底回实时计算（该 SKU 近 5 次有效报价，跨询价时间倒序）
+            List<com.dzgylxt.entity.cost.PriceHistory> recorded =
+                    priceHistoryService.recent(item.getSkuId(), HISTORY_LIMIT);
+            if (!recorded.isEmpty()) {
+                for (com.dzgylxt.entity.cost.PriceHistory h : recorded) {
+                    InquiryComparisonVO.PriceHistory vo2 = new InquiryComparisonVO.PriceHistory();
+                    vo2.setSkuId(h.getSkuId());
+                    vo2.setSupplierId(h.getSupplierId());
+                    vo2.setPrice(h.getPrice());
+                    vo2.setSource("price_history:" + h.getSource().name());
+                    vo2.setTime(h.getEffectiveDate() == null ? null : h.getEffectiveDate().toString());
+                    sc.getHistory().add(vo2);
+                }
+            } else {
+                List<Quotation> history = quotationMapper.selectList(
+                        Wrappers.<Quotation>lambdaQuery()
+                                .eq(Quotation::getSkuId, item.getSkuId())
+                                .eq(Quotation::getInvalid, 0)
+                                .orderByDesc(Quotation::getCreatedAt)
+                                .last("LIMIT " + HISTORY_LIMIT));
+                for (Quotation q : history) {
+                    InquiryComparisonVO.PriceHistory h = new InquiryComparisonVO.PriceHistory();
+                    h.setSkuId(q.getSkuId());
+                    h.setSupplierId(q.getSupplierId());
+                    h.setPrice(q.getPrice());
+                    h.setSource("quotation");
+                    h.setTime(q.getCreatedAt() == null ? null : q.getCreatedAt().toString());
+                    sc.getHistory().add(h);
+                }
             }
             vo.getItems().add(sc);
         }
