@@ -12,6 +12,7 @@ import com.dzgylxt.enums.PaymentStatus;
 import com.dzgylxt.enums.SettlementStatus;
 import com.dzgylxt.mapper.order.OrderItemMapper;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
+import com.dzgylxt.mapper.order.ServiceAssessMapper;
 import com.dzgylxt.mapper.settlement.PaymentMapper;
 import com.dzgylxt.mapper.settlement.SettlementMapper;
 import com.dzgylxt.service.IBudgetOccupyService;
@@ -65,6 +66,10 @@ class SettlementPaymentTest {
     @Mock
     private OrderItemMapper orderItemMapper;
 
+    /** #42/#43 新增依赖：totalDeductOf 经此查 Σ考核扣款（物料单应为空列表 → 0）。 */
+    @Mock
+    private ServiceAssessMapper serviceAssessMapper;
+
     @Mock
     private IBudgetOccupyService budgetOccupyService;
 
@@ -82,6 +87,7 @@ class SettlementPaymentTest {
         settlementService = new SettlementServiceImpl(gatewayProvider);
         ReflectionTestUtils.setField(settlementService, "orderMapper", orderMapper);
         ReflectionTestUtils.setField(settlementService, "orderItemMapper", orderItemMapper);
+        ReflectionTestUtils.setField(settlementService, "serviceAssessMapper", serviceAssessMapper);
         ReflectionTestUtils.setField(settlementService, "baseMapper", settlementMapper);
         ReflectionTestUtils.setField(settlementService, "budgetOccupyService", budgetOccupyService);
 
@@ -145,9 +151,10 @@ class SettlementPaymentTest {
     void createPayment_requiresSettled_andCapsAtAmount() {
         Settlement settled = settlement(SettlementStatus.SETTLED);
         when(settlementMapper.selectById(SETTLE_ID)).thenReturn(settled);
-        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("1000"));
+        // #39 后封顶口径改为"累计付款（含在途）"：sumCommittedAmount 已含已付+在途
+        when(paymentMapper.sumCommittedAmount(SETTLE_ID)).thenReturn(new BigDecimal("1000"));
 
-        // 已付 1000 + 本次 300 > 结算 1200 → 拒绝
+        // 已承诺 1000 + 本次 300 > 结算 1200 → 拒绝
         PaymentSaveReqVO over = new PaymentSaveReqVO();
         over.setSettlementId(SETTLE_ID);
         over.setPayAmount(new BigDecimal("300"));
