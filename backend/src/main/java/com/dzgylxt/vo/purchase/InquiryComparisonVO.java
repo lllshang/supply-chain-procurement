@@ -28,6 +28,8 @@ public class InquiryComparisonVO implements Serializable {
         private List<Quotation> quotations = new ArrayList<>();
         /** 历史价（近 5 次，可配置） */
         private List<PriceHistory> history = new ArrayList<>();
+        /** 历史价数据来源（#45 收口批）：HISTORY=price_history 价格库 / REALTIME=实时报价计算兜底 */
+        private String priceSource;
     }
 
     @Data
