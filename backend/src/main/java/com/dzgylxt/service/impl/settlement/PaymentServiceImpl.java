@@ -74,14 +74,15 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
         if (settlement.getStatus() != SettlementStatus.SETTLED) {
             throw new BizException(ResultCode.STATUS_INVALID, "仅已结算（SETTLED）可发起付款");
         }
-        BigDecimal paid = baseMapper.sumPaidAmount(settlement.getId());
+        // QA #39：封顶校验计入在途付款（非 REJECTED），防止多笔在途合计超额
+        BigDecimal committed = baseMapper.sumCommittedAmount(settlement.getId());
         BigDecimal payAmount = req.getPayAmount() == null ? BigDecimal.ZERO : req.getPayAmount();
         if (payAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BizException(ResultCode.PARAM_ERROR, "付款金额必须大于 0");
         }
-        if (paid.add(payAmount).compareTo(settlement.getAmount()) > 0) {
+        if (committed.add(payAmount).compareTo(settlement.getAmount()) > 0) {
             throw new BizException(ResultCode.BIZ_ERROR,
-                    "累计付款超出结算金额：已付 " + paid + "，本次 " + payAmount
+                    "累计付款（含在途）超出结算金额：已承诺 " + committed + "，本次 " + payAmount
                             + "，结算 " + settlement.getAmount());
         }
         Payment p = new Payment();
@@ -248,7 +249,10 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (paidTotal.compareTo(settledTotal) >= 0 && settledTotal.compareTo(BigDecimal.ZERO) > 0) {
             PurchaseOrder order = orderMapper.selectById(orderId);
-            if (order != null && order.getStatus() == OrderStatus.SETTLED) {
+            // QA #46：无 isFinal 结算单的订单可能停在 RECEIVED（从未触发 SETTLED
+            // 提升），付清即应 PAID——guard 放宽为「未终态均可推进」
+            if (order != null && order.getStatus() != OrderStatus.PAID
+                    && order.getStatus() != OrderStatus.CANCELLED) {
                 order.setStatus(OrderStatus.PAID);
                 orderMapper.updateById(order);
             }

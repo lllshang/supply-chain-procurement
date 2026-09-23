@@ -150,8 +150,15 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
         s.setPhaseRatio(req.getPhaseRatio());
         s.setIsFinal(req.getIsFinal() == null ? 0 : req.getIsFinal());
         s.setRemark(req.getRemark());
-        s.setAmount(resolveAmount(req, order, orderAmount));
-        validatePhaseAndFinal(s, history, orderAmount);
+        // QA #43：服务结算回填考核扣款（一次性扣完——历史行已扣部分不重复扣，
+        // 剩余扣款落在本次行；物料单恒 0）
+        BigDecimal remainingDeduct = remainingDeductOf(order, history);
+        s.setDeductAmount(remainingDeduct);
+        s.setAmount(resolveAmount(req, order, orderAmount, remainingDeduct));
+        // QA #42：isFinal 结清校验基数 = 订单金额 − Σ考核扣款（与 handleApproval 的
+        // SETTLED 判定同口径，服务链 isFinal 可达）
+        validatePhaseAndFinal(s, history,
+                orderAmount.subtract(totalDeductOf(order.getId())).setScale(2, RoundingMode.HALF_UP));
         s.setStatus(SettlementStatus.PENDING);
         save(s);
         return s.getId();
@@ -229,9 +236,11 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
         cmd.setAmount(s.getAmount());
         cmd.setRemark("结算核销-" + s.getSettleNo());
         budgetOccupyService.writeOff(cmd);
-        // 订单全部结清（Σ已结 ≥ 应结总额）→ SETTLED
+        // 订单全部结清（QA #42：服务单应结基数 = 订单金额 − Σ考核扣款）→ SETTLED
         BigDecimal settled = baseMapper.sumSettledAmount(s.getOrderId());
-        BigDecimal total = orderTotalAmount(s.getOrderId());
+        BigDecimal total = orderTotalAmount(s.getOrderId())
+                .subtract(totalDeductOf(s.getOrderId()))
+                .setScale(2, RoundingMode.HALF_UP);
         if (settled.compareTo(total) >= 0) {
             PurchaseOrder order = orderMapper.selectById(s.getOrderId());
             if (order != null && order.getStatus() != OrderStatus.CANCELLED) {
@@ -333,24 +342,48 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
 
     /** 金额解析：req 显式金额优先；否则物料=数量×订单均价、服务=订单金额−扣款（按比例）。 */
     private BigDecimal resolveAmount(SettlementSaveReqVO req, PurchaseOrder order,
-                                     BigDecimal orderAmount) {
+                                     BigDecimal orderAmount, BigDecimal remainingDeduct) {
         if (req.getAmount() != null && req.getAmount().compareTo(BigDecimal.ZERO) > 0) {
             return req.getAmount().setScale(2, RoundingMode.HALF_UP);
         }
         SettlementDraftVO draft = buildDraft(order, req.getArrivalId());
         if (req.getType() == SettlementType.SERVICE
                 || order.getOrderType() == com.dzgylxt.enums.ItemType.SERVICE) {
-            // 服务结算 = 订单金额 × 本次/入库比例 − Σ扣款（扣款一次性扣完，不足不穿 0）
+            // 服务结算 = 订单金额 × 本次/入库比例 − 本次承担扣款（QA #43：剩余扣款
+            // 一次性落本行，扣款>订单取 0；历史行已扣不重复扣）
             BigDecimal ratio = draft.getStoredQtyBase().compareTo(BigDecimal.ZERO) > 0
                     ? nvl(req.getSettledQtyBase()).divide(draft.getStoredQtyBase(), 6, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
-            return orderAmount.multiply(ratio).subtract(draft.getAssessDeduct())
+            return orderAmount.multiply(ratio).subtract(remainingDeduct)
                     .setScale(2, RoundingMode.HALF_UP).max(BigDecimal.ZERO);
         }
         BigDecimal avgPrice = draft.getStoredQtyBase().compareTo(BigDecimal.ZERO) > 0
                 ? orderAmount.divide(draft.getStoredQtyBase(), 6, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
         return nvl(req.getSettledQtyBase()).multiply(avgPrice).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /** QA #43：本次应承担的剩余考核扣款 = Σ考核扣款 − Σ历史行已扣（已扣=历史行 deduct_amount）。 */
+    private BigDecimal remainingDeductOf(PurchaseOrder order, List<Settlement> history) {
+        if (order.getOrderType() != com.dzgylxt.enums.ItemType.SERVICE) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal total = serviceAssessMapper.selectList(
+                        new LambdaQueryWrapper<ServiceAssess>().eq(ServiceAssess::getOrderId, order.getId()))
+                .stream().map(a -> nvl(a.getDeductAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal already = history.stream()
+                .map(h -> nvl(h.getDeductAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return total.subtract(already).max(BigDecimal.ZERO);
+    }
+
+    /** QA #42：订单 Σ考核扣款（服务单；物料单恒 0）。 */
+    private BigDecimal totalDeductOf(Long orderId) {
+        return serviceAssessMapper.selectList(
+                        new LambdaQueryWrapper<ServiceAssess>().eq(ServiceAssess::getOrderId, orderId))
+                .stream().map(a -> nvl(a.getDeductAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** 阶段比例 Σ≤100；尾款：Σ已结(SETTLED) + 本次 = 应结总额。 */

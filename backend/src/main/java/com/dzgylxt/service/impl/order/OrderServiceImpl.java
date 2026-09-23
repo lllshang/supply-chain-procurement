@@ -426,20 +426,32 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
                 contractMapper.releaseAvailable(contract.getId(), amountDelta.abs(), contract.getVersion());
             }
-            if (order.getBudgetOccupied() != null) {
-                // P3 §3 行7：变更对冲——正差额追加占用（超预算拦截），负差额释放
+            // P3 §3 行7：变更对冲（仅对存在真实预算占用的订单生效；无申请来源
+            // 订单 budget_occupied=0 且无预算上下文，跳过占用/释放，快照不虚增）
+            if (order.getBudgetOccupied() != null
+                    && order.getBudgetOccupied().compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal newOccupied = order.getBudgetOccupied().add(amountDelta);
                 if (amountDelta.compareTo(BigDecimal.ZERO) > 0) {
                     BudgetOccupyCmd occupyCmd = new BudgetOccupyCmd();
-                    occupyCmd.setDeptId(null);
+                    // QA #35：与 submit/createOrder 同源回填控制维度（dept×subject×period），
+                    // 否则服务端校验「预算占用命令非法」；无申请来源的订单无预算上下文，不占用
+                    if (order.getApplyId() != null) {
+                        PurchaseApply srcApply = applyMapper.selectById(order.getApplyId());
+                        if (srcApply != null) {
+                            occupyCmd.setDeptId(srcApply.getDeptId());
+                            occupyCmd.setExpectedDate(srcApply.getExpectedDate());
+                        }
+                    }
                     occupyCmd.setAmount(amountDelta);
                     occupyCmd.setBizType(BudgetBizType.ORDER);
                     occupyCmd.setBizId(id);
                     occupyCmd.setRemark("订单变更增额");
-                    OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
-                    if (!result.isAvailable()) {
-                        throw new BizException(ResultCode.BIZ_ERROR,
-                                "变更增额超出预算余额：" + result.getMessage());
+                    if (occupyCmd.getDeptId() != null) {
+                        OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
+                        if (!result.isAvailable()) {
+                            throw new BizException(ResultCode.BIZ_ERROR,
+                                    "变更增额超出预算余额：" + result.getMessage());
+                        }
                     }
                 } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
                     BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();

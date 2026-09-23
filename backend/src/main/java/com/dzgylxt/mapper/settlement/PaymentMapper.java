@@ -17,8 +17,16 @@ public interface PaymentMapper extends BaseMapper<Payment> {
     @Select("SELECT * FROM payment WHERE deleted = 0 AND settlement_id = #{settlementId} ORDER BY id ASC")
     List<Payment> selectBySettlement(@Param("settlementId") Long settlementId);
 
-    /** 结算单已付累计（仅 PAID）。 */
+    /** 结算单已付累计（仅 PAID；订单付清判定口径）。 */
     @Select("SELECT COALESCE(SUM(pay_amount), 0) FROM payment"
             + " WHERE deleted = 0 AND settlement_id = #{settlementId} AND status = 1")
     BigDecimal sumPaidAmount(@Param("settlementId") Long settlementId);
+
+    /**
+     * 结算单付款承诺累计（QA #39：计入非 REJECTED——PAID 实付 + UNPAID 在途，
+     * 防止多笔在途付款合计超出结算金额）。
+     */
+    @Select("SELECT COALESCE(SUM(pay_amount), 0) FROM payment"
+            + " WHERE deleted = 0 AND settlement_id = #{settlementId} AND status != 2")
+    BigDecimal sumCommittedAmount(@Param("settlementId") Long settlementId);
 }

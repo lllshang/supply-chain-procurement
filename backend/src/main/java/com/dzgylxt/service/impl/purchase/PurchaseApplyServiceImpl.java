@@ -369,4 +369,38 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
             budgetOccupyService.release(releaseCmd);
         }
     }
+
+    /**
+     * 作废申请（P3 设计 §2 行10，QA #36）：未转单完成前可作废；
+     * 全部预算占用按日志余额释放（经唯一写入口，保持 Σlog==used_amount 守恒）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void closeApply(Long id, String reason) {
+        PurchaseApply apply = getById(id);
+        if (apply == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "采购申请不存在：" + id);
+        }
+        if (apply.getStatus() == PurchaseApplyStatus.FULL_ORDER
+                || apply.getStatus() == PurchaseApplyStatus.CLOSED) {
+            throw new BizException(ResultCode.STATUS_INVALID,
+                    "当前状态不允许作废：" + apply.getStatus().getDesc());
+        }
+        apply.setStatus(PurchaseApplyStatus.CLOSED);
+        apply.setRemark(reason == null ? "作废" : apply.getRemark() == null
+                ? "作废：" + reason : apply.getRemark() + "；作废：" + reason);
+        updateById(apply);
+        // 行 10：作废释放全部占用（按日志余额，FULL_ORDER 已全额转移无可释放）
+        BigDecimal occupied = budgetOccupyService.occupiedTotal(
+                com.dzgylxt.enums.BudgetBizType.APPLY, id);
+        if (occupied.compareTo(BigDecimal.ZERO) > 0) {
+            BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
+            releaseCmd.setDeptId(apply.getDeptId());
+            releaseCmd.setAmount(occupied);
+            releaseCmd.setBizType(com.dzgylxt.enums.BudgetBizType.APPLY);
+            releaseCmd.setBizId(id);
+            releaseCmd.setRemark("申请作废释放-" + apply.getApplyNo());
+            budgetOccupyService.release(releaseCmd);
+        }
+    }
 }

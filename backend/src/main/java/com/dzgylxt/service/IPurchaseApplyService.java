@@ -28,4 +28,11 @@ public interface IPurchaseApplyService extends IService<PurchaseApply>, Approval
 
     /** 估算申请总额（Σ 明细 数量×预估价，缺预估价取 SKU 标准价）。 */
     java.math.BigDecimal estimateTotalAmount(Long applyId);
+
+    /**
+     * 作废申请（P3 设计 §2 行10）：未转单完成前（DRAFT/BUDGET_PENDING/
+     * PURCHASE_PENDING/APPROVED/PARTIAL_ORDER/REJECTED）可作废；
+     * 全部预算占用按日志余额释放（FULL_ORDER 已全额转移、无可释放）。
+     */
+    void closeApply(Long id, String reason);
 }

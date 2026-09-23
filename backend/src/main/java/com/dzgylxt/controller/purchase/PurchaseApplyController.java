@@ -97,4 +97,25 @@ public class PurchaseApplyController {
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(bytes);
     }
+
+    /** 作废申请（P3 设计 §2 行10；未转单完成前可作废并释放预算占用）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/close")
+    public R<Boolean> close(@PathVariable Long id, @RequestBody(required = false) CloseReq req) {
+        applyService.closeApply(id, req == null ? null : req.getReason());
+        return R.ok(true);
+    }
+
+    /** 作废请求体。 */
+    public static class CloseReq {
+        private String reason;
+
+        public String getReason() {
+            return reason;
+        }
+
+        public void setReason(String reason) {
+            this.reason = reason;
+        }
+    }
 }

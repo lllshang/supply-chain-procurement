@@ -12,7 +12,9 @@ public enum PurchaseApplyStatus implements IEnum<Integer> {
     APPROVED(3, "已审批"),
     REJECTED(4, "已驳回"),
     PARTIAL_ORDER(5, "部分转单"),
-    FULL_ORDER(6, "全部转单");
+    FULL_ORDER(6, "全部转单"),
+    /** P3 设计 §2 行10：作废（未转单完成前可作废，释放全部预算占用）。 */
+    CLOSED(7, "已作废");
 
     private final int code;
     private final String desc;
