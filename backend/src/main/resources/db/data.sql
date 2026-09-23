@@ -120,6 +120,12 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 (36, 1, 803, NOW(), NOW(), 0),
 (37, 1, 804, NOW(), NOW(), 0),
 (39, 1, 805, NOW(), NOW(), 0),
+(40, 1, 505, NOW(), NOW(), 0),
+(41, 1, 506, NOW(), NOW(), 0),
+(42, 1, 507, NOW(), NOW(), 0),
+(43, 1, 806, NOW(), NOW(), 0),
+(44, 1, 807, NOW(), NOW(), 0),
+(45, 1, 808, NOW(), NOW(), 0),
 (38, 1, 1001, NOW(), NOW(), 0);
 
 -- ---------------- P1 计量单位字典（基础种子，幂等） ----------------

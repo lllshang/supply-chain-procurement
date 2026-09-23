@@ -26,7 +26,9 @@ public class PurchaseOrder extends BaseEntity implements Serializable {
     /** 0=物料 1=服务（源自申请 item_type 拆单，P2 §1.3.7） */
     private ItemType orderType;
     private OrderStatus status;
-    /** 本单金额快照（<!-- D3: P3 改为真实占用 -->） */
+    /** 本单占用预算（P3 起为真实占用：下单时自申请转移，取消/核销经 IBudgetOccupyService） */
     private BigDecimal budgetOccupied;
+    /** 阶段结算比例 JSON（如 [{"phase":1,"ratio":30},{"phase":2,"ratio":40}]；null=一次性，P3 §1.3.3） */
+    private String phasePlan;
     private String remark;
 }
