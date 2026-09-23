@@ -35,10 +35,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 年度预算导入服务实现（R-BUD-03）。
+ * 年度预算导入服务实现（R-BUD-03，R1 修订）。
  *
- * <p>解析模板 → 校验（年度/部门/科目/项目/金额）→ 生成 1 条预算头 + N 条明细
- * （科目 × 期间，period 0=年度、1–12=月，启用项目维度时按 project_id 再分）。
+ * <p>解析模板 → 校验（年度/部门/科目/金额）→ 生成 1 条预算头 + N 条<b>月度</b>明细
+ * （科目 × 月份 1–12，period=0 年度额度行<b>已拆除（R1）</b>——年度 = 12 个月度行聚合视图；
+ * project_id 退出额度控制（R1），仅作为统计冗余随行落库）。
  * 全部校验通过才落库；失败回传错误清单（定位到行/列）。</p>
  */
 @Service
@@ -89,11 +90,12 @@ public class BudgetImportServiceImpl implements IBudgetImportService {
         header.setRemark("年度预算导入（模板 " + TEMPLATE_VERSION + "）");
         budgetHeaderMapper.insert(header);
         for (LineDraft draft : parsed.drafts.values()) {
-            for (int period = 0; period <= 12; period++) {
+            // R1：仅落月度行（period 1–12）；年度=聚合视图，不落 period=0 额度行
+            for (int period = 1; period <= 12; period++) {
                 BudgetLine line = new BudgetLine();
                 line.setHeaderId(header.getId());
                 line.setSubjectId(draft.subjectId);
-                line.setProjectId(draft.projectId);
+                line.setProjectId(draft.statProjectId());
                 line.setPeriod(period);
                 line.setAmount(draft.amounts[period]);
                 line.setUsedAmount(BigDecimal.ZERO);
@@ -121,12 +123,13 @@ public class BudgetImportServiceImpl implements IBudgetImportService {
         Map<Long, String> projectNames = projectNameMap();
         List<BudgetLineRespVO> lines = new ArrayList<>();
         for (LineDraft draft : parsed.drafts.values()) {
-            for (int period = 0; period <= 12; period++) {
+            // R1：预览仅月度行（period 1–12），与落库口径一致
+            for (int period = 1; period <= 12; period++) {
                 BudgetLineRespVO vo = new BudgetLineRespVO();
                 vo.setSubjectId(draft.subjectId);
                 vo.setSubjectName(subjectNames.get(draft.subjectId));
-                vo.setProjectId(draft.projectId);
-                vo.setProjectName(draft.projectId == null ? null : projectNames.get(draft.projectId));
+                vo.setProjectId(draft.statProjectId());
+                vo.setProjectName(draft.statProjectId() == null ? null : projectNames.get(draft.statProjectId()));
                 vo.setPeriod(period);
                 vo.setAmount(draft.amounts[period]);
                 vo.setUsedAmount(BigDecimal.ZERO);
@@ -222,7 +225,7 @@ public class BudgetImportServiceImpl implements IBudgetImportService {
             }
         }
         parsed.totalAmount = parsed.drafts.values().stream()
-                .map(d -> d.amounts[0])
+                .flatMap(d -> java.util.Arrays.stream(d.amounts).skip(1)) // R1：年度总额 = 12 个月度行聚合
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return parsed;
     }
@@ -243,9 +246,13 @@ public class BudgetImportServiceImpl implements IBudgetImportService {
         return ok;
     }
 
+    /**
+     * 合并行草稿（R1：key 仅科目——project_id 退出额度控制，不再按项目拆额度行；
+     * 项目仅作统计冗余，同科目多项目混合时 projectId 置空避免误归属）。
+     */
     private void mergeDraft(Parsed parsed, Long subjectId, Long projectId, BudgetImportRowVO row) {
-        String key = subjectId + ":" + (projectId == null ? "null" : projectId);
-        LineDraft draft = parsed.drafts.computeIfAbsent(key, k -> new LineDraft(subjectId, projectId));
+        LineDraft draft = parsed.drafts.computeIfAbsent(subjectId, k -> new LineDraft(subjectId));
+        draft.mergeProject(projectId);
         BigDecimal monthSum = BigDecimal.ZERO;
         for (int m = 1; m <= 12; m++) {
             BigDecimal amount = row.monthAt(m);
@@ -255,8 +262,7 @@ public class BudgetImportServiceImpl implements IBudgetImportService {
             draft.amounts[m] = draft.amounts[m].add(amount);
             monthSum = monthSum.add(amount);
         }
-        BigDecimal annual = row.getAnnual() == null ? monthSum : row.getAnnual();
-        draft.amounts[0] = draft.amounts[0].add(annual);
+        // 年度总额列仅为模板信息列（R1：无 period=0 行），月度合计为权威口径
     }
 
     private Map<Long, String> subjectNameMap() {
@@ -276,21 +282,37 @@ public class BudgetImportServiceImpl implements IBudgetImportService {
         private Long deptId;
         private BigDecimal totalAmount = BigDecimal.ZERO;
         private final List<ImportErrorVO> errors = new ArrayList<>();
-        private final Map<String, LineDraft> drafts = new LinkedHashMap<>();
+        private final Map<Long, LineDraft> drafts = new LinkedHashMap<>();
     }
 
-    /** 明细草稿：amounts[0]=年度，1–12=月。 */
+    /** 明细草稿（R1）：amounts[1–12]=月度额度（无年度行）；projectId 仅统计冗余（混合即置空）。 */
     private static final class LineDraft {
         private final Long subjectId;
-        private final Long projectId;
+        private Long projectId;
+        private boolean projectSeen;
+        private boolean projectConflict;
         private final BigDecimal[] amounts = new BigDecimal[13];
 
-        private LineDraft(Long subjectId, Long projectId) {
+        private LineDraft(Long subjectId) {
             this.subjectId = subjectId;
-            this.projectId = projectId;
             for (int i = 0; i < amounts.length; i++) {
                 amounts[i] = BigDecimal.ZERO;
             }
+        }
+
+        /** 项目统计归属：一致则保留，混合（含有无混杂）置空——project_id 不参与额度控制。 */
+        private void mergeProject(Long projectId) {
+            if (!projectSeen) {
+                projectSeen = true;
+                this.projectId = projectId;
+            } else if ((this.projectId == null) != (projectId == null)
+                    || (this.projectId != null && !this.projectId.equals(projectId))) {
+                projectConflict = true;
+            }
+        }
+
+        private Long statProjectId() {
+            return projectConflict ? null : projectId;
         }
     }
 }

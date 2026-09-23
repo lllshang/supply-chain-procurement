@@ -62,6 +62,9 @@ public class BudgetExecutionServiceImpl implements IBudgetExecutionService {
         if (headerIds != null) {
             wrapper.in(BudgetLine::getHeaderId, headerIds);
         }
+        // R1：仅月度行（period 1–12）参与台账——period=0 年度额度行已拆除，
+        // 年度 = 12 个月度行聚合视图（历史存量行被过滤，不重复计入可用/执行率）
+        wrapper.ne(BudgetLine::getPeriod, 0);
         List<BudgetLine> lines = budgetLineMapper.selectList(
                 wrapper.orderByAsc(BudgetLine::getSubjectId).orderByAsc(BudgetLine::getPeriod));
         List<Row> rows = new ArrayList<>();

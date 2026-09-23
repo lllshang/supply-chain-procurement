@@ -13,7 +13,7 @@ import java.util.List;
 @Mapper
 public interface BudgetLineMapper extends BaseMapper<BudgetLine> {
 
-    /** 取某预算头下的全部明细（含 period 0 与 1–12，按科目/期间排序）。 */
+    /** 取某预算头下的全部明细（月度行 1–12；R1：period=0 年度额度行已拆除，历史存量仅供迁移清理）。 */
     @Select("SELECT * FROM budget_line WHERE deleted = 0 AND header_id = #{headerId}"
             + " ORDER BY subject_id ASC, period ASC")
     List<BudgetLine> selectByHeader(@Param("headerId") Long headerId);

@@ -19,9 +19,10 @@ import java.util.List;
  * 预算校验实现（P3 升级为月度硬控读数，设计 §2.3 <!-- D3: 已落地 P3 -->）。
  *
  * <p>契约不变（P2 入口零改动）；读数语义升级：按 <b>提交当月</b> 取
- * {@code budget_line} 月度行（period=1–12，部门×科目×月份控制单元，Q1b 定稿），
+ * {@code budget_line} 月度行（period=1–12，部门×科目×月份控制单元，Q1b 定稿 + R1 定稿），
  * 可用余额 = Σ(该控制单元月度行 amount − used_amount)；<b>月度行不存在 = 无预算
- * （budgetStatus=2，走升级审批）</b>；年度行（period=0）仅台账汇总展示。
+ * （budgetStatus=2，走升级审批）</b>；period=0 年度额度行<b>已拆除（R1）</b>——
+ * 年度 = 12 个月度行聚合视图，不落额度行。
  * 真实占用/释放/核销一律经 {@link IBudgetOccupyService} 唯一写入口。</p>
  */
 @Service
