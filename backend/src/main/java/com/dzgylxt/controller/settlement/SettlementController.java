@@ -1,13 +1,86 @@
 package com.dzgylxt.controller.settlement;
 
-import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.dzgylxt.common.PageResult;
+import com.dzgylxt.common.R;
 import com.dzgylxt.entity.settlement.Settlement;
+import com.dzgylxt.enums.SettlementStatus;
+import com.dzgylxt.service.ISettlementService;
+import com.dzgylxt.vo.settlement.SettlementDraftVO;
+import com.dzgylxt.vo.settlement.SettlementSaveReqVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import com.dzgylxt.controller.BaseController;
 
-/** 结算管理。 */
+/**
+ * 结算管理（P3 设计 §5：/api/v1/settlements；独立控制器不走通用 save）。
+ */
 @RestController
 @RequestMapping("/api/v1/settlements")
-public class SettlementController extends BaseController<IService<Settlement>, Settlement> {
+public class SettlementController {
+
+    @Autowired
+    private ISettlementService settlementService;
+
+    /** 分页（订单/供应商/状态过滤）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/page")
+    public R<PageResult<Settlement>> page(@RequestParam(defaultValue = "1") long current,
+                                          @RequestParam(defaultValue = "10") long size,
+                                          @RequestParam(required = false) Long orderId,
+                                          @RequestParam(required = false) Long supplierId,
+                                          @RequestParam(required = false) SettlementStatus status) {
+        IPage<Settlement> result = settlementService.page(current, size, orderId, supplierId, status);
+        return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
+    }
+
+    /** 单据。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/{id}")
+    public R<Settlement> getById(@PathVariable Long id) {
+        return R.ok(settlementService.getById(id));
+    }
+
+    /** 订单入口带出草稿。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/draft/from-order/{orderId}")
+    public R<SettlementDraftVO> draftFromOrder(@PathVariable Long orderId) {
+        return R.ok(settlementService.draftFromOrder(orderId));
+    }
+
+    /** 到货单入口带出草稿（优先）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/draft/from-arrival/{arrivalId}")
+    public R<SettlementDraftVO> draftFromArrival(@PathVariable Long arrivalId) {
+        return R.ok(settlementService.draftFromArrival(arrivalId));
+    }
+
+    /** 创建结算单。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping
+    public R<Long> create(@RequestBody SettlementSaveReqVO req) {
+        return R.ok(settlementService.createSettlement(req));
+    }
+
+    /** 修改重提（驳回留痕后）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PutMapping("/{id}")
+    public R<Boolean> update(@PathVariable Long id, @RequestBody SettlementSaveReqVO req) {
+        settlementService.updateSettlement(id, req);
+        return R.ok(true);
+    }
+
+    /** 提交 SETTLEMENT 审批。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/submit")
+    public R<Long> submit(@PathVariable Long id) {
+        return R.ok(settlementService.submit(id));
+    }
 }
