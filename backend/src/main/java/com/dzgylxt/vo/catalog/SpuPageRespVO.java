@@ -1,5 +1,6 @@
 package com.dzgylxt.vo.catalog;
 
+import com.dzgylxt.enums.ProductStatus;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -19,6 +20,6 @@ public class SpuPageRespVO implements Serializable {
     private String baseUnit;
     private String imageFileKey;
     /** 0=正常 1=停用 */
-    private Integer status;
+    private ProductStatus status;
     private LocalDateTime updatedAt;
 }

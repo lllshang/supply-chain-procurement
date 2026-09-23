@@ -1,5 +1,6 @@
 package com.dzgylxt.vo.contract;
 
+import com.dzgylxt.enums.ItemType;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -15,8 +16,8 @@ public class ContractSaveReqVO implements Serializable {
     /** 来源定标（P2b 线下补录可空 <!-- D2 -->） */
     private Long awardId;
     private String title;
-    /** 0=物料 1=服务 2=综合 */
-    private Integer contractType;
+    /** 合同类型（#33 枚举 name 契约：收 name/数值、吐 name；落库 getValue()） */
+    private ItemType contractType;
     /** 合同金额（有来源定标时必须 = Σ 定标明细） */
     private BigDecimal amount;
     private LocalDate validFrom;

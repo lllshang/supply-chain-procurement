@@ -1,5 +1,6 @@
 package com.dzgylxt.vo.catalog;
 
+import com.dzgylxt.enums.ProductStatus;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -21,5 +22,5 @@ public class SpuSaveReqVO implements Serializable {
     private String description;
     private String remark;
     /** 0=正常 1=停用 */
-    private Integer status;
+    private ProductStatus status;
 }

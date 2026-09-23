@@ -3,6 +3,7 @@ package com.dzgylxt.service.impl.purchase;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.common.BizException;
+import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.catalog.Sku;
 import com.dzgylxt.entity.purchase.FrequentPurchase;
@@ -42,7 +43,7 @@ public class FrequentPurchaseServiceImpl extends ServiceImpl<FrequentPurchaseMap
         }
         for (Long skuId : skuIds) {
             Sku sku = skuMapper.selectById(skuId);
-            if (sku == null || sku.getStatus() == null || sku.getStatus() != 0) {
+            if (sku == null || sku.getStatus() == null || sku.getStatus() != ProductStatus.NORMAL) {
                 // 停用 SKU 拒绝带入（设计 §2.1）
                 throw new BizException(ResultCode.PARAM_ERROR, "SKU 无效或已停用，不可带入：" + skuId);
             }

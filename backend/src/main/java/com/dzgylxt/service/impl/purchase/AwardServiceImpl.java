@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.approval.ApprovalGateway;
 import com.dzgylxt.approval.ApprovalTaskSpec;
 import com.dzgylxt.common.BizException;
+import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.catalog.Sku;
@@ -216,7 +217,7 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
                 throw new BizException(ResultCode.PARAM_ERROR, "定标明细行的供应商/SKU/数量/单价均必填且为正数");
             }
             Sku sku = skuMapper.selectById(vo.getSkuId());
-            if (sku == null || sku.getStatus() == null || sku.getStatus() != 0) {
+            if (sku == null || sku.getStatus() == null || sku.getStatus() != ProductStatus.NORMAL) {
                 throw new BizException(ResultCode.PARAM_ERROR, "SKU 无效或已停用：" + vo.getSkuId());
             }
             String purchaseUnit = sku.getPurchaseUnit() != null ? sku.getPurchaseUnit() : sku.getBaseUnit();

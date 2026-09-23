@@ -1,5 +1,7 @@
 package com.dzgylxt.vo.supplier;
 
+import com.dzgylxt.enums.CoopStatus;
+import com.dzgylxt.enums.BlacklistFlag;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -17,10 +19,10 @@ public class SupplierAdmissionVO implements Serializable {
 
     private Long supplierId;
     private Boolean qualified;
-    /** 合作状态：0=正常 1=停用 2=冻结 */
-    private Integer coopStatus;
-    /** 黑名单：0=否 1=是 */
-    private Integer isBlacklist;
+    /** 合作状态（#33 name 契约：快照吐 name） */
+    private CoopStatus coopStatus;
+    /** 黑名单（#33 name 契约） */
+    private BlacklistFlag isBlacklist;
     /** 资质有效期整体派生状态：VALID / EXPIRING / EXPIRED / NONE */
     private String qualValidity;
     /** 不合格原因列表 */

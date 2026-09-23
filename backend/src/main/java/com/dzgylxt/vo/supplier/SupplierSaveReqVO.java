@@ -1,5 +1,6 @@
 package com.dzgylxt.vo.supplier;
 
+import com.dzgylxt.enums.SupplierSource;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -22,5 +23,5 @@ public class SupplierSaveReqVO implements Serializable {
     private String bankName;
     private String bankAccount;
     /** 来源：0=平台录入 1=H5提交 2=导入（缺省 0） */
-    private Integer source;
+    private SupplierSource source;
 }

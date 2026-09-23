@@ -1,7 +1,6 @@
 package com.dzgylxt.enums;
 
 import com.baomidou.mybatisplus.annotation.IEnum;
-import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * 供应商黑名单标记：0=否，1=是。
@@ -19,7 +18,6 @@ public enum BlacklistFlag implements IEnum<Integer> {
     }
 
     @Override
-    @JsonValue
     public Integer getValue() {
         return code;
     }

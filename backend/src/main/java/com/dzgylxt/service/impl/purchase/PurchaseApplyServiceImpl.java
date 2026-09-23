@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.approval.ApprovalGateway;
 import com.dzgylxt.approval.ApprovalTaskSpec;
 import com.dzgylxt.common.BizException;
+import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.ParamException;
 import com.dzgylxt.common.ResultCode;
@@ -264,7 +265,7 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
                 throw new BizException(ResultCode.PARAM_ERROR, "明细行数量必须大于 0");
             }
             Sku sku = skuMapper.selectById(req.getSkuId());
-            if (sku == null || sku.getStatus() == null || sku.getStatus() != 0) {
+            if (sku == null || sku.getStatus() == null || sku.getStatus() != ProductStatus.NORMAL) {
                 throw new BizException(ResultCode.PARAM_ERROR, "SKU 无效或已停用：" + req.getSkuId());
             }
             String purchaseUnit = req.getPurchaseUnit() != null ? req.getPurchaseUnit()

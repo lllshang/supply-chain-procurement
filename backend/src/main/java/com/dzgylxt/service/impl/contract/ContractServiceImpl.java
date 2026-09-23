@@ -104,7 +104,7 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
         contract.setAwardId(req.getAwardId());
         contract.setNo(businessNoGenerator.nextNo("HT"));
         contract.setTitle(req.getTitle());
-        contract.setContractType(req.getContractType() == null ? 0 : req.getContractType());
+        contract.setContractType(req.getContractType() == null ? 0 : req.getContractType().getValue());
         contract.setAmount(amount);
         contract.setValidFrom(req.getValidFrom());
         contract.setValidTo(req.getValidTo());
@@ -132,7 +132,7 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
             contract.setTitle(req.getTitle());
         }
         if (req.getContractType() != null) {
-            contract.setContractType(req.getContractType());
+            contract.setContractType(req.getContractType().getValue());
         }
         if (req.getAmount() != null) {
             contract.setAmount(req.getAmount());

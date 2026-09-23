@@ -1,5 +1,7 @@
 package com.dzgylxt.vo.catalog;
 
+import com.dzgylxt.enums.ProductStatus;
+import com.dzgylxt.enums.ValuationType;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -22,8 +24,8 @@ public class SkuSaveReqVO implements Serializable {
     private BigDecimal referencePrice;
     private BigDecimal standardPrice;
     /** 计价方式：0=计件 1=计重 */
-    private Integer valuationType;
+    private ValuationType valuationType;
     private String imageFileKey;
     /** 0=正常 1=停用 */
-    private Integer status;
+    private ProductStatus status;
 }

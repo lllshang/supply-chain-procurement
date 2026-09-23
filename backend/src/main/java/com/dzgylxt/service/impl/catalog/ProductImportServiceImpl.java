@@ -3,6 +3,7 @@ package com.dzgylxt.service.impl.catalog;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.exception.ExcelDataConvertException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.dzgylxt.enums.ValuationType;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.common.TaskRegistry;
@@ -29,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -198,7 +200,14 @@ public class ProductImportServiceImpl implements IProductImportService {
             skuReq.setPurchaseUnit(row.getPurchaseUnit());
             skuReq.setReferencePrice(row.getReferencePrice());
             skuReq.setStandardPrice(row.getStandardPrice());
-            skuReq.setValuationType(row.getValuationType());
+            // Excel 路径（EasyExcel 非 Jackson）：Integer 值 → 枚举
+            ValuationType valuationType = ValuationType.BY_PIECE;
+            if (row.getValuationType() != null) {
+                valuationType = Arrays.stream(ValuationType.values())
+                        .filter(t -> t.getValue().equals(row.getValuationType()))
+                        .findFirst().orElse(ValuationType.BY_PIECE);
+            }
+            skuReq.setValuationType(valuationType);
             skuService.createSku(skuReq);
         }
         task.setStatus("SUCCESS");

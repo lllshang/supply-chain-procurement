@@ -68,7 +68,7 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         entity.setStatus(SupplierStatus.PENDING);
         entity.setCoopStatus(CoopStatus.NORMAL);
         entity.setIsBlacklist(BlacklistFlag.NO);
-        entity.setSource(toSource(req.getSource()));
+        entity.setSource(req.getSource() == null ? SupplierSource.PLATFORM : req.getSource());
         save(entity);
         return entity.getId();
     }
@@ -90,9 +90,7 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
             throw new BizException(ResultCode.DATA_NOT_FOUND, "供应商分类不存在：" + req.getSupplierCategoryId());
         }
         copy(req, entity);
-        if (req.getSource() != null) {
-            entity.setSource(toSource(req.getSource()));
-        }
+        entity.setSource(req.getSource() == null ? entity.getSource() : req.getSource());
         updateById(entity);
     }
 
@@ -138,10 +136,10 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
             vo.setSupplierCategoryId(s.getSupplierCategoryId());
             // 分类可能为空（supplier_category_id = NULL），需判空避免以 null 查询映射。
             vo.setCategoryName(s.getSupplierCategoryId() == null ? null : nameMap.get(s.getSupplierCategoryId()));
-            vo.setCoopStatus(s.getCoopStatus() == null ? null : s.getCoopStatus().getValue());
-            vo.setIsBlacklist(s.getIsBlacklist() == null ? null : s.getIsBlacklist().getValue());
-            vo.setSource(s.getSource() == null ? null : s.getSource().getValue());
-            vo.setStatus(s.getStatus() == null ? null : s.getStatus().getValue());
+            vo.setCoopStatus(s.getCoopStatus());
+            vo.setIsBlacklist(s.getIsBlacklist());
+            vo.setSource(s.getSource());
+            vo.setStatus(s.getStatus());
             vo.setUpdatedAt(s.getUpdatedAt());
             records.add(vo);
         }
@@ -209,8 +207,8 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         }
         SupplierAdmissionVO vo = new SupplierAdmissionVO();
         vo.setSupplierId(supplierId);
-        vo.setCoopStatus(supplier.getCoopStatus() == null ? null : supplier.getCoopStatus().getValue());
-        vo.setIsBlacklist(supplier.getIsBlacklist() == null ? null : supplier.getIsBlacklist().getValue());
+        vo.setCoopStatus(supplier.getCoopStatus());
+        vo.setIsBlacklist(supplier.getIsBlacklist());
         vo.setQualValidity(overall == null ? "NONE" : overall.name());
         vo.setQualified(coopOk && notBlack && hasUnexpiredQual);
         vo.setReasons(reasons);
@@ -238,15 +236,4 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         entity.setBankAccount(req.getBankAccount());
     }
 
-    private SupplierSource toSource(Integer value) {
-        if (value == null) {
-            return SupplierSource.PLATFORM;
-        }
-        for (SupplierSource source : SupplierSource.values()) {
-            if (source.getValue().equals(value)) {
-                return source;
-            }
-        }
-        throw new BizException(ResultCode.PARAM_ERROR, "未知来源：" + value);
-    }
 }

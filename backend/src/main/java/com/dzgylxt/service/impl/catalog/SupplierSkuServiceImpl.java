@@ -129,7 +129,7 @@ public class SupplierSkuServiceImpl extends ServiceImpl<SupplierSkuMapper, Suppl
             vo.setSupplierSkuCode(bind.getSupplierSkuCode());
             vo.setSupplyPrice(bind.getSupplyPrice());
             vo.setPackageUnit(bind.getPackageUnit());
-            vo.setBindScope(bind.getBindScope() == null ? null : bind.getBindScope().getValue());
+            vo.setBindScope(bind.getBindScope());
             vo.setStatus(bind.getStatus());
             result.add(vo);
         }

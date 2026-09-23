@@ -1,5 +1,7 @@
 package com.dzgylxt.vo.supplier;
 
+import com.dzgylxt.enums.CoopStatus;
+import com.dzgylxt.enums.BlacklistFlag;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -14,9 +16,9 @@ public class SupplierPageReqVO implements Serializable {
     private Long categoryId;
     private String level;
     /** 合作状态：0=正常 1=停用 2=冻结 */
-    private Integer coopStatus;
+    private CoopStatus coopStatus;
     /** 黑名单：0=否 1=是 */
-    private Integer blacklist;
+    private BlacklistFlag blacklist;
     private Long current = 1L;
     private Long size = 10L;
 }

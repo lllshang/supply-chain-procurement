@@ -1,5 +1,6 @@
 package com.dzgylxt.vo.catalog;
 
+import com.dzgylxt.enums.ProductStatus;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -11,7 +12,7 @@ import java.io.Serializable;
 public class SpuPageReqVO implements Serializable {
 
     private Long categoryId;
-    private Integer status;
+    private ProductStatus status;
     /** 关键字（匹配 spuCode / name） */
     private String keyword;
     private Long current = 1L;

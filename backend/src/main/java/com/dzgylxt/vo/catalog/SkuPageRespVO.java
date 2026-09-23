@@ -1,5 +1,7 @@
 package com.dzgylxt.vo.catalog;
 
+import com.dzgylxt.enums.ProductStatus;
+import com.dzgylxt.enums.ValuationType;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -21,8 +23,8 @@ public class SkuPageRespVO implements Serializable {
     private String purchaseUnit;
     private BigDecimal referencePrice;
     private BigDecimal standardPrice;
-    private Integer valuationType;
+    private ValuationType valuationType;
     /** 0=正常 1=停用 */
-    private Integer status;
+    private ProductStatus status;
     private LocalDateTime updatedAt;
 }

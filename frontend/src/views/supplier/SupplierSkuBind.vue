@@ -107,10 +107,10 @@ async function loadBindings() {
 
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ skuId: null, supplierSkuCode: '', supplyPrice: null, packageUnit: '', bindScope: 0 })
+const form = reactive({ skuId: null, supplierSkuCode: '', supplyPrice: null, packageUnit: '', bindScope: 'UNLIMITED' })
 
 function openForm() {
-  Object.assign(form, { skuId: null, supplierSkuCode: '', supplyPrice: null, packageUnit: '', bindScope: 0 })
+  Object.assign(form, { skuId: null, supplierSkuCode: '', supplyPrice: null, packageUnit: '', bindScope: 'UNLIMITED' })
   formVisible.value = true
 }
 

@@ -14,33 +14,6 @@ export const ENUMS = {
     { value: 0, label: '正常', type: 'success' },
     { value: 1, label: '停用', type: 'info' }
   ],
-  // 供应商合作状态
-  coopStatus: [
-    { value: 0, label: '正常', type: 'success' },
-    { value: 1, label: '停用', type: 'info' },
-    { value: 2, label: '冻结', type: 'danger' }
-  ],
-  // 黑名单
-  blacklist: [
-    { value: 0, label: '否', type: 'success' },
-    { value: 1, label: '是', type: 'danger' }
-  ],
-  // 供应商来源
-  supplierSource: [
-    { value: 0, label: '平台录入' },
-    { value: 1, label: 'H5提交' },
-    { value: 2, label: '导入' }
-  ],
-  // 计价方式
-  valuationType: [
-    { value: 0, label: '计件' },
-    { value: 1, label: '计重' }
-  ],
-  // 绑定范围
-  bindScope: [
-    { value: 0, label: '不限定' },
-    { value: 1, label: '限定报价接单' }
-  ],
   // 价格规则类型
   priceRuleType: [
     { value: 1, label: '最低限价' },
@@ -190,6 +163,39 @@ export const STRING_ENUMS = {
   adjustBizType: [
     { value: 'ORDER', label: '订单' },
     { value: 'ARRIVAL', label: '到货' }
+  ],
+  // 供应商合作状态（#33 name 契约：详情/分页均吐 name）
+  coopStatus: [
+    { value: 'NORMAL', label: '正常', type: 'success' },
+    { value: 'DISABLED', label: '停用', type: 'info' },
+    { value: 'FROZEN', label: '冻结', type: 'danger' }
+  ],
+  // 黑名单
+  blacklist: [
+    { value: 'NO', label: '否', type: 'success' },
+    { value: 'YES', label: '是', type: 'danger' }
+  ],
+  // 供应商来源
+  supplierSource: [
+    { value: 'PLATFORM', label: '平台录入' },
+    { value: 'H5', label: 'H5提交' },
+    { value: 'IMPORT', label: '导入' }
+  ],
+  // 绑定范围
+  bindScope: [
+    { value: 'UNLIMITED', label: '不限定' },
+    { value: 'LIMITED', label: '限定报价接单' }
+  ],
+  // 计价方式（SKU 分页/详情吐 name）
+  valuationType: [
+    { value: 'BY_PIECE', label: '计件' },
+    { value: 'BY_WEIGHT', label: '计重' }
+  ],
+  // 商品状态 name 版（Spu/Sku 已枚举化；unit/category/spec/price_rule 仍为
+  // 数值，沿用 ENUMS.productStatus，键分开避免混用）
+  productStatusName: [
+    { value: 'NORMAL', label: '正常', type: 'success' },
+    { value: 'DISABLED', label: '停用', type: 'info' }
   ],
   // 行级类型（物料/服务）
   itemType: [

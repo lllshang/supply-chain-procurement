@@ -3,6 +3,7 @@ package com.dzgylxt.entity.catalog;
 import com.dzgylxt.common.BaseEntity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.dzgylxt.enums.ProductStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -22,7 +23,7 @@ public class Spu extends BaseEntity implements Serializable {
     private String spec;
     private String baseUnit;
     /** 0=正常，1=停用 */
-    private Integer status;
+    private ProductStatus status;
     /** 主图 file_key（引用 file_meta.file_key） */
     private String imageFileKey;
     /** 商品简介 */

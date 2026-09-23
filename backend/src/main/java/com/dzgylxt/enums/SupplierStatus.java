@@ -1,7 +1,6 @@
 package com.dzgylxt.enums;
 
 import com.baomidou.mybatisplus.annotation.IEnum;
-import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * 供应商状态：0=资质审核中，1=通过，2=驳回。
@@ -20,7 +19,6 @@ public enum SupplierStatus implements IEnum<Integer> {
     }
 
     @Override
-    @JsonValue
     public Integer getValue() {
         return code;
     }

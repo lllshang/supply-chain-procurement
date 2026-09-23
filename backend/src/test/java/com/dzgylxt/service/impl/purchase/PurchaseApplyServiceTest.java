@@ -20,6 +20,7 @@ import com.dzgylxt.vo.purchase.ApplyItemReqVO;
 import com.dzgylxt.vo.purchase.ApplySaveReqVO;
 import com.dzgylxt.vo.purchase.BudgetCheckResultVO;
 import org.junit.jupiter.api.BeforeEach;
+import com.dzgylxt.enums.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -94,7 +95,7 @@ class PurchaseApplyServiceTest {
     void createApply_snapshotsConversionPerItem() {
         Sku sku = new Sku();
         sku.setId(9L);
-        sku.setStatus(0);
+        sku.setStatus(ProductStatus.NORMAL);
         sku.setBaseUnit("PCS");
         sku.setPurchaseUnit("BOX");
         when(skuMapper.selectById(9L)).thenReturn(sku);
@@ -225,7 +226,7 @@ class PurchaseApplyServiceTest {
     void createApply_disabledSku_paramError() {
         Sku sku = new Sku();
         sku.setId(9L);
-        sku.setStatus(1);
+        sku.setStatus(ProductStatus.DISABLED);
         when(skuMapper.selectById(9L)).thenReturn(sku);
         when(applyMapper().insert(any(PurchaseApply.class))).thenReturn(1);
 

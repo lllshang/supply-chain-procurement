@@ -12,6 +12,7 @@ import com.dzgylxt.mapper.purchase.AwardItemMapper;
 import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.vo.purchase.AwardSaveReqVO;
 import org.junit.jupiter.api.BeforeEach;
+import com.dzgylxt.enums.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -80,7 +81,7 @@ class AwardMainSupplierTest {
 
         Sku sku = new Sku();
         sku.setId(SKU_ID);
-        sku.setStatus(0);
+        sku.setStatus(ProductStatus.NORMAL);
         sku.setBaseUnit("PCS");
         sku.setPurchaseUnit("BOX");
         when(skuMapper.selectById(SKU_ID)).thenReturn(sku);

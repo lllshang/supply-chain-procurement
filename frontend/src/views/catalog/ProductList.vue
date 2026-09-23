@@ -7,7 +7,7 @@
     <div class="toolbar">
       <el-input v-model="query.keyword" class="filter" placeholder="SPU 编码 / 名称" clearable :prefix-icon="Search" @keyup.enter="reload" />
       <TreeSelect v-model="query.categoryId" class="filter" :fetcher="getCategoryTree" :leaf-only="false" placeholder="品类" />
-      <EnumSelect v-model="query.status" class="filter-sm" enum-key="productStatus" placeholder="状态" />
+      <EnumSelect v-model="query.status" class="filter-sm" enum-key="productStatusName" placeholder="状态" />
       <el-button type="primary" :icon="Search" @click="reload">查询</el-button>
     </div>
 
@@ -19,7 +19,7 @@
       <el-table-column prop="baseUnit" label="基本单位" width="100" />
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
-          <StatusTag :value="row.status" enum-key="productStatus" />
+          <StatusTag :value="row.status" enum-key="productStatusName" />
         </template>
       </el-table-column>
       <el-table-column prop="updatedAt" label="更新时间" width="170" />
@@ -27,7 +27,7 @@
         <template #default="{ row }">
           <el-button link type="primary" @click="openSkus(row)">SKU</el-button>
           <el-button v-permission="writePerm" link type="primary" @click="openSpuForm(row)">编辑</el-button>
-          <el-button v-permission="writePerm" link type="success" v-if="row.status === 1" @click="toggleSpu(row, true)">启用</el-button>
+          <el-button v-permission="writePerm" link type="success" v-if="row.status === 'DISABLED'" @click="toggleSpu(row, true)">启用</el-button>
           <el-button v-permission="writePerm" link type="warning" v-else @click="toggleSpu(row, false)">停用</el-button>
         </template>
       </el-table-column>
@@ -61,14 +61,14 @@
         <el-table-column prop="standardPrice" label="标准价" width="100" />
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
-            <StatusTag :value="row.status" enum-key="productStatus" />
+            <StatusTag :value="row.status" enum-key="productStatusName" />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openConversion(row)">单位换算</el-button>
             <el-button v-permission="writePerm" link type="primary" @click="openSkuForm(row)">编辑</el-button>
-            <el-button v-permission="writePerm" link type="success" v-if="row.status === 1" @click="toggleSku(row, true)">启用</el-button>
+            <el-button v-permission="writePerm" link type="success" v-if="row.status === 'DISABLED'" @click="toggleSku(row, true)">启用</el-button>
             <el-button v-permission="writePerm" link type="warning" v-else @click="toggleSku(row, false)">停用</el-button>
           </template>
         </el-table-column>

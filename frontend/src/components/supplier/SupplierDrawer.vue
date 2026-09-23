@@ -80,7 +80,7 @@ const loading = ref(false)
 const admissionLoading = ref(false)
 const detail = reactive({})
 const admission = reactive({ qualified: false, qualValidity: 'NONE', reasons: [] })
-const coopStatus = ref(0)
+const coopStatus = ref('NORMAL')
 const blacklist = ref(false)
 
 async function load() {
@@ -90,8 +90,8 @@ async function load() {
   try {
     const res = await getSupplier(id)
     Object.assign(detail, res?.data || {})
-    coopStatus.value = detail.coopStatus ?? 0
-    blacklist.value = detail.isBlacklist === 1
+    coopStatus.value = detail.coopStatus ?? 'NORMAL'
+    blacklist.value = detail.isBlacklist === 'YES'
   } catch (e) {
     Object.assign(detail, props.supplier)
   } finally {

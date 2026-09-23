@@ -61,15 +61,10 @@ public class SupplierController {
 
     @PreAuthorize(GUARD)
     @PostMapping("/{id}/coop-status")
-    public R<Boolean> updateCoopStatus(@PathVariable Long id, @RequestParam Integer status) {
-        CoopStatus coopStatus = null;
-        for (CoopStatus cs : CoopStatus.values()) {
-            if (cs.getValue().equals(status)) {
-                coopStatus = cs;
-                break;
-            }
-        }
-        supplierService.updateCoopStatus(id, coopStatus);
+    public R<Boolean> updateCoopStatus(@PathVariable Long id,
+                                       @RequestParam CoopStatus status) {
+        // #33 name 契约：查询参数经 EnumWebConfig ConverterFactory 收 name/数值
+        supplierService.updateCoopStatus(id, status);
         return R.ok(true);
     }
 

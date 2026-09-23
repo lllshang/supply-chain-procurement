@@ -10,6 +10,7 @@ import com.dzgylxt.vo.contract.ContractSaveReqVO;
 import com.dzgylxt.vo.supplier.SupplierAdmissionVO;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import com.dzgylxt.enums.ItemType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -136,7 +137,7 @@ class ContractPerSupplierAmountTest {
         req.setSupplierId(supplierId);
         req.setAwardId(AWARD_ID);
         req.setTitle("拆分定标合同");
-        req.setContractType(0);
+        req.setContractType(ItemType.MATERIAL);
         req.setAmount(amount);
         req.setValidFrom(LocalDate.of(2026, 9, 22));
         req.setValidTo(LocalDate.of(2027, 9, 21));

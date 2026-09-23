@@ -4,6 +4,7 @@ import com.dzgylxt.common.BaseEntity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.enums.ValuationType;
+import com.dzgylxt.enums.ProductStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -24,7 +25,7 @@ public class Sku extends BaseEntity implements Serializable {
     private String baseUnit;
     private String spec;
     /** 0=正常，1=停用 */
-    private Integer status;
+    private ProductStatus status;
     /** 采购单位（引用 unit.code） */
     private String purchaseUnit;
     /** 参考价（≥0） */

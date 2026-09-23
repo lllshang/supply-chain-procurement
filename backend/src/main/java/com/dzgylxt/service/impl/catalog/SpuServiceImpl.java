@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.ResultCode;
+import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.entity.catalog.ProductCategory;
 import com.dzgylxt.entity.catalog.Spu;
 import com.dzgylxt.mapper.catalog.ProductCategoryMapper;
@@ -30,8 +31,8 @@ import java.util.stream.Collectors;
 @Service
 public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuService {
 
-    private static final int STATUS_NORMAL = 0;
-    private static final int STATUS_DISABLED = 1;
+    private static final ProductStatus STATUS_NORMAL = ProductStatus.NORMAL;
+    private static final ProductStatus STATUS_DISABLED = ProductStatus.DISABLED;
 
     private final IProductCategoryService categoryService;
     private final IUnitService unitService;
@@ -163,7 +164,7 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
         return respPage;
     }
 
-    private void changeStatus(Long id, int status) {
+    private void changeStatus(Long id, ProductStatus status) {
         Spu entity = getById(id);
         if (entity == null) {
             throw new BizException(ResultCode.DATA_NOT_FOUND, "SPU 不存在：" + id);

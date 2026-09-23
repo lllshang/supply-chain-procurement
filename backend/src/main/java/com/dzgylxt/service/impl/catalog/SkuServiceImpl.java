@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.catalog.Sku;
+import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.enums.PriceRefType;
 import com.dzgylxt.enums.ValuationType;
 import com.dzgylxt.mapper.catalog.SkuMapper;
@@ -29,8 +30,8 @@ import java.util.List;
 @Service
 public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements ISkuService {
 
-    private static final int STATUS_NORMAL = 0;
-    private static final int STATUS_DISABLED = 1;
+    private static final ProductStatus STATUS_NORMAL = ProductStatus.NORMAL;
+    private static final ProductStatus STATUS_DISABLED = ProductStatus.DISABLED;
 
     private final ISpuService spuService;
     private final IUnitService unitService;
@@ -109,7 +110,7 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements ISkuS
             vo.setPurchaseUnit(sku.getPurchaseUnit());
             vo.setReferencePrice(sku.getReferencePrice());
             vo.setStandardPrice(sku.getStandardPrice());
-            vo.setValuationType(sku.getValuationType() == null ? null : sku.getValuationType().getValue());
+            vo.setValuationType(sku.getValuationType());
             vo.setStatus(sku.getStatus());
             vo.setUpdatedAt(sku.getUpdatedAt());
             records.add(vo);
@@ -159,7 +160,7 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements ISkuS
         entity.setPurchaseUnit(req.getPurchaseUnit());
         entity.setReferencePrice(req.getReferencePrice());
         entity.setStandardPrice(req.getStandardPrice());
-        entity.setValuationType(toValuationType(req.getValuationType()));
+        entity.setValuationType(req.getValuationType() == null ? ValuationType.BY_PIECE : req.getValuationType());
         entity.setImageFileKey(req.getImageFileKey());
     }
 
@@ -169,19 +170,7 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements ISkuS
         }
     }
 
-    private ValuationType toValuationType(Integer value) {
-        if (value == null) {
-            return ValuationType.BY_PIECE;
-        }
-        for (ValuationType type : ValuationType.values()) {
-            if (type.getValue().equals(value)) {
-                return type;
-            }
-        }
-        throw new BizException(ResultCode.PARAM_ERROR, "未知计价方式：" + value);
-    }
-
-    private void changeStatus(Long id, int status) {
+    private void changeStatus(Long id, ProductStatus status) {
         Sku entity = getById(id);
         if (entity == null) {
             throw new BizException(ResultCode.DATA_NOT_FOUND, "SKU 不存在：" + id);
