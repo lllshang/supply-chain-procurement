@@ -96,6 +96,8 @@ class OrderTripleCheckTest {
     private UnitConversionMapper unitConversionMapper;
     @Mock
     private RedisLockUtil redisLockUtil;
+    @Mock
+    private com.dzgylxt.service.IBudgetOccupyService budgetOccupyService;
 
     private FakeRow contractRow;
     private FakeRow itemRow;
@@ -127,6 +129,14 @@ class OrderTripleCheckTest {
                 return prefix + "-TEST-" + String.format("%06d", seq.incrementAndGet());
             }
         });
+        // P3 预算占用：转移/释放直接成功（本测试聚焦合同/余量三重校验）
+        ReflectionTestUtils.setField(service, "budgetOccupyService", budgetOccupyService);
+        lenient().when(budgetOccupyService.transfer(any(com.dzgylxt.vo.budget.BudgetTransferCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
+        lenient().when(budgetOccupyService.release(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
+        lenient().when(budgetOccupyService.occupiedTotal(any(), any()))
+                .thenReturn(BigDecimal.ZERO);
         // IService.save 走 baseMapper.insert
         ReflectionTestUtils.setField(service, "baseMapper", purchaseOrderMapper);
         lenient().when(purchaseOrderMapper.insert(any(com.dzgylxt.entity.order.PurchaseOrder.class)))

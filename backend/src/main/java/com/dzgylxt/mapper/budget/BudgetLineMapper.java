@@ -41,6 +41,19 @@ public interface BudgetLineMapper extends BaseMapper<BudgetLine> {
     List<BudgetLine> selectMonthlyLines(@Param("deptId") Long deptId, @Param("year") Integer year,
                                         @Param("subjectId") Long subjectId);
 
+    /** 部门当月全部科目的月度行（subjectId 空时的分摊候选；按 id 升序）。 */
+    @Select("SELECT bl.* FROM budget_line bl"
+            + " JOIN budget_header bh ON bh.id = bl.header_id AND bh.deleted = 0"
+            + " WHERE bl.deleted = 0 AND bh.dept_id = #{deptId} AND bh.year = #{year}"
+            + " AND bl.period = #{period}"
+            + " ORDER BY bl.id ASC")
+    List<BudgetLine> selectDeptMonthlyLines(@Param("deptId") Long deptId, @Param("year") Integer year,
+                                            @Param("period") Integer period);
+
+    /** 按主键锁行（多行分摊场景按 id 升序逐行调用，保证锁序一致）。 */
+    @Select("SELECT * FROM budget_line WHERE id = #{id} AND deleted = 0 FOR UPDATE")
+    BudgetLine selectForUpdateById(@Param("id") Long id);
+
     /** 条件更新 used_amount（乐观锁 version 兜底；delta 为负时保证不减穿 0）。 */
     @Update("UPDATE budget_line SET used_amount = used_amount + #{delta}, version = version + 1,"
             + " updated_at = NOW() WHERE id = #{id} AND deleted = 0 AND version = #{version}"

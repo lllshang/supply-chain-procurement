@@ -39,7 +39,12 @@ import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyItemMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyMapper;
 import com.dzgylxt.security.UserContext;
+import com.dzgylxt.service.IBudgetOccupyService;
+import com.dzgylxt.enums.BudgetBizType;
 import com.dzgylxt.service.IOrderService;
+import com.dzgylxt.vo.budget.BudgetOccupyCmd;
+import com.dzgylxt.vo.budget.BudgetTransferCmd;
+import com.dzgylxt.vo.budget.OccupyResultVO;
 import com.dzgylxt.vo.order.OrderChangeReqVO;
 import com.dzgylxt.vo.order.OrderCreateReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -111,6 +116,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
+
+    @Autowired
+    private IBudgetOccupyService budgetOccupyService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -273,6 +281,16 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             if (orderAmount.compareTo(BigDecimal.ZERO) > 0) {
                 contractMapper.releaseAvailable(contract.getId(), orderAmount, contract.getVersion());
             }
+            // P3 §3 行5：取消释放订单占用（按日志余额，守恒回冲）
+            BigDecimal occupied = budgetOccupyService.occupiedTotal(BudgetBizType.ORDER, id);
+            if (occupied != null && occupied.compareTo(BigDecimal.ZERO) > 0) {
+                BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
+                releaseCmd.setAmount(occupied);
+                releaseCmd.setBizType(BudgetBizType.ORDER);
+                releaseCmd.setBizId(id);
+                releaseCmd.setRemark("订单取消释放-" + order.getOrderNo());
+                budgetOccupyService.release(releaseCmd);
+            }
             // 回冲申请余量（先锁申请明细行，再按真实 version 条件回冲）
             List<PurchaseApplyItem> lockedApplyItems = order.getApplyId() == null
                     ? List.of() : applyItemMapper.selectForUpdateByApply(order.getApplyId());
@@ -405,7 +423,29 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                 contractMapper.releaseAvailable(contract.getId(), amountDelta.abs(), contract.getVersion());
             }
             if (order.getBudgetOccupied() != null) {
-                order.setBudgetOccupied(order.getBudgetOccupied().add(amountDelta));
+                // P3 §3 行7：变更对冲——正差额追加占用（超预算拦截），负差额释放
+                BigDecimal newOccupied = order.getBudgetOccupied().add(amountDelta);
+                if (amountDelta.compareTo(BigDecimal.ZERO) > 0) {
+                    BudgetOccupyCmd occupyCmd = new BudgetOccupyCmd();
+                    occupyCmd.setDeptId(null);
+                    occupyCmd.setAmount(amountDelta);
+                    occupyCmd.setBizType(BudgetBizType.ORDER);
+                    occupyCmd.setBizId(id);
+                    occupyCmd.setRemark("订单变更增额");
+                    OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
+                    if (!result.isAvailable()) {
+                        throw new BizException(ResultCode.BIZ_ERROR,
+                                "变更增额超出预算余额：" + result.getMessage());
+                    }
+                } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
+                    BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
+                    releaseCmd.setAmount(amountDelta.negate());
+                    releaseCmd.setBizType(BudgetBizType.ORDER);
+                    releaseCmd.setBizId(id);
+                    releaseCmd.setRemark("订单变更减额释放");
+                    budgetOccupyService.release(releaseCmd);
+                }
+                order.setBudgetOccupied(newOccupied);
             }
             for (OrderItem item : items) {
                 orderItemMapper.updateById(item);
@@ -513,7 +553,7 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         order.setOrderType(type);
         order.setStatus(OrderStatus.CREATED);
         order.setBudgetOccupied(group.stream().map(l -> l.amount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)); // <!-- D3: P3 改为真实占用 -->
+                .reduce(BigDecimal.ZERO, BigDecimal::add)); // P3：真实占用（转移自申请）
         order.setRemark(req.getRemark());
         save(order);
 
@@ -533,6 +573,18 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             item.setPlanDate(line.req.getPlanDate());
             orderItemMapper.insert(item);
         }
+
+        // P3 §3 行6：占用主体转移（申请→订单，金额不变；不重复计 used_amount）
+        if (req.getApplyId() != null && order.getBudgetOccupied().compareTo(BigDecimal.ZERO) > 0) {
+            BudgetTransferCmd transferCmd = new BudgetTransferCmd();
+            transferCmd.setFromBizType(BudgetBizType.APPLY);
+            transferCmd.setFromBizId(req.getApplyId());
+            transferCmd.setToBizType(BudgetBizType.ORDER);
+            transferCmd.setToBizId(order.getId());
+            transferCmd.setAmount(order.getBudgetOccupied());
+            transferCmd.setRemark("下单转移-订单" + order.getOrderNo());
+            budgetOccupyService.transfer(transferCmd);
+        }
         return order.getId();
     }
 
@@ -549,6 +601,24 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                         || i.getRemainQty().compareTo(BigDecimal.ZERO) <= 0);
         apply.setStatus(allOrdered ? PurchaseApplyStatus.FULL_ORDER : PurchaseApplyStatus.PARTIAL_ORDER);
         applyMapper.updateById(apply);
+
+        // P3 §3 行8：FULL_ORDER 释放申请占用余量（Σ申请占用 − Σ订单承接额）
+        if (allOrdered) {
+            BigDecimal applyOccupied = budgetOccupyService.occupiedTotal(BudgetBizType.APPLY, applyId);
+            BigDecimal transferred = list(Wrappers.<PurchaseOrder>lambdaQuery()
+                            .eq(PurchaseOrder::getApplyId, applyId)).stream()
+                    .map(o -> o.getBudgetOccupied() == null ? BigDecimal.ZERO : o.getBudgetOccupied())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal remainder = applyOccupied.subtract(transferred);
+            if (remainder.compareTo(BigDecimal.ZERO) > 0) {
+                BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
+                releaseCmd.setAmount(remainder);
+                releaseCmd.setBizType(BudgetBizType.APPLY);
+                releaseCmd.setBizId(applyId);
+                releaseCmd.setRemark("全额转单释放申请占用余量");
+                budgetOccupyService.release(releaseCmd);
+            }
+        }
     }
 
     /** 取消回冲后回写申请状态：全部余量恢复 → APPROVED，否则 PARTIAL_ORDER。 */

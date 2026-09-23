@@ -896,8 +896,7 @@ CREATE TABLE IF NOT EXISTS budget_occupy_log (
     KEY idx_pol_action (action)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='预算占用/释放/核销流水（每日对账依据）';
 
--- 1.2.2 price_history（价格库：成交价沉淀；与 price_rule 事前限价两套分工，Q5）
-CREATE TABLE IF NOT EXISTS price_history (
+-- 1.2.2 price_history（价格库：成交价沉淀；与 price_rule 事前限价两套分工，Q5）CREATE TABLE IF NOT EXISTS price_history (
     id             BIGINT        NOT NULL PRIMARY KEY,
     sku_id         BIGINT        NOT NULL COMMENT 'SKU',
     supplier_id    BIGINT        NULL COMMENT '供应商（手工/品类级价可空）',
@@ -966,7 +965,11 @@ ALTER TABLE `payment`
   ADD COLUMN `confirmed_at` DATETIME    NULL COMMENT '登记确认时间' AFTER `confirmed_by`,
   ADD UNIQUE KEY `uk_pay_no` (`pay_no`, `deleted`);
 
--- 1.3.3 purchase_order（+1 阶段结算比例）
+-- 1.3.3 approval_task（+1：payload 持久化，P3 §4 spec.payloadJson 落库，回调侧可读）
+ALTER TABLE `approval_task`
+  ADD COLUMN `payload_json` TEXT NULL COMMENT '审批负载 JSON（bizType 升级审批参数，如 BUDGET 超支/调整、SETTLEMENT/PAYMENT 摘要）' AFTER `current_node`;
+
+-- 1.3.4 purchase_order（+1 阶段结算比例）
 ALTER TABLE `purchase_order`
   ADD COLUMN `phase_plan` TEXT NULL COMMENT '阶段结算比例 JSON（[{"phase":1,"ratio":30}…]；null=一次性）' AFTER `order_type`;
 

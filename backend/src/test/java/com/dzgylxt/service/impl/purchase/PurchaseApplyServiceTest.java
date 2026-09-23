@@ -65,6 +65,9 @@ class PurchaseApplyServiceTest {
     @Mock
     private IBudgetSoftCheckService budgetSoftCheckService;
 
+    @Mock
+    private com.dzgylxt.service.IBudgetOccupyService budgetOccupyService;
+
     private PurchaseApplyServiceImpl service;
 
     @BeforeEach
@@ -75,6 +78,13 @@ class PurchaseApplyServiceTest {
         ReflectionTestUtils.setField(service, "unitConversionMapper", unitConversionMapper);
         ReflectionTestUtils.setField(service, "approvalGateway", approvalGateway);
         ReflectionTestUtils.setField(service, "budgetSoftCheckService", budgetSoftCheckService);
+        ReflectionTestUtils.setField(service, "budgetOccupyService", budgetOccupyService);
+        // 驳回释放路径：默认无占用余额
+        org.mockito.Mockito.lenient()
+                .when(budgetOccupyService.occupiedTotal(any(), any())).thenReturn(BigDecimal.ZERO);
+        org.mockito.Mockito.lenient()
+                .when(budgetOccupyService.release(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
         ReflectionTestUtils.setField(service, "businessNoGenerator", new BusinessNoGenerator(null) {
             @Override
             public String nextNo(String prefix) {
@@ -128,12 +138,13 @@ class PurchaseApplyServiceTest {
         assertNotNull(saved.getVersion());
     }
 
-    /** 提交：软校验超预算仅置 budget_status=2，状态推进 PURCHASE_PENDING 并发起审批。 */
+    /** 提交（P3 硬控 行 1）：预算占用成功 → PURCHASE_PENDING + budget_status=1 + 采购审批。 */
     @Test
-    void submit_overBudgetOnlyWarns_andStartsApproval() {
+    void submit_occupySucceeds_startsPurchaseApproval() {
         PurchaseApply apply = new PurchaseApply();
         apply.setId(1L);
         apply.setDeptId(1L);
+        apply.setApplyNo("CG-TEST-000001");
         apply.setStatus(PurchaseApplyStatus.DRAFT);
         when(applyMapper().selectById(1L)).thenReturn(apply);
 
@@ -144,21 +155,55 @@ class PurchaseApplyServiceTest {
         item.setPriceEstimate(new BigDecimal("100"));
         when(itemMapper.selectList(any())).thenReturn(List.of(item));
 
-        BudgetCheckResultVO check = new BudgetCheckResultVO();
-        check.setBudgetStatus(2);
-        when(budgetSoftCheckService.check(eq(1L), any(), any(), any(BigDecimal.class))).thenReturn(check);
+        when(budgetOccupyService.occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.ok(new BigDecimal("1000"), List.of(5001L)));
         when(approvalGateway.create(any(ApprovalTaskSpec.class))).thenReturn(77L);
         when(applyMapper().updateById(any(PurchaseApply.class))).thenReturn(1);
 
         service.submit(1L);
 
         assertEquals(PurchaseApplyStatus.PURCHASE_PENDING, apply.getStatus());
-        assertEquals(2, apply.getBudgetStatus(), "超预算仅提示（<!-- D3 -->），不拦截");
+        assertEquals(1, apply.getBudgetStatus(), "占用成功 budget_status=1");
         ArgumentCaptor<ApprovalTaskSpec> spec = ArgumentCaptor.forClass(ApprovalTaskSpec.class);
         verify(approvalGateway).create(spec.capture());
         assertEquals("PURCHASE_APPLY", spec.getValue().getBizType());
         assertEquals(1L, spec.getValue().getBizId());
-        assertTrue(spec.getValue().getPayloadJson().contains("\"budgetStatus\":2"));
+    }
+
+    /** 提交（P3 硬控 行 2）：预算不足 → 拦截停 BUDGET_PENDING + BUDGET 升级审批（先占后审禁止）。 */
+    @Test
+    void submit_overBudget_blockedAndEscalated() {
+        PurchaseApply apply = new PurchaseApply();
+        apply.setId(1L);
+        apply.setDeptId(1L);
+        apply.setApplyNo("CG-TEST-000001");
+        apply.setStatus(PurchaseApplyStatus.DRAFT);
+        when(applyMapper().selectById(1L)).thenReturn(apply);
+
+        PurchaseApplyItem item = new PurchaseApplyItem();
+        item.setApplyId(1L);
+        item.setSkuId(9L);
+        item.setQtyInPurchaseUnit(BigDecimal.TEN);
+        item.setPriceEstimate(new BigDecimal("100"));
+        when(itemMapper.selectList(any())).thenReturn(List.of(item));
+
+        com.dzgylxt.vo.budget.OccupyResultVO blocked =
+                com.dzgylxt.vo.budget.OccupyResultVO.blocked(new BigDecimal("400"),
+                        new BigDecimal("600"), "当月预算余额不足");
+        when(budgetOccupyService.occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(blocked);
+        when(approvalGateway.create(any(ApprovalTaskSpec.class))).thenReturn(88L);
+        when(applyMapper().updateById(any(PurchaseApply.class))).thenReturn(1);
+
+        service.submit(1L);
+
+        assertEquals(PurchaseApplyStatus.BUDGET_PENDING, apply.getStatus(), "超支拦截停 BUDGET_PENDING");
+        assertEquals(2, apply.getBudgetStatus());
+        ArgumentCaptor<ApprovalTaskSpec> spec = ArgumentCaptor.forClass(ApprovalTaskSpec.class);
+        verify(approvalGateway).create(spec.capture());
+        assertEquals("BUDGET", spec.getValue().getBizType(), "发 BUDGET 升级审批");
+        assertEquals(1L, spec.getValue().getBizId());
+        assertTrue(spec.getValue().getPayloadJson().contains("overAmount"));
     }
 
     /** 提交状态机：APPROVED 单不可重复提交。 */

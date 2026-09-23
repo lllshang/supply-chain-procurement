@@ -22,5 +22,7 @@ public class ApprovalTask extends BaseEntity implements Serializable {
     private String flowKey;
     private ApprovalStatus status;
     private String currentNode;
+    /** 审批负载 JSON（P3 §4：BUDGET 超支/调整、SETTLEMENT/PAYMENT 摘要；回调侧读取） */
+    private String payloadJson;
     private String remark;
 }

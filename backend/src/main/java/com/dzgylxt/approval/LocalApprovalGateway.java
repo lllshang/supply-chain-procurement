@@ -62,6 +62,7 @@ public class LocalApprovalGateway implements ApprovalGateway {
         task.setStatus(ApprovalStatus.CREATED);
         // 两级审批从第一节点起（本地桩后续直接推进）；单级直接 end
         task.setCurrentNode("PURCHASE_APPLY".equals(spec.getBizType()) ? NODE_DEPT_HEAD : NODE_END);
+        task.setPayloadJson(spec.getPayloadJson());
         task.setRemark(spec.getTitle());
         approvalTaskService.save(task);
         return task.getId();

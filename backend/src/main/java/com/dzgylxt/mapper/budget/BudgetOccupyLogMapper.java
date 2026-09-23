@@ -31,6 +31,13 @@ public interface BudgetOccupyLogMapper extends BaseMapper<BudgetOccupyLog> {
             + " WHERE deleted = 0 AND biz_type = #{bizTypeCode} AND biz_id = #{bizId}")
     int countLinesByBiz(@Param("bizTypeCode") Integer bizTypeCode, @Param("bizId") Long bizId);
 
+    /** 某业务单据发生过动作的预算行ID集合（调用方按 id 升序加锁遍历）。 */
+    @Select("SELECT DISTINCT budget_line_id FROM budget_occupy_log"
+            + " WHERE deleted = 0 AND biz_type = #{bizTypeCode} AND biz_id = #{bizId}"
+            + " ORDER BY budget_line_id ASC")
+    java.util.List<Long> selectLineIdsByBiz(@Param("bizTypeCode") Integer bizTypeCode,
+                                            @Param("bizId") Long bizId);
+
     /** 每日对账：某行的 Σlog(占用−释放)（对齐 budget_line.used_amount 校验）。 */
     @Select("SELECT COALESCE(SUM(CASE WHEN action = 0 THEN amount"
             + " WHEN action = 1 THEN -amount ELSE 0 END), 0)"

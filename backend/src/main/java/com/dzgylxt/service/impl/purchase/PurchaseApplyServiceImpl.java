@@ -22,8 +22,11 @@ import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyItemMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyMapper;
 import com.dzgylxt.security.UserContext;
+import com.dzgylxt.service.IBudgetOccupyService;
 import com.dzgylxt.service.IBudgetSoftCheckService;
 import com.dzgylxt.service.IPurchaseApplyService;
+import com.dzgylxt.vo.budget.BudgetOccupyCmd;
+import com.dzgylxt.vo.budget.OccupyResultVO;
 import com.dzgylxt.vo.purchase.ApplyDetailRespVO;
 import com.dzgylxt.vo.purchase.ApplyItemReqVO;
 import com.dzgylxt.vo.purchase.ApplySaveReqVO;
@@ -41,9 +44,11 @@ import java.util.List;
 /**
  * 采购申请服务实现（设计 §2.1）。
  *
- * <p>状态机：DRAFT →(submit 软校验) BUDGET_PENDING →(自动) PURCHASE_PENDING
+ * <p>状态机（P3 预算硬控 <!-- D3 已落地 -->）：DRAFT →(submit：占用成功) PURCHASE_PENDING
  * →(两级审批 DEPT_HEAD→PURCHASE_DEPT，本地桩即审即过) APPROVED / REJECTED；
- * REJECTED 修改重提 = 重新发起审批（同 bizId 新任务，旧任务留痕）。</p>
+ * DRAFT →(submit：余额不足) BUDGET_PENDING →(BUDGET 升级审批：通过=超支占用生效+
+ * 补发采购审批 / 驳回=REJECTED)；REJECTED / FULL_ORDER 释放占用（经
+ * IBudgetOccupyService 唯一写入口）；REJECTED 修改重提 = 重新校验+占用。</p>
  */
 @Service
 public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, PurchaseApply>
@@ -66,6 +71,9 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
 
     @Autowired
     private IBudgetSoftCheckService budgetSoftCheckService;
+
+    @Autowired
+    private IBudgetOccupyService budgetOccupyService;
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
@@ -135,15 +143,42 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
             throw new BizException(ResultCode.PARAM_ERROR, "申请明细不能为空");
         }
 
-        // 预算软校验（<!-- D3 -->：只读、超限仅置 budget_status=2 提示、不写 used_amount）
+        // 预算硬控（<!-- D3 已落地 P3 -->）：提交即预占用（Q1）；不足→拦截+BUDGET 升级审批（行 1/2）
         BigDecimal totalAmount = estimateTotalAmount(id);
-        BudgetCheckResultVO check = budgetSoftCheckService.check(
-                apply.getDeptId(), null, null, totalAmount);
-        apply.setBudgetStatus(check.getBudgetStatus());
+        BudgetOccupyCmd cmd = new BudgetOccupyCmd();
+        cmd.setDeptId(apply.getDeptId());
+        cmd.setAmount(totalAmount);
+        cmd.setBizType(com.dzgylxt.enums.BudgetBizType.APPLY);
+        cmd.setBizId(apply.getId());
+        cmd.setExpectedDate(apply.getExpectedDate());
+        cmd.setRemark("申请提交预占用-" + apply.getApplyNo());
+        OccupyResultVO occupy = budgetOccupyService.occupy(cmd);
+        apply.setBudgetStatus(occupy.isAvailable() ? 1 : 2);
 
-        // DRAFT → BUDGET_PENDING → PURCHASE_PENDING（软校验自动通过，预算升级审批分支 P3 启用 <!-- D3 -->）
-        apply.setStatus(PurchaseApplyStatus.PURCHASE_PENDING);
-        updateById(apply);
+        if (occupy.isAvailable()) {
+            // 行 1：占用成功 → 直接进入采购两级审批
+            apply.setStatus(PurchaseApplyStatus.PURCHASE_PENDING);
+            updateById(apply);
+        } else {
+            // 行 2：余额不足/无月度行 → 停 BUDGET_PENDING，发 BUDGET 升级审批（不占用）
+            apply.setStatus(PurchaseApplyStatus.BUDGET_PENDING);
+            updateById(apply);
+            cn.hutool.json.JSONObject payload = new cn.hutool.json.JSONObject();
+            payload.set("applyId", apply.getId());
+            payload.set("deptId", apply.getDeptId());
+            payload.set("amount", totalAmount);
+            payload.set("overAmount", occupy.getOverAmount());
+            payload.set("balance", occupy.getBalance());
+            payload.set("budgetStatus", 2);
+            ApprovalTaskSpec budgetSpec = new ApprovalTaskSpec();
+            budgetSpec.setBizType("BUDGET");
+            budgetSpec.setBizId(apply.getId());
+            budgetSpec.setTitle("预算升级-" + apply.getApplyNo());
+            budgetSpec.setApplicant(UserContext.getCurrentUsername());
+            budgetSpec.setPayloadJson(payload.toString());
+            approvalGateway.create(budgetSpec);
+            return apply.getId();
+        }
 
         // 发起两级审批（本地桩即审即过；重提=新任务，旧任务留痕）
         ApprovalTaskSpec spec = new ApprovalTaskSpec();
@@ -321,5 +356,17 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         }
         apply.setStatus(PurchaseApplyStatus.REJECTED);
         updateById(apply);
+        // 行 5：申请驳回释放全部占用（按日志余额，经唯一写入口 <!-- D3 已落地 -->）
+        BigDecimal occupied = budgetOccupyService.occupiedTotal(
+                com.dzgylxt.enums.BudgetBizType.APPLY, bizId);
+        if (occupied.compareTo(BigDecimal.ZERO) > 0) {
+            BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
+            releaseCmd.setDeptId(apply.getDeptId());
+            releaseCmd.setAmount(occupied);
+            releaseCmd.setBizType(com.dzgylxt.enums.BudgetBizType.APPLY);
+            releaseCmd.setBizId(bizId);
+            releaseCmd.setRemark("申请驳回释放-" + apply.getApplyNo());
+            budgetOccupyService.release(releaseCmd);
+        }
     }
 }
