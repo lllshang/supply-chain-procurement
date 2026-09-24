@@ -43,5 +43,9 @@ public class Settlement extends BaseEntity implements Serializable {
     private BigDecimal phaseRatio;
     /** 是否尾款结清：0/1 */
     private Integer isFinal;
+    /** R4：付款阶段（1=预付 2=进度款 3=尾款；预付款结算=1，一次性/物料可空） */
+    private Integer paymentStage;
+    /** R4：本单抵扣的预付款合计（尾款结算自动扣减，落库回填；非预付款结算恒 0） */
+    private BigDecimal prepaymentDeduction;
     private String remark;
 }
