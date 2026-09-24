@@ -37,7 +37,16 @@
     <!-- 新建询价 -->
     <el-dialog v-model="formVisible" title="新建询价" width="560px" destroy-on-close>
       <el-form :model="form" label-width="100px">
-        <el-form-item label="来源申请ID" required><el-input v-model="form.applyId" placeholder="已审批申请的 ID" /></el-form-item>
+        <el-form-item label="询价来源" required>
+          <el-radio-group v-model="form.sourceType">
+            <el-radio value="APPLY">申请转询价</el-radio>
+            <el-radio value="OFFLINE">独立寻源</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="form.sourceType === 'APPLY'" label="来源申请ID" required><el-input v-model="form.applyId" placeholder="已审批（含部分/全部转单）申请的 ID" /></el-form-item>
+        <el-form-item v-if="form.sourceType === 'OFFLINE'" label="寻源原因" required>
+          <el-input v-model="form.sourceReason" type="textarea" :rows="2" placeholder="BR-07：无申请来源询价必须填写寻源原因（如年度寻源/价格到期）" />
+        </el-form-item>
         <el-form-item label="截标时间" required><el-date-picker v-model="form.deadline" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" /></el-form-item>
         <el-form-item label="供应商ID">
           <el-input v-model="form.supplierIdsText" placeholder="逗号分隔的供应商 ID（可空，发布前再圈定）" />
@@ -119,21 +128,36 @@ function handlePage(p) {
 // ---- 新建 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ applyId: '', deadline: '', supplierIdsText: '' })
+const form = reactive({ sourceType: 'APPLY', applyId: '', sourceReason: '', deadline: '', supplierIdsText: '' })
 function openCreate() {
-  Object.assign(form, { applyId: '', deadline: '', supplierIdsText: '' })
+  Object.assign(form, { sourceType: 'APPLY', applyId: '', sourceReason: '', deadline: '', supplierIdsText: '' })
   formVisible.value = true
 }
 async function onSave() {
-  if (!form.applyId || !form.deadline) {
+  if (form.sourceType === 'OFFLINE') {
+    // D9 独立寻源：无申请来源，寻源原因必填（BR-07）
+    if (!form.sourceReason || !form.sourceReason.trim()) {
+      ElMessage.warning('独立寻源必须填写寻源原因（BR-07）')
+      return
+    }
+  } else if (!form.applyId || !form.deadline) {
     ElMessage.warning('请填写来源申请与截标时间')
+    return
+  }
+  if (!form.deadline) {
+    ElMessage.warning('请填写截标时间')
     return
   }
   saving.value = true
   try {
     const supplierIds = form.supplierIdsText.split(/[,，\s]+/).filter(Boolean)
     // 雪花 ID 全程字符串直传（#28）：Number() 会丢失 >2^53 精度，后端 Long→String 序列化
-    await createInquiry({ applyId: form.applyId, deadline: form.deadline, supplierIds })
+    await createInquiry({
+      sourceType: form.sourceType,
+      applyId: form.sourceType === 'APPLY' ? form.applyId : null,
+      sourceReason: form.sourceType === 'OFFLINE' ? form.sourceReason.trim() : null,
+      deadline: form.deadline, supplierIds
+    })
     ElMessage.success('询价已创建')
     formVisible.value = false
     reload()

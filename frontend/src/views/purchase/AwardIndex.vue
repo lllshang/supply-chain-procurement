@@ -3,6 +3,7 @@
     <el-card>
       <PageHead title="比价定标">
         <el-button type="primary" :icon="Plus" v-permission="'purchase:award:write'" @click="openCreate">新建定标</el-button>
+        <el-button :icon="Document" v-permission="'purchase:award:write'" @click="openOfflineCreate">线下定标登记</el-button>
       </PageHead>
       <el-table :data="rows" v-loading="loading" stripe>
         <el-table-column prop="awardNo" label="定标单号" width="170" />
@@ -34,15 +35,36 @@
 
     <!-- 新建 / 调整 -->
     <el-dialog v-model="formVisible" :title="form.editId ? '调整定标明细（重提）' : '新建定标'" width="860px" destroy-on-close>
-      <el-form :model="form" label-width="100px">
+      <el-form :model="form" label-width="110px">
+        <el-form-item label="定标方式" required>
+          <el-radio-group v-model="form.entryMode" :disabled="!!form.editId">
+            <el-radio value="INQUIRY">询价定标</el-radio>
+            <el-radio value="OFFLINE">线下定标登记</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-row :gutter="12">
-          <el-col :span="8">
+          <el-col v-if="form.entryMode === 'INQUIRY'" :span="8">
             <el-form-item label="来源询价ID" required><el-input v-model="form.inquiryId" :disabled="!!form.editId" /></el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col v-if="form.entryMode === 'INQUIRY'" :span="8">
             <el-form-item label="来源申请ID"><el-input v-model="form.applyId" :disabled="!!form.editId" /></el-form-item>
           </el-col>
         </el-row>
+        <el-row v-if="form.entryMode === 'OFFLINE'" :gutter="12">
+          <el-col :span="8">
+            <el-form-item label="预算部门ID" required><el-input v-model="form.deptId" placeholder="预算部门 ID" /></el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="预算科目" required>
+              <el-select v-model="form.subjectId" placeholder="提交时即占预算" style="width: 100%">
+                <el-option v-for="s in subjects" :key="s.id" :label="s.name" :value="s.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <div v-if="form.entryMode === 'OFFLINE'" class="hint" style="margin-bottom: 10px">
+          线下定标登记（P2b/D9）：线下已完成比选定标时不补建询价单直接登记；提交审批时即按部门×科目×当月占用预算。
+        </div>
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="定标供应商" required>
@@ -93,13 +115,14 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Document } from '@element-plus/icons-vue'
 import PageHead from '@/components/PageHead.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { usePagination } from '@/composables/usePagination'
 import {
   pageAwards, createAward, updateAwardItems, submitAward, listAwardItems, getAward, getInquiryComparison
 } from '@/api/purchase2'
+import { listBudgetSubjects } from '@/api/budget'
 
 const rows = ref([])
 const { current, pageSize, total, loading, load, onCurrentChange } = usePagination((p) => pageAwards(p))
@@ -114,7 +137,22 @@ function handlePage(p) {
 // ---- 新建 / 调整 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ editId: null, inquiryId: '', applyId: '', supplierId: '', remark: '', items: [] })
+// P2b/D9：entryMode=INQUIRY 询价定标 | OFFLINE 线下定标登记（预算锚点=award，提交即占）
+const form = reactive({
+  editId: null, entryMode: 'INQUIRY', inquiryId: '', applyId: '',
+  deptId: '', subjectId: null, supplierId: '', remark: '', items: []
+})
+
+// 预算科目（线下定标登记用）
+const subjects = ref([])
+async function loadSubjects() {
+  try {
+    const res = await listBudgetSubjects()
+    subjects.value = res.data || []
+  } catch (e) {
+    subjects.value = []
+  }
+}
 
 function emptyItem() {
   return { skuId: '', price: 0, qty: 1 }
@@ -126,12 +164,23 @@ function openCreate(row) {
   // row 传参 = REJECTED 调整重提（带出原询价/申请/供应商）
   Object.assign(form, {
     editId: row && row.status === 'REJECTED' ? row.id : null,
+    entryMode: 'INQUIRY',
     inquiryId: row ? String(row.inquiryId || '') : '',
     applyId: row ? String(row.applyId || '') : '',
+    deptId: '', subjectId: null,
     supplierId: row && row.supplierId ? String(row.supplierId) : '',
     remark: '',
     items: [emptyItem()]
   })
+  formVisible.value = true
+}
+
+async function openOfflineCreate() {
+  Object.assign(form, {
+    editId: null, entryMode: 'OFFLINE', inquiryId: '', applyId: '',
+    deptId: '1', subjectId: null, supplierId: '', remark: '', items: [emptyItem()]
+  })
+  await loadSubjects()
   formVisible.value = true
 }
 
@@ -140,6 +189,27 @@ async function onSave() {
   const items = form.items.filter((i) => i.skuId).map((i) => ({
     skuId: i.skuId, supplierId: form.supplierId, price: i.price, qty: i.qty
   }))
+  if (form.entryMode === 'OFFLINE') {
+    // D9 线下定标登记：询价ID 留空，部门×科目必填（提交时即占预算）
+    if (!form.deptId || !form.subjectId || !form.supplierId || !items.length) {
+      ElMessage.warning('线下定标需填写预算部门、预算科目、定标供应商与完整明细')
+      return
+    }
+    saving.value = true
+    try {
+      await createAward({
+        inquiryId: null, applyId: null,
+        deptId: form.deptId, subjectId: form.subjectId,
+        items, remark: form.remark
+      })
+      ElMessage.success('线下定标已登记，提交审批时将占用预算')
+      formVisible.value = false
+      reload()
+    } finally {
+      saving.value = false
+    }
+    return
+  }
   if (!form.inquiryId || !form.supplierId || !items.length) {
     ElMessage.warning('请填写询价 ID、定标供应商与完整明细')
     return

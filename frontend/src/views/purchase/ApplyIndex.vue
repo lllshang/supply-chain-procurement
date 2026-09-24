@@ -67,6 +67,14 @@
             <el-option v-for="s in subjects" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
         </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="采购用途"><el-input v-model="form.purpose" placeholder="采购用途（选填，PR-01）" /></el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="项目名称"><el-input v-model="form.projectName" placeholder="手工项目名（选填，业务归属）" /></el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="明细行">
           <el-button size="small" :icon="Plus" @click="addItem">加行</el-button>
           <el-button size="small" :icon="Goods" @click="onBringIn">常购带入</el-button>
@@ -167,7 +175,7 @@ function handlePage(p) {
 // ---- 新建 / 编辑 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ id: null, title: '', type: 'STANDARD', expectedDate: null, budgetSubjectId: null, items: [] })
+const form = reactive({ id: null, title: '', type: 'STANDARD', expectedDate: null, budgetSubjectId: null, purpose: '', projectName: '', items: [] })
 
 function emptyItem() {
   return { skuId: '', qty: 1, purchaseUnit: '', priceEstimate: 0, itemType: 'MATERIAL', remark: '' }
@@ -176,7 +184,7 @@ function addItem() {
   form.items.push(emptyItem())
 }
 function openCreate() {
-  Object.assign(form, { id: null, title: '', type: 'STANDARD', expectedDate: null, budgetSubjectId: null, items: [emptyItem()] })
+  Object.assign(form, { id: null, title: '', type: 'STANDARD', expectedDate: null, budgetSubjectId: null, purpose: '', projectName: '', items: [emptyItem()] })
   formVisible.value = true
 }
 async function openEdit(row) {
@@ -187,6 +195,8 @@ async function openEdit(row) {
     type: res.data.apply.type,
     expectedDate: res.data.apply.expectedDate,
     budgetSubjectId: res.data.apply.budgetSubjectId ?? null,
+    purpose: res.data.apply.purpose || '',
+    projectName: res.data.apply.projectName || '',
     items: (res.data.items || []).map((i) => ({
       skuId: String(i.skuId), qty: i.qtyInPurchaseUnit, purchaseUnit: i.purchaseUnit,
       priceEstimate: i.priceEstimate, itemType: i.itemType, remark: i.remark
@@ -224,6 +234,8 @@ async function onSave() {
       type: form.type,
       expectedDate: form.expectedDate,
       budgetSubjectId: form.budgetSubjectId,
+      purpose: form.purpose || null,
+      projectName: form.projectName || null,
       items: form.items.filter((i) => i.skuId).map((i) => ({
         skuId: i.skuId, qty: i.qty, purchaseUnit: i.purchaseUnit,
         priceEstimate: i.priceEstimate, itemType: i.itemType, remark: i.remark

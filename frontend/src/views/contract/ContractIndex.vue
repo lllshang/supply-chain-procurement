@@ -45,6 +45,11 @@
           <EnumSelect v-model="form.contractType" enum-key="contractType" :clearable="false" />
         </el-form-item>
         <el-form-item label="合同金额" required><el-input-number v-model="form.amount" :min="0.01" :controls="false" style="width: 180px" /></el-form-item>
+        <el-form-item label="预算科目">
+          <el-select v-model="form.subjectId" placeholder="选填（S8：统计冗余）" clearable style="width: 180px">
+            <el-option v-for="s in subjects" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="有效期">
           <el-date-picker v-model="form.validRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="生效日" end-placeholder="到期日" style="width: 100%" />
         </el-form-item>
@@ -79,6 +84,7 @@ import PageHead from '@/components/PageHead.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import EnumSelect from '@/components/EnumSelect.vue'
 import { usePagination } from '@/composables/usePagination'
+import { listBudgetSubjects } from '@/api/budget'
 import {
   pageContracts, createContract, submitContract, terminateContract, renewContract
 } from '@/api/purchase2'
@@ -96,9 +102,9 @@ function handlePage(p) {
 // ---- 登记 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, validRange: null })
+const form = reactive({ supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, subjectId: null, validRange: null })
 function openCreate() {
-  Object.assign(form, { supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, validRange: null })
+  Object.assign(form, { supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, subjectId: null, validRange: null })
   formVisible.value = true
 }
 async function onSave() {
@@ -113,6 +119,7 @@ async function onSave() {
       awardId: form.awardId || null,
       title: form.title,
       contractType: form.contractType,
+      subjectId: form.subjectId || null,
       amount: form.amount,
       validFrom: form.validRange[0],
       validTo: form.validRange[1]
@@ -166,5 +173,16 @@ async function onRenew() {
   }
 }
 
-onMounted(reload)
+// 预算科目（S8：统计冗余，选填）
+const subjects = ref([])
+async function loadSubjects() {
+  try {
+    const res = await listBudgetSubjects()
+    subjects.value = res.data || []
+  } catch (e) {
+    subjects.value = []
+  }
+}
+
+onMounted(() => { loadSubjects(); reload() })
 </script>
