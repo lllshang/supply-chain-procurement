@@ -67,6 +67,9 @@ dependencies {
     // ---- 测试 ----
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
+    // ---- B7 集成测试：Testcontainers（真实 MySQL8 + Redis，禁 H2 假绿源）----
+    testImplementation("org.testcontainers:junit-jupiter:1.20.6")
+    testImplementation("org.testcontainers:mysql:1.20.6")
 }
 
 // MapStruct + Lombok 注解处理器协同
@@ -84,4 +87,11 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+    // B7：本机 Docker Desktop 服务端 API=1.56 已弃用旧版本（v1.32 /info → HTTP 400），
+    // docker-java 默认协商 1.32 会被拒。显式指定新版 API（client 1.44 兼容服务端 1.56）。
+    systemProperty("api.version", "1.44")
+    environment("DOCKER_API_VERSION", "1.44")
+    // B7：Docker Hub 拉取 ryuk 受网络阻塞——禁用 ryuk（容器清理由 JVM shutdown hook 承担；
+    // mysql:8.0 / redis:7.0 本机已缓存，无需拉取）
+    environment("TESTCONTAINERS_RYUK_DISABLED", "true")
 }
