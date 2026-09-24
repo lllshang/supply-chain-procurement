@@ -69,6 +69,10 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
     @Autowired
     private ApprovalGateway approvalGateway;
 
+    /** QA2-01：预算科目有效性校验（额度控制键=部门×月份×科目）。 */
+    @Autowired
+    private com.dzgylxt.mapper.budget.BudgetSubjectMapper budgetSubjectMapper;
+
     @Autowired
     private IBudgetSoftCheckService budgetSoftCheckService;
 
@@ -91,6 +95,7 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         apply.setType(req.getType() == null ? PurchaseApplyType.STANDARD : req.getType());
         apply.setStatus(PurchaseApplyStatus.DRAFT);
         apply.setBudgetStatus(0);
+        apply.setBudgetSubjectId(req.getBudgetSubjectId());
         apply.setApplicantId(UserContext.getCurrentUserId());
         apply.setExpectedDate(req.getExpectedDate());
         apply.setRemark(req.getRemark());
@@ -117,6 +122,9 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         }
         apply.setType(req.getType() == null ? apply.getType() : req.getType());
         apply.setExpectedDate(req.getExpectedDate());
+        // QA2-01：科目随单维护（提交时强校验，编辑期允许为空草稿）
+        apply.setBudgetSubjectId(req.getBudgetSubjectId() == null
+                ? apply.getBudgetSubjectId() : req.getBudgetSubjectId());
         apply.setRemark(req.getRemark());
         updateById(apply);
 
@@ -142,11 +150,23 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         if (items.isEmpty()) {
             throw new BizException(ResultCode.PARAM_ERROR, "申请明细不能为空");
         }
+        // QA2-01：额度控制键=部门×月份×科目（PRD §6.4.1 L609）——提交前必须填写预算科目
+        if (apply.getBudgetSubjectId() == null) {
+            throw new BizException(ResultCode.PARAM_ERROR,
+                    "申请未填写预算科目，不可提交（额度控制键=部门×月份×科目，请先补录科目）");
+        }
+        // 预算科目有效性校验（防止占用落到不存在科目上）
+        if (budgetSubjectMapper.selectById(apply.getBudgetSubjectId()) == null) {
+            throw new BizException(ResultCode.PARAM_ERROR,
+                    "预算科目不存在：" + apply.getBudgetSubjectId());
+        }
 
         // 预算硬控（<!-- D3 已落地 P3 -->）：提交即预占用（Q1）；不足→拦截+BUDGET 升级审批（行 1/2）
+        // QA2-01：控制单元回填科目维度（此前仅部门×月份，990112 案例执行率失真根因）
         BigDecimal totalAmount = estimateTotalAmount(id);
         BudgetOccupyCmd cmd = new BudgetOccupyCmd();
         cmd.setDeptId(apply.getDeptId());
+        cmd.setSubjectId(apply.getBudgetSubjectId());
         cmd.setAmount(totalAmount);
         cmd.setBizType(com.dzgylxt.enums.BudgetBizType.APPLY);
         cmd.setBizId(apply.getId());
@@ -166,6 +186,7 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
             cn.hutool.json.JSONObject payload = new cn.hutool.json.JSONObject();
             payload.set("applyId", apply.getId());
             payload.set("deptId", apply.getDeptId());
+            payload.set("subjectId", apply.getBudgetSubjectId());
             payload.set("amount", totalAmount);
             payload.set("overAmount", occupy.getOverAmount());
             payload.set("balance", occupy.getBalance());

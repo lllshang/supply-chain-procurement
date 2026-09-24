@@ -264,6 +264,7 @@ CREATE TABLE IF NOT EXISTS purchase_apply (
     type         TINYINT      NOT NULL DEFAULT 0 COMMENT '0标准/项目 1日常/框架 2线下补录',
     status       TINYINT      NOT NULL DEFAULT 0,
     budget_status TINYINT     NOT NULL DEFAULT 0 COMMENT '0未校验 1通过 2超预算',
+    budget_subject_id BIGINT  NULL COMMENT '预算科目ID（QA2-01：额度控制键=部门×月份×科目，提交前必填；存量置空待补录）',
     applicant_id BIGINT       NULL,
     remark       VARCHAR(255) NULL,
     created_by   BIGINT       NULL,

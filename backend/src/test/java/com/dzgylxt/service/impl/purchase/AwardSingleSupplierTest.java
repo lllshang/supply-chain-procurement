@@ -198,6 +198,7 @@ class AwardSingleSupplierTest {
         com.dzgylxt.entity.purchase.PurchaseApply apply = new com.dzgylxt.entity.purchase.PurchaseApply();
         apply.setId(1L);
         apply.setDeptId(1L);
+        apply.setBudgetSubjectId(1001L);
         when(applyMapper.selectById(1L)).thenReturn(apply);
         when(budgetOccupyService.checkOnly(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
                 .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.blocked(

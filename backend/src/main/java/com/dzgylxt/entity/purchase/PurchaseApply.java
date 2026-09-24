@@ -26,6 +26,11 @@ public class PurchaseApply extends BaseEntity implements Serializable {
     private PurchaseApplyStatus status;
     /** 预算状态：0=未校验，1=通过，2=超预算 */
     private Integer budgetStatus;
+    /**
+     * 预算科目ID（QA2-01：额度控制键=部门×月份×科目（PRD §6.4.1 L609 / PR-01），
+     * 占用/再校验/转移均按此科目落预算行；NULL=待补录（存量数据），提交前必须填写。
+     */
+    private Long budgetSubjectId;
     private Long applicantId;
     /** 期望到货日期（P2 §1.3.1） */
     private LocalDate expectedDate;

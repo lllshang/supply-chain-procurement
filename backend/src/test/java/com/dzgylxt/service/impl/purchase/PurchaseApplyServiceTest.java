@@ -15,6 +15,8 @@ import com.dzgylxt.mapper.catalog.SkuMapper;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyItemMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyMapper;
+import com.dzgylxt.mapper.budget.BudgetSubjectMapper;
+import com.dzgylxt.entity.budget.BudgetSubject;
 import com.dzgylxt.service.IBudgetSoftCheckService;
 import com.dzgylxt.vo.purchase.ApplyItemReqVO;
 import com.dzgylxt.vo.purchase.ApplySaveReqVO;
@@ -68,6 +70,9 @@ class PurchaseApplyServiceTest {
     @Mock
     private com.dzgylxt.service.IBudgetOccupyService budgetOccupyService;
 
+    @Mock
+    private BudgetSubjectMapper budgetSubjectMapper;
+
     private PurchaseApplyServiceImpl service;
 
     @BeforeEach
@@ -79,6 +84,9 @@ class PurchaseApplyServiceTest {
         ReflectionTestUtils.setField(service, "approvalGateway", approvalGateway);
         ReflectionTestUtils.setField(service, "budgetSoftCheckService", budgetSoftCheckService);
         ReflectionTestUtils.setField(service, "budgetOccupyService", budgetOccupyService);
+        ReflectionTestUtils.setField(service, "budgetSubjectMapper", budgetSubjectMapper);
+        org.mockito.Mockito.lenient()
+                .when(budgetSubjectMapper.selectById(anyLong())).thenReturn(new BudgetSubject());
         // 驳回释放路径：默认无占用余额
         org.mockito.Mockito.lenient()
                 .when(budgetOccupyService.occupiedTotal(any(), any())).thenReturn(BigDecimal.ZERO);
@@ -146,6 +154,7 @@ class PurchaseApplyServiceTest {
         apply.setDeptId(1L);
         apply.setApplyNo("CG-TEST-000001");
         apply.setStatus(PurchaseApplyStatus.DRAFT);
+        apply.setBudgetSubjectId(1001L);
         when(applyMapper().selectById(1L)).thenReturn(apply);
 
         PurchaseApplyItem item = new PurchaseApplyItem();
@@ -178,6 +187,7 @@ class PurchaseApplyServiceTest {
         apply.setDeptId(1L);
         apply.setApplyNo("CG-TEST-000001");
         apply.setStatus(PurchaseApplyStatus.DRAFT);
+        apply.setBudgetSubjectId(1001L);
         when(applyMapper().selectById(1L)).thenReturn(apply);
 
         PurchaseApplyItem item = new PurchaseApplyItem();

@@ -146,6 +146,8 @@ public class BudgetApprovalHandler implements ApprovalCallbackHandler {
         }
         BudgetOccupyCmd cmd = new BudgetOccupyCmd();
         cmd.setDeptId(apply.getDeptId());
+        // QA2-01：超支占用同样落到申请科目行（控制单元=部门×月份×科目）
+        cmd.setSubjectId(apply.getBudgetSubjectId());
         cmd.setAmount(payload == null ? BigDecimal.ZERO : payload.getBigDecimal("amount"));
         cmd.setBizType(com.dzgylxt.enums.BudgetBizType.APPLY);
         cmd.setBizId(apply.getId());

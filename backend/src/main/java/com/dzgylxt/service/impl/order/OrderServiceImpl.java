@@ -469,6 +469,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                             PurchaseApply srcApply = applyMapper.selectById(order.getApplyId());
                             if (srcApply != null) {
                                 occupyCmd.setDeptId(srcApply.getDeptId());
+                                // QA2-01：变更增量占用落到申请科目行（控制单元=部门×科目×月份）
+                                occupyCmd.setSubjectId(srcApply.getBudgetSubjectId());
                                 occupyCmd.setExpectedDate(srcApply.getExpectedDate());
                             }
                         }
@@ -594,7 +596,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         payload.set("budgetStatus", 2);
         com.dzgylxt.approval.ApprovalTaskSpec spec = new com.dzgylxt.approval.ApprovalTaskSpec();
         spec.setBizType("BUDGET");
-        spec.setBizId(order.getApplyId() == null ? order.getId() : order.getApplyId());
+        // QA2-06：bizId 固定为订单 id（bizType=BUDGET + orderId 定位单次变更升级），
+        // 防同一申请多次变更时按 applyId 串单（放行标记按 金额+订单 精确消费）
+        spec.setBizId(order.getId());
         spec.setTitle("预算升级-订单变更" + order.getOrderNo());
         spec.setPayloadJson(payload.toString());
         if (transactionManager != null) {
@@ -623,7 +627,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         List<com.dzgylxt.entity.approval.ApprovalTask> tasks = approvalTaskMapper.selectList(
                 Wrappers.<com.dzgylxt.entity.approval.ApprovalTask>lambdaQuery()
                         .eq(com.dzgylxt.entity.approval.ApprovalTask::getBizType, "BUDGET")
-                        .eq(com.dzgylxt.entity.approval.ApprovalTask::getBizId, order.getApplyId())
+                        // QA2-06：bizId=订单 id（与 createBudgetUpgradeTask 对齐）
+                        .eq(com.dzgylxt.entity.approval.ApprovalTask::getBizId, order.getId())
                         .eq(com.dzgylxt.entity.approval.ApprovalTask::getStatus,
                                 com.dzgylxt.enums.ApprovalStatus.APPROVED)
                         .orderByDesc(com.dzgylxt.entity.approval.ApprovalTask::getId));

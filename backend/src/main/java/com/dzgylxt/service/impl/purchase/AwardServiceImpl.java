@@ -38,6 +38,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -56,6 +58,8 @@ import java.util.List;
  */
 @Service
 public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements IAwardService {
+
+    private static final Logger log = LoggerFactory.getLogger(AwardServiceImpl.class);
 
     /** 审批 bizType（设计 §3）。 */
     public static final String BIZ_TYPE = "AWARD";
@@ -186,11 +190,29 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
 
         // R7 定标预算再校验（BR-04 L1079 / §6.4.3 L634）：部门×科目×提交当月，
         // 仅校验不重复占用（占用锚在申请）；不足→拦截提交，转 BUDGET 升级审批（通过后放行确认）
-        if (award.getApplyId() != null) {
+        // QA2-02：无有效申请来源时显式分支（log.warn + remark 标注来源类型），不留静默跳过
+        if (award.getApplyId() == null) {
+            log.warn("[R7预算再校验] 定标 {} 无申请来源（独立寻源/线下登记），显式跳过预算再校验，待 P2b 补录口径",
+                    award.getAwardNo());
+            String note = (award.getRemark() == null || award.getRemark().isBlank()
+                    ? "" : award.getRemark() + "；") + "[预算再校验] 无申请来源（独立寻源），跳过科目级预算再校验";
+            award.setRemark(note);
+            updateById(award);
+        } else {
             com.dzgylxt.entity.purchase.PurchaseApply apply = applyMapper.selectById(award.getApplyId());
-            if (apply != null && apply.getDeptId() != null) {
+            if (apply == null || apply.getDeptId() == null || apply.getBudgetSubjectId() == null) {
+                log.warn("[R7预算再校验] 定标 {} 关联申请 {} 无效（不存在/缺部门或科目），显式跳过预算再校验，待补录",
+                        award.getAwardNo(), award.getApplyId());
+                String note = (award.getRemark() == null || award.getRemark().isBlank()
+                        ? "" : award.getRemark() + "；")
+                        + "[预算再校验] 申请缺部门/预算科目（来源类型：申请转询价），跳过科目级预算再校验，待补录";
+                award.setRemark(note);
+                updateById(award);
+            } else {
                 BudgetOccupyCmd checkCmd = new BudgetOccupyCmd();
                 checkCmd.setDeptId(apply.getDeptId());
+                // QA2-01：再校验回填科目维度（控制单元=部门×科目×月份）
+                checkCmd.setSubjectId(apply.getBudgetSubjectId());
                 checkCmd.setAmount(award.getAmount() == null ? BigDecimal.ZERO : award.getAmount());
                 checkCmd.setBizType(BudgetBizType.AWARD);
                 checkCmd.setBizId(award.getId());
@@ -206,6 +228,7 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
                     payload.set("awardId", award.getId());
                     payload.set("applyId", award.getApplyId());
                     payload.set("deptId", apply.getDeptId());
+                    payload.set("subjectId", apply.getBudgetSubjectId());
                     payload.set("amount", award.getAmount());
                     payload.set("overAmount", check.getOverAmount());
                     payload.set("balance", check.getBalance());
