@@ -6,6 +6,7 @@ import com.dzgylxt.entity.order.PurchaseOrder;
 import com.dzgylxt.vo.order.OrderChangeReqVO;
 import com.dzgylxt.vo.order.OrderCreateReqVO;
 
+import java.util.Collection;
 import java.util.List;
 
 /** 采购订单服务（设计 §2.6 / §4：三重校验事务为核心硬规则）。 */
@@ -26,6 +27,9 @@ public interface IOrderService extends IService<PurchaseOrder> {
 
     /** 订单明细（含换算快照与来源追溯）。 */
     List<OrderItem> listItems(Long orderId);
+
+    /** R5：填充订单派生进度（结清/付清），不写订单状态机；供列表/详情接口返回。 */
+    void fillProgress(Collection<PurchaseOrder> orders);
 
     /** 全链路追溯：申请↔询价↔定标↔合同↔订单↔到货。 */
     Object trace(Long id);

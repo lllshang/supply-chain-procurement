@@ -35,7 +35,7 @@ public class PurchaseOrderController {
     @Autowired
     private OrderChangeMapper orderChangeMapper;
 
-    /** 分页（id 倒序）。 */
+    /** 分页（id 倒序），附带 R5 派生进度（结清/付清）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/page")
     public R<PageResult<PurchaseOrder>> page(@RequestParam(defaultValue = "1") long current,
@@ -43,14 +43,19 @@ public class PurchaseOrderController {
         Page<PurchaseOrder> page = new Page<>(current, size);
         IPage<PurchaseOrder> result = orderService.page(page,
                 new LambdaQueryWrapper<PurchaseOrder>().orderByDesc(PurchaseOrder::getId));
+        orderService.fillProgress(result.getRecords());
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
     }
 
-    /** 单据详情。 */
+    /** 单据详情，附带 R5 派生进度（结清/付清）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/{id}")
     public R<PurchaseOrder> getById(@PathVariable Long id) {
-        return R.ok(orderService.getById(id));
+        PurchaseOrder order = orderService.getById(id);
+        if (order != null) {
+            orderService.fillProgress(java.util.List.of(order));
+        }
+        return R.ok(order);
     }
 
     /** 下单（三重校验事务；物料/服务拆单，返回订单 id 列表）。 */

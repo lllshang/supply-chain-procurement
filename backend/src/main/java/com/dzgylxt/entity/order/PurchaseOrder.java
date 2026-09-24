@@ -2,6 +2,7 @@ package com.dzgylxt.entity.order;
 
 import com.dzgylxt.common.BaseEntity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.enums.ItemType;
 import com.dzgylxt.enums.OrderStatus;
@@ -31,4 +32,11 @@ public class PurchaseOrder extends BaseEntity implements Serializable {
     /** 阶段结算比例 JSON（如 [{"phase":1,"ratio":30},{"phase":2,"ratio":40}]；null=一次性，P3 §1.3.3） */
     private String phasePlan;
     private String remark;
+
+    /** R5：派生展示字段——结清进度 = Σ有效结算金额 / 应结总额（0~1）；不参与订单状态机。 */
+    @TableField(exist = false)
+    private BigDecimal settleProgress;
+    /** R5：派生展示字段——付清进度 = Σ已付付款金额 / 应结总额（0~1）；不参与订单状态机。 */
+    @TableField(exist = false)
+    private BigDecimal paidProgress;
 }

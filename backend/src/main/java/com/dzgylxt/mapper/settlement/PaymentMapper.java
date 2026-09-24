@@ -22,6 +22,12 @@ public interface PaymentMapper extends BaseMapper<Payment> {
             + " WHERE deleted = 0 AND settlement_id = #{settlementId} AND status = 2")
     BigDecimal sumPaidAmount(@Param("settlementId") Long settlementId);
 
+    /** R5：订单已付累计（关联结算单的 PAID 付款；付清进度 paidProgress 口径）。 */
+    @Select("SELECT COALESCE(SUM(p.pay_amount), 0) FROM payment p"
+            + " JOIN settlement s ON p.settlement_id = s.id"
+            + " WHERE p.deleted = 0 AND s.deleted = 0 AND s.order_id = #{orderId} AND p.status = 2")
+    BigDecimal sumPaidAmountByOrder(@Param("orderId") Long orderId);
+
     /**
      * 结算单付款承诺累计（QA #39：计入在途 + 已付——UNPAID/PARTIAL 在途 + PAID 实付，
      * 防止多笔在途付款合计超出结算金额。R5：PaymentStatus 删除 REJECTED，

@@ -11,7 +11,6 @@ import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.order.PurchaseOrder;
 import com.dzgylxt.entity.settlement.Payment;
 import com.dzgylxt.entity.settlement.Settlement;
-import com.dzgylxt.enums.OrderStatus;
 import com.dzgylxt.enums.PaymentStatus;
 import com.dzgylxt.enums.SettlementStatus;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
@@ -121,7 +120,7 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
         p.setConfirmedAt(java.time.LocalDateTime.now());
         p.setStatus(PaymentStatus.PAID);
         updateById(p);
-        settleOrderIfFullyPaid(p);
+        // R5：订单状态机不再流转 PAID——付清进度由订单 VO 派生展示（paidProgress），此处不写订单状态
     }
 
     @Override
@@ -171,34 +170,6 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
     }
 
     // ---------------- 内部 ----------------
-
-    /** 结算单全部付清（Σ已付 ≥ Σ该订单已结算金额）→ 订单 PAID。 */
-    private void settleOrderIfFullyPaid(Payment payment) {
-        Settlement settlement = settlementMapper.selectById(payment.getSettlementId());
-        if (settlement == null) {
-            return;
-        }
-        Long orderId = settlement.getOrderId();
-        List<Settlement> settlements = settlementMapper.selectByOrder(orderId);
-        BigDecimal settledTotal = settlements.stream()
-                .filter(s -> s.getStatus() == SettlementStatus.SETTLED)
-                .map(s -> nvl(s.getAmount()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal paidTotal = settlements.stream()
-                .filter(s -> s.getStatus() == SettlementStatus.SETTLED)
-                .map(s -> baseMapper.sumPaidAmount(s.getId()))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (paidTotal.compareTo(settledTotal) >= 0 && settledTotal.compareTo(BigDecimal.ZERO) > 0) {
-            PurchaseOrder order = orderMapper.selectById(orderId);
-            // QA #46：无 isFinal 结算单的订单可能停在 RECEIVED（从未触发 SETTLED
-            // 提升），付清即应 PAID——guard 放宽为「未终态均可推进」
-            if (order != null && order.getStatus() != OrderStatus.PAID
-                    && order.getStatus() != OrderStatus.CANCELLED) {
-                order.setStatus(OrderStatus.PAID);
-                orderMapper.updateById(order);
-            }
-        }
-    }
 
     private StatementVO.Row row(LocalDate date, String docNo, String direction,
                                 BigDecimal amount, String remark) {

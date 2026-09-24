@@ -283,7 +283,8 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
 
     /**
      * SETTLEMENT 审批回调由 {@code SettlementApprovalHandler} 委托本方法
-     * （通过→核销+结清收口；驳回→保持 PENDING 留痕）。
+     * （通过→核销；驳回→保持 PENDING 留痕）。R5：订单状态机不再流转 SETTLED/PAID，
+     * 结清进度由订单 VO 派生展示字段 {@code settleProgress}，此处不写订单状态。
      */
     @Transactional(rollbackFor = Exception.class)
     public void handleApproval(Long taskId, Long bizId, boolean approved, String comment) {
@@ -304,18 +305,7 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
         cmd.setAmount(s.getAmount());
         cmd.setRemark("结算核销-" + s.getSettleNo());
         budgetOccupyService.writeOff(cmd);
-        // 订单全部结清（QA #42：服务单应结基数 = 订单金额 − Σ考核扣款）→ SETTLED
-        BigDecimal settled = baseMapper.sumSettledAmount(s.getOrderId());
-        BigDecimal total = orderTotalAmount(s.getOrderId())
-                .subtract(totalDeductOf(s.getOrderId()))
-                .setScale(2, RoundingMode.HALF_UP);
-        if (settled.compareTo(total) >= 0) {
-            PurchaseOrder order = orderMapper.selectById(s.getOrderId());
-            if (order != null && order.getStatus() != OrderStatus.CANCELLED) {
-                order.setStatus(OrderStatus.SETTLED);
-                orderMapper.updateById(order);
-            }
-        }
+        // R5：订单状态机不再流转 SETTLED/PAID——结清进度由订单 VO 派生展示（settleProgress），此处不写订单状态
     }
 
     @Override

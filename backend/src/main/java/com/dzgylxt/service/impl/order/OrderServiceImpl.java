@@ -33,6 +33,8 @@ import com.dzgylxt.mapper.order.ArrivalMapper;
 import com.dzgylxt.mapper.order.OrderChangeMapper;
 import com.dzgylxt.mapper.order.OrderItemMapper;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
+import com.dzgylxt.mapper.settlement.PaymentMapper;
+import com.dzgylxt.mapper.settlement.SettlementMapper;
 import com.dzgylxt.mapper.purchase.AwardItemMapper;
 import com.dzgylxt.mapper.purchase.AwardMapper;
 import com.dzgylxt.mapper.purchase.InquiryMapper;
@@ -53,9 +55,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,6 +112,14 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
     @Autowired
     private ArrivalItemMapper arrivalItemMapper;
+
+    /** R5：订单派生进度（结清/付清）聚合用。 */
+    @Autowired
+    private SettlementMapper settlementMapper;
+
+    /** R5：订单派生进度（付清）聚合用。 */
+    @Autowired
+    private PaymentMapper paymentMapper;
 
     @Autowired
     private UnitConversionMapper unitConversionMapper;
@@ -553,6 +565,54 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     public List<OrderItem> listItems(Long orderId) {
         return orderItemMapper.selectList(Wrappers.<OrderItem>lambdaQuery()
                 .eq(OrderItem::getOrderId, orderId).orderByAsc(OrderItem::getId));
+    }
+
+    /**
+     * R5：填充订单派生进度（结清/付清），不写订单状态机。settleProgress = Σ已结算金额/应结总额，
+     * paidProgress = Σ已付付款/应结总额（均封顶 0~1）。供列表/详情接口返回派生展示字段。
+     */
+    @Override
+    public void fillProgress(Collection<PurchaseOrder> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return;
+        }
+        for (PurchaseOrder order : orders) {
+            BigDecimal orderAmount = orderTotalAmount(order.getId());
+            BigDecimal settled = settlementMapper.sumSettledAmount(order.getId());
+            BigDecimal paid = paymentMapper.sumPaidAmountByOrder(order.getId());
+            order.setSettleProgress(progressOf(settled, orderAmount));
+            order.setPaidProgress(progressOf(paid, orderAmount));
+        }
+    }
+
+    /** 进度率 = 已发生/应结（0~1，封顶）；应结为 0 时按是否已发生归 0/1。 */
+    private BigDecimal progressOf(BigDecimal occurred, BigDecimal total) {
+        if (total == null || total.compareTo(BigDecimal.ZERO) <= 0) {
+            return occurred != null && occurred.compareTo(BigDecimal.ZERO) > 0
+                    ? BigDecimal.ONE : BigDecimal.ZERO;
+        }
+        BigDecimal ratio = occurred == null ? BigDecimal.ZERO
+                : occurred.divide(total, 4, RoundingMode.HALF_UP);
+        if (ratio.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        if (ratio.compareTo(BigDecimal.ONE) > 0) {
+            return BigDecimal.ONE;
+        }
+        return ratio;
+    }
+
+    /** 订单应结总额 = Σ 明细 price × qty_base（基本单位口径）。 */
+    private BigDecimal orderTotalAmount(Long orderId) {
+        return orderItemMapper.selectList(
+                        Wrappers.<OrderItem>lambdaQuery().eq(OrderItem::getOrderId, orderId)).stream()
+                .map(i -> nvl(i.getPrice()).multiply(nvl(i.getQtyBase())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal nvl(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 
     /** 全链路追溯：申请↔询价↔定标↔合同↔订单↔到货（设计 §2.6 trace）。 */
