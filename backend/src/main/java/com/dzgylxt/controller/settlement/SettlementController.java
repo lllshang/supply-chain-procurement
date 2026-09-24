@@ -106,4 +106,18 @@ public class SettlementController {
     public R<Long> submit(@PathVariable Long id) {
         return R.ok(settlementService.submit(id));
     }
+
+    /** B9：作废结算单（仅 PENDING 可作废；释放 committed 口径）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/void")
+    public R<Boolean> voidSettlement(@PathVariable Long id, @RequestBody VoidReq req) {
+        settlementService.voidSettlement(id, req.getReason());
+        return R.ok(true);
+    }
+
+    /** B9：作废请求体（reason 必填——冲正需留痕）。 */
+    @lombok.Data
+    public static class VoidReq {
+        private String reason;
+    }
 }

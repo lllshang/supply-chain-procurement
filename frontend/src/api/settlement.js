@@ -32,6 +32,11 @@ export function submitSettlement(id) {
   return request.post(`/api/v1/settlements/${id}/submit`)
 }
 
+/** B9：作废结算单（仅 PENDING 可作废，释放 committed 口径） */
+export function voidSettlement(id, data) {
+  return request.post(`/api/v1/settlements/${id}/void`, data)
+}
+
 // ---- 预付款结算（D10：从订单发起，含在途封顶校验） ----
 // 预付款草稿预览（订单金额/已付预付款 prepaidPaid/可发起余额）
 export function draftPrepaymentFromOrder(orderId) {

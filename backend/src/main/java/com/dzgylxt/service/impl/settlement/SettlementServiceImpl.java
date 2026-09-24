@@ -346,6 +346,38 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
         // R5：订单状态机不再流转 SETTLED/PAID——结清进度由订单 VO 派生展示（settleProgress），此处不写订单状态
     }
 
+    /**
+     * B9：作废结算单——仅 PENDING 可作废（SETTLED 已核销不可逆，需走退款/冲销流程）。
+     * 预付款 PENDING 作废：自动从 sumPrepaymentCommitted 口径中排除（SQL status IN (0,1) 不含 3），
+     * 释放"承诺盘子"，使尾款结算/新预付款可用额度恢复。
+     * 与 voidAward 同模式：幂等保护 + 引用守卫（已确认付款不可作废）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void voidSettlement(Long id, String reason) {
+        Settlement s = getById(id);
+        if (s == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "结算单不存在：" + id);
+        }
+        if (s.getStatus() == SettlementStatus.VOIDED) {
+            throw new BizException(ResultCode.STATUS_INVALID, "结算单已作废，请勿重复操作");
+        }
+        if (s.getStatus() != SettlementStatus.PENDING) {
+            throw new BizException(ResultCode.STATUS_INVALID,
+                    "仅待结算(PENDING)可作废——已结算(SETTLED)单据需走退款/冲销流程");
+        }
+        // 引用守卫：已确认付款的结算单不可作废（付款需先冲销）
+        BigDecimal paid = nvl(paymentMapper.sumPaidAmount(s.getId()));
+        if (paid.compareTo(BigDecimal.ZERO) > 0) {
+            throw new BizException(ResultCode.STATUS_INVALID,
+                    "该结算单已有付款记录（" + paid.setScale(2, RoundingMode.HALF_UP) + "），请先冲销付款");
+        }
+        s.setStatus(SettlementStatus.VOIDED);
+        s.setRemark(reason == null ? "作废"
+                : (s.getRemark() == null ? "作废：" + reason : s.getRemark() + "；作废：" + reason));
+        updateById(s);
+    }
+
     @Override
     public IPage<Settlement> page(long current, long size, Long orderId, Long supplierId,
                                   SettlementStatus status) {

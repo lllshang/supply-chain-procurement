@@ -44,6 +44,7 @@
             <el-button link type="primary" @click="openDetail(row)">明细</el-button>
             <el-button v-if="row.status === 'PENDING'" link type="warning" @click="openEdit(row)">编辑重提</el-button>
             <el-button v-if="row.status === 'PENDING'" link type="success" @click="onSubmit(row)">提交审批</el-button>
+            <el-button v-if="row.status === 'PENDING'" link type="danger" @click="onVoid(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -215,7 +216,8 @@ import { enumLabel } from '@/constants/enums'
 import {
   pageSettlements, getSettlement, draftFromOrder, draftFromArrival,
   createSettlement, updateSettlement, submitSettlement,
-  draftPrepaymentFromOrder, createPrepaymentSettlement
+  draftPrepaymentFromOrder, createPrepaymentSettlement,
+  voidSettlement
 } from '@/api/settlement'
 
 const queryOrderId = ref('')
@@ -391,6 +393,21 @@ async function onSubmit(row) {
   await ElMessageBox.confirm('提交后走 SETTLEMENT 审批，审批通过将核销预算占用（writeOff）。确认提交？', '提交审批')
   await submitSettlement(row.id)
   ElMessage.success('已提交结算审批')
+  reload()
+}
+
+// ---- B9：作废 ----
+async function onVoid(row) {
+  const { value: reason } = await ElMessageBox.prompt('作废后该结算单将从承诺口径排除（预付款释放），不可恢复', '作废结算单', {
+    confirmButtonText: '确认作废',
+    cancelButtonText: '取消',
+    inputPattern: /\S+/,
+    inputErrorMessage: '作废原因必填',
+    inputPlaceholder: '请输入作废原因',
+    type: 'warning'
+  })
+  await voidSettlement(row.id, { reason })
+  ElMessage.success('结算单已作废')
   reload()
 }
 

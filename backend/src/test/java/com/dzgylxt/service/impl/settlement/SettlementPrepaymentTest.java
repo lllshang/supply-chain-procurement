@@ -18,6 +18,7 @@ import com.dzgylxt.mapper.order.OrderItemMapper;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
 import com.dzgylxt.mapper.order.ServiceAssessMapper;
 import com.dzgylxt.mapper.settlement.SettlementMapper;
+import com.dzgylxt.mapper.settlement.PaymentMapper;
 import com.dzgylxt.service.IBudgetOccupyService;
 import com.dzgylxt.vo.settlement.SettlementSaveReqVO;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +84,9 @@ class SettlementPrepaymentTest {
     @Mock
     private org.springframework.beans.factory.ObjectProvider<com.dzgylxt.approval.ApprovalGateway> gatewayProvider;
 
+    @Mock
+    private PaymentMapper paymentMapper;
+
     private SettlementServiceImpl settlementService;
 
     @BeforeEach
@@ -95,6 +99,7 @@ class SettlementPrepaymentTest {
         ReflectionTestUtils.setField(settlementService, "serviceAssessMapper", serviceAssessMapper);
         ReflectionTestUtils.setField(settlementService, "baseMapper", settlementMapper);
         ReflectionTestUtils.setField(settlementService, "businessNoGenerator", businessNoGenerator);
+        ReflectionTestUtils.setField(settlementService, "paymentMapper", paymentMapper);
         ReflectionTestUtils.setField(settlementService, "budgetOccupyService", budgetOccupyService);
 
         when(businessNoGenerator.nextNo(any())).thenReturn("JS-202609-000001");
@@ -284,5 +289,70 @@ class SettlementPrepaymentTest {
         order.setStatus(status);
         order.setOrderType(ItemType.MATERIAL);
         return order;
+    }
+
+    // ---------------- B9：作废结算单 ----------------
+
+    @Test
+    void voidSettlement_pending_success() {
+        Settlement s = new Settlement();
+        s.setId(5001L);
+        s.setOrderId(ORDER_ID);
+        s.setStatus(SettlementStatus.PENDING);
+        s.setType(SettlementType.PREPAYMENT);
+        s.setAmount(new BigDecimal("500"));
+        s.setRemark("预付款");
+        when(settlementMapper.selectById(5001L)).thenReturn(s);
+        when(paymentMapper.sumPaidAmount(5001L)).thenReturn(BigDecimal.ZERO);
+        when(settlementMapper.updateById(any(Settlement.class))).thenReturn(1);
+
+        settlementService.voidSettlement(5001L, "误建");
+
+        ArgumentCaptor<Settlement> captor = ArgumentCaptor.forClass(Settlement.class);
+        verify(settlementMapper).updateById(captor.capture());
+        assertEquals(SettlementStatus.VOIDED, captor.getValue().getStatus());
+        assertEquals("预付款；作废：误建", captor.getValue().getRemark());
+    }
+
+    @Test
+    void voidSettlement_settled_rejected() {
+        Settlement s = new Settlement();
+        s.setId(5002L);
+        s.setOrderId(ORDER_ID);
+        s.setStatus(SettlementStatus.SETTLED);
+        when(settlementMapper.selectById(5002L)).thenReturn(s);
+
+        BizException ex = assertThrows(BizException.class,
+                () -> settlementService.voidSettlement(5002L, "test"));
+        assertEquals(com.dzgylxt.common.ResultCode.STATUS_INVALID.getCode(), ex.getCode());
+    }
+
+    @Test
+    void voidSettlement_alreadyVoided_idempotent() {
+        Settlement s = new Settlement();
+        s.setId(5003L);
+        s.setOrderId(ORDER_ID);
+        s.setStatus(SettlementStatus.VOIDED);
+        when(settlementMapper.selectById(5003L)).thenReturn(s);
+
+        BizException ex = assertThrows(BizException.class,
+                () -> settlementService.voidSettlement(5003L, "重复"));
+        assertEquals(com.dzgylxt.common.ResultCode.STATUS_INVALID.getCode(), ex.getCode());
+    }
+
+    @Test
+    void voidSettlement_hasPayment_rejected() {
+        Settlement s = new Settlement();
+        s.setId(5004L);
+        s.setOrderId(ORDER_ID);
+        s.setStatus(SettlementStatus.PENDING);
+        s.setType(SettlementType.MATERIAL);
+        s.setAmount(new BigDecimal("2000"));
+        when(settlementMapper.selectById(5004L)).thenReturn(s);
+        when(paymentMapper.sumPaidAmount(5004L)).thenReturn(new BigDecimal("500"));
+
+        BizException ex = assertThrows(BizException.class,
+                () -> settlementService.voidSettlement(5004L, "test"));
+        assertEquals(com.dzgylxt.common.ResultCode.STATUS_INVALID.getCode(), ex.getCode());
     }
 }

@@ -42,6 +42,9 @@ public interface ISettlementService extends IService<Settlement> {
     /** SETTLEMENT 审批回调（由 SettlementApprovalHandler 委托）：通过→核销+SETTLED；驳回→保持 PENDING。 */
     void handleApproval(Long taskId, Long bizId, boolean approved, String comment);
 
+    /** B9：作废结算单——仅 PENDING 可作废（SETTLED 已核销不可逆）；释放 committed 口径。 */
+    void voidSettlement(Long id, String reason);
+
     /** 分页（订单/供应商/状态过滤）。 */
     com.baomidou.mybatisplus.core.metadata.IPage<Settlement> page(long current, long size,
                                                                   Long orderId, Long supplierId,

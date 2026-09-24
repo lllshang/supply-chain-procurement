@@ -210,7 +210,8 @@ export const STRING_ENUMS = {
   settlementStatus: [
     { value: 'PENDING', label: '待结算', type: 'warning' },
     { value: 'SETTLED', label: '已结算', type: 'success' },
-    { value: 'PARTIAL', label: '部分结算', type: 'warning' }
+    { value: 'PARTIAL', label: '部分结算', type: 'warning' },
+    { value: 'VOIDED', label: '已作废', type: 'info' }
   ],
   // 结算类型
   settlementType: [
