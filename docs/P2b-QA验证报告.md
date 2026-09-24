@@ -173,3 +173,65 @@
 - **P2b-6 → Engineer（可与 P2b-5 一并）**。
 - **P2b-7 → 主理人/架构落规格**。**P2b-8 → Engineer 补单测**。
 - 台账 D1/D2/D9/B3 **暂不建议清零**，待 P2b-3/4/5 修复复验通过后再清。
+
+---
+
+# 第 2 轮聚焦复验（P2b-3/4/5/6 修复验证）
+
+> 验证对象：`develop @ 334a8dc`（`d3b94f6` P2b-3/4 → `0b851bf` P2b-5/6 → `334a8dc` 测试+16）。
+> 方法：JDK17 + gradlew `clean build`；新建空库 `scm_qa_p2b2` 自动初始化；后端 `:18081` 运行态实测 + 直查 DB 对账；QA 自建预算行 `990402`(科目2/9月)/`990403`(科目1诱饵)/`990410`、SKU `991002`(BOX→PCS×12)、供应商+资质。
+> 第 1 轮反例原样重跑为主；第 1 轮问题编号 P2b-3/4/5/6 对应验证。
+
+## 3.0 结论先行
+
+**IS_PASS = false（P2b-3 ✅ / P2b-4 ❌ / P2b-5 ⚠️部分 / P2b-6 ✅；新发现 P1×2：P2b-9、P2b-10）**
+
+| 复验项 | 判定 | 依据 |
+|---|---|---|
+| 构建与单测（106 例） | ✅ 属实 | `clean build` 15s；JUnit XML 逐类核对 **20 类 / 106 例 / 0 失败 0 错误 0 跳过**（P2bBudgetLifecycleTest 8 + P2bExtensionTest 10 + OrderTripleCheckTest 12 + AwardSingleSupplierTest 4） |
+| P2b-3 驳回释放 | ✅ **通过** | 提交即占 10560 → AWARD 驳回 → `used` 回退 0 + RELEASE 负向流水 `('0','10560.00'),('1','-10560.00')` |
+| P2b-4 重提幂等（终态=新金额） | ❌ **失败（必现）** | 驳回→调整 5280→重提 → **`3002 预算行并发冲突` 100% 复现**（受控时序 + sleep 隔离非并发竞态），终态 `used=0`≠5280。根因 P2b-9 |
+| P2b-5 变更硬控 | ⚠️ **部分修复** | ①有锚超额：拦截 + BUDGET 任务 payload **含 subjectId:2** + 变更回滚 ✅；②有锚余额足：ORDER OCCUPY 1056 + used +1056 ✅；**③无锚（D2 手填合同）变更增额 2→100 BOX(+103488) 静默成功** ❌（见 P2b-10） |
+| P2b-6 占用落 ORDER 流水 | ✅ **通过** | 下单转移 `AWARD(2) RELEASE -2112` + `ORDER(3) OCCUPY 2112` 成对落账；变更增/减额均落 ORDER 流水；`budget_occupied` 与预算系统挂钩（2112→3168→2112）；守恒零差异 |
+| 作废端点闭环 | ✅ 合规项全过 | 干净定标 void：3168→0 释放 + remark「作废：QA作废验证」留痕；重复 void → 3003 拒；已登记合同 void → 3003「请先终止合同（避免预算锚点悬空）」+ 状态不变；**VOIDED 经 API 序列化为 name `"VOIDED"`**（#33 契约）✅ |
+| 回归（第 1 轮正向抽 4 项+标准链） | ✅ 全过 | D1 DAILY 拒询价 3003（文案正确）；独立寻源缺原因 4000(BR-07)/带原因成功（`source_type=OFFLINE, source_reason` 落库）；标准链 STANDARD submit→两级审批→APPROVED + 占用 88 落账；无申请下单合同额度扣减对账 5000−2112=2888、超额 105600 拒且 available 不变 |
+| 守恒 | ✅ 每场景后全库零差异（但见 P2b-9 的"守恒盲区"警示） |
+
+## 3.1 🔴 新发现 P1×2
+
+### P2b-9【后端·🔴】`sumBizOccupied` 对 RELEASE 双重取反——有释放历史的单据，占用余额计算翻倍（释放/作废/重提全链被污染）
+
+**根因**：`BudgetOccupyLogMapper.sumBizOccupied`（`BudgetOccupyLogMapper.java:20-23`）对 `action IN (1,2)` 取 `-amount`，但 `BudgetOccupyServiceImpl.release()` 写 RELEASE 流水时已 `take.negate()`（amount 本身为负）→ **双重取反**。任何 `occupiedTotal/releaseAwardOccupation` 对存在 RELEASE 历史的 bizId 都返回「净占用+|累计释放|」的翻倍值。
+
+**三重运行态实锤**：
+
+1. **驳回后重提 100% 失败（P2b-4 验证 FAILED）**：驳回释放 10560 后重提，`releaseAwardOccupation` 计算出 `occupiedTotal=21120(=10560×2)` → 释放 CAS `used 0−21120≥0` 不成立 → `3002 预算行并发冲突`（误导性文案）。应用日志铁证：`changeUsedAmount 参数: -21120.00, 990402, version=2 → Updates: 0`。
+2. **驳回后作废吞掉同行其他业务占用 + 对方永久卡死**：定标 A（占 10560→驳回释放）+ 定标 B（占 21120）同行。`void A` 成功却按 21120 释放 → `used 21120→0`，**B 的真实占用被 A 全额吞掉**（A 流水净额 −21120，出现"负占用"）；随后 `void B` 按真实 21120 释放撞 `used−21120≥0` 守卫 → 3002 **永久卡死，无法释放/核销**。
+3. **订单取消多释放**（第三方操作在我的 18081 实例上触发，见 3.3 环境备注）：ORDER 净占用 3168（转移 3168+增额 1056−减额 1056），取消却释放 **4224(=3168+1056)**——减额 RELEASE −1056 被 `sumBizOccupied` 回加为 +1056。
+
+**影响面**：`releaseAwardOccupation`（定标驳回/作废/重提）、订单取消释放、变更减额后再次释放——凡"释放后再按余额释放"的路径全部翻倍。**守恒校验盲区**：Σlog==used 仍成立但语义已腐坏（负占用对冲正占用），现有 `conservation` 对账无法发现，需按 bizId 净额≥0 校验补充。
+**修复方向**（供工程参考）：`sumBizOccupied` 改 `action=1 THEN amount`（RELEASE 日志已带符号，不取反；WRITE_OFF 日志为正数保留 `-amount`）；或统一 release 写正数并由 SQL 取反——二者取一，不可共存。修复后需回归 `BudgetOccupyConcurrencyTest` 8 例 + `P2bBudgetLifecycleTest` 8 例（其 mock 亦按此签名）。
+
+### P2b-10【后端·🔴】无锚（D2 手填合同）订单变更增额仍静默绕过预算硬控——"4000 拦截"分支实为死代码，P2b-5 仅修复有锚场景
+
+- 运行态复现：D2 手填合同（`award_id=NULL`）→ 无申请下单（`budget_occupied=0`，P2b-6 语义）→ 放开合同额度闸 → `POST /orders/{id}/change` 2→100 BOX（**+103488 元**）→ **200 成功**：qty 已改、`used` 纹丝不动、`budget_occupied` 仍 0、无任何 BUDGET 任务。预算硬控被完全绕过。
+- 根因：`OrderServiceImpl.changeOrder` 的预算对冲块（含 `buildChangeOccupyCmd` 返回 null → 4000 硬控拦截分支）整体包在 `if (order.getBudgetOccupied() != null && order.getBudgetOccupied().compareTo(BigDecimal.ZERO) > 0)` 内——无锚订单 occupied=0 **根本进不了该块**；有锚订单则锚链必命中，`occupyCmd==null` 分支实际不可达（死代码）。
+- 单测给出虚假信心：`P2bBudgetLifecycleTest.changeOrder_noAnchor_hardBlocked` 通过**手工 mock `budgetOccupied>0`** 构造无锚场景，与真实链路（P2b-6 将无锚订单 occupied 置 0）脱节——单测绿但生产行为未修复。
+- 修复方向：锚点缺失拦截应放在 `budgetOccupied>0` 门**之外**（增额时无论 occupied 是否为 0 都必须先解析锚点；解析失败→4000 硬控），并把 `changeOrder_noAnchor_hardBlocked` 改为不 mock occupied 的真实形态。
+
+## 3.2 代码审读结论（复验点 6）
+
+- `buildChangeOccupyCmd`（`OrderServiceImpl.java:597-626`）：两级锚链 `order.applyId → apply.dept/subject/expectedDate`；`contract.award_id → award.dept/subject` 实现正确，**对有锚订单无绕过口**；减额路径不经过锚点解析（直接按 `occupiedTotal(ORDER)` 释放），**未被误拦**（运行态 ②b 实证 RELEASE -1056 成功）。
+- `consumeApprovedBudgetUpgrade`（`OrderServiceImpl.java:682-712`）：去 applyId 门**安全**——匹配条件仍为 `bizType='BUDGET' + bizId=orderId + status=APPROVED + payload.orderChange=true + orderId 匹配 + amount 精确匹配 + consumed 未消费`，不会误消费其他 bizType 任务；一次消费置 `consumed=true` 防重放。✅
+- `BudgetApprovalHandler` 升级 force 占用补 `subjectId`（payload→cmd）✅（与 5d-① 任务 payload 实测一致）。
+
+## 3.3 环境备注（如实记录）
+
+验证期间（QA 批次 B/C 之后）检测到**非 QA 操作**在我的 `:18081`/`scm_qa_p2b2` 实例上执行（流水 biz_id 时间戳晚于 QA 全部批次：线下定标 10560 → 下单转移 3168 → 变更 → **订单取消释放 4224** 等）。该操作恰好构成 P2b-9 的第 3 个独立实锤（订单取消多释放 1056），但会造成实例状态污染——本报告所有判定均基于 QA 自有批次输出（过程输出已完整留存）+ 当时 DB 快照，未受污染影响。
+
+## 3.4 第 2 轮结论
+
+- **P2b-3 / P2b-6 修复确认有效**（运行态实测 + 守恒）；作废端点合规项全过。
+- **P2b-4 修复无效**（P2b-9 连带：重提 100% 必现 3002，终态幂等不可达）。
+- **P2b-5 部分修复**（有锚三态全过；无锚场景宣称的 4000 硬控不成立，见 P2b-10）。
+- 新增 **P1×2（P2b-9 / P2b-10）**，均为修复引入或修复未覆盖的预算硬控核心缺陷，建议修复后做第 3 轮聚焦回归（重提幂等 / 驳回后作废 / 无锚变更拦截 / 订单取消释放回冲）。
