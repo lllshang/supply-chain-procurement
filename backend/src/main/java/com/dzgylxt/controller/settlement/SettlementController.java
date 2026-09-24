@@ -8,6 +8,7 @@ import com.dzgylxt.enums.SettlementStatus;
 import com.dzgylxt.service.ISettlementService;
 import com.dzgylxt.vo.settlement.SettlementDraftVO;
 import com.dzgylxt.vo.settlement.SettlementSaveReqVO;
+import com.dzgylxt.vo.settlement.PrepaymentCreateReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -62,11 +63,26 @@ public class SettlementController {
         return R.ok(settlementService.draftFromArrival(arrivalId));
     }
 
+    /** R4：预付款结算草稿（订单发起，带出已付预付款）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/prepayment/draft/{orderId}")
+    public R<SettlementDraftVO> draftPrepayment(@PathVariable Long orderId) {
+        return R.ok(settlementService.draftPrepaymentFromOrder(orderId));
+    }
+
     /** 创建结算单。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @PostMapping
     public R<Long> create(@RequestBody SettlementSaveReqVO req) {
         return R.ok(settlementService.createSettlement(req));
+    }
+
+    /** R4：预付款结算（订单发起，无需到货/无结算数量）→ SETTLEMENT 审批 → 核销；尾款自动扣减。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/prepayment/{orderId}")
+    public R<Long> createPrepayment(@PathVariable Long orderId,
+                                    @RequestBody PrepaymentCreateReqVO req) {
+        return R.ok(settlementService.createPrepaymentSettlement(orderId, req.getAmount(), req.getRemark()));
     }
 
     /** 修改重提（驳回留痕后）。 */

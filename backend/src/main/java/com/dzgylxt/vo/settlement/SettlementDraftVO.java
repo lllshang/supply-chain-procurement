@@ -32,6 +32,8 @@ public class SettlementDraftVO implements Serializable {
     private BigDecimal remainQtyBase;
     /** 服务考核扣款合计（物料单=0） */
     private BigDecimal assessDeduct;
+    /** R4：本订单已付预付款合计（SETTLED 预付款结算；预付款/尾款表单展示与累计校验用） */
+    private BigDecimal prepaidPaid;
     /** 建议结算金额：物料=remainQty×均价；服务=orderAmount×(remainQty/stored)−扣款 */
     private BigDecimal suggestAmount;
     /** 到货单入口：本单已入库量（按 arrival 汇总） */

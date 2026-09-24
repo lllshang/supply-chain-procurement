@@ -45,11 +45,11 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 结算服务实现（P3 设计 §2.1 / T04）。
+ * 结算服务实现（P3 设计 §2.1 / T04；R4 预付款结算 + R5 订单状态机收敛）。
  *
  * <p>核心联动（规格 §5 行 11）：SETTLEMENT 审批通过 → 预算核销（{@code writeOff}，
- * used_amount 不变转构成）→ 订单全部结清（Σ已结 ≥ 应结总额）→ 订单 {@code SETTLED}。
- * 驳回保持 PENDING 留痕可重提（不改枚举值，规格口径）。</p>
+ * used_amount 不变转构成）。R5：订单状态机不再流转 SETTLED/PAID，结清/付清进度改
+ * 派生展示字段（订单 VO）；驳回保持 PENDING 留痕可重提（不改枚举值，规格口径）。</p>
  */
 @Service
 public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlement>
@@ -105,6 +105,13 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
     }
 
     @Override
+    public SettlementDraftVO draftPrepaymentFromOrder(Long orderId) {
+        PurchaseOrder order = requireOrder(orderId);
+        // 预付款草稿：订单维度带出（含已付预付款），无到货/数量口径
+        return buildDraft(order, null);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createSettlement(SettlementSaveReqVO req) {
         PurchaseOrder order = requireOrder(req.getOrderId());
@@ -120,6 +127,8 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
                 .map(s -> nvl(s.getAmount()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal orderAmount = orderTotalAmount(order.getId());
+        // R4：本订单已付预付款合计（SETTLED 预付款结算；尾款自动扣减与累计校验口径）
+        BigDecimal prepaidTotal = baseMapper.sumPrepaymentPaid(order.getId());
 
         // 重复结算拦截（到货单入口粒度）
         if (req.getArrivalId() != null && baseMapper.existsByArrival(req.getArrivalId())) {
@@ -134,6 +143,10 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
             throw new BizException(ResultCode.BIZ_ERROR,
                     "结算数量超出可结余量：入库 " + storedQty + "，已结 " + settledQty);
         }
+
+        // QA #42：isFinal 结清校验基数 = 订单金额 − Σ考核扣款（应结总额；预付款扣减另计）
+        BigDecimal grossTotal = orderAmount.subtract(totalDeductOf(order.getId()))
+                .setScale(2, RoundingMode.HALF_UP);
 
         Settlement s = new Settlement();
         s.setOrderId(order.getId());
@@ -154,11 +167,66 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
         // 剩余扣款落在本次行；物料单恒 0）
         BigDecimal remainingDeduct = remainingDeductOf(order, history);
         s.setDeductAmount(remainingDeduct);
-        s.setAmount(resolveAmount(req, order, orderAmount, remainingDeduct));
-        // QA #42：isFinal 结清校验基数 = 订单金额 − Σ考核扣款（与 handleApproval 的
-        // SETTLED 判定同口径，服务链 isFinal 可达）
-        validatePhaseAndFinal(s, history,
-                orderAmount.subtract(totalDeductOf(order.getId())).setScale(2, RoundingMode.HALF_UP));
+        // R4：尾款（isFinal=1）自动扣减已付预付款——金额 = 应结总额 − 预付款 − 历史非预付款已结；
+        // 非尾款恒 0 不扣减，金额沿用数量×均价推导
+        if (s.getIsFinal() == 1) {
+            BigDecimal settledExclPrepaid = history.stream()
+                    .filter(h -> h.getStatus() == SettlementStatus.SETTLED
+                            && h.getType() != SettlementType.PREPAYMENT)
+                    .map(h -> nvl(h.getAmount()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal finalAmount = req.getAmount() != null && req.getAmount().compareTo(BigDecimal.ZERO) > 0
+                    ? req.getAmount()
+                    : grossTotal.subtract(prepaidTotal).subtract(settledExclPrepaid).max(BigDecimal.ZERO);
+            s.setAmount(finalAmount.setScale(2, RoundingMode.HALF_UP));
+            s.setPrepaymentDeduction(prepaidTotal.setScale(2, RoundingMode.HALF_UP));
+        } else {
+            s.setAmount(resolveAmount(req, order, orderAmount, remainingDeduct));
+            s.setPrepaymentDeduction(BigDecimal.ZERO);
+        }
+        // QA #42：尾款校验（含 R4 预付款抵扣）= 累计已结(含预付款) + 本次 − 预付款抵扣 = 应结总额
+        validatePhaseAndFinal(s, history, grossTotal, prepaidTotal);
+        s.setStatus(SettlementStatus.PENDING);
+        save(s);
+        return s.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createPrepaymentSettlement(Long orderId, BigDecimal amount, String remark) {
+        PurchaseOrder order = requireOrder(orderId);
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            throw new BizException(ResultCode.STATUS_INVALID, "已取消订单不可发起预付款结算");
+        }
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "预付款金额必须大于 0");
+        }
+        // R4：累计已付预付款 ≤ 订单有效金额（应结总额 = 订单金额 − Σ考核扣款）
+        BigDecimal orderAmount = orderTotalAmount(orderId);
+        BigDecimal grossTotal = orderAmount.subtract(totalDeductOf(orderId))
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal prepaidTotal = baseMapper.sumPrepaymentPaid(orderId);
+        if (prepaidTotal.add(amount).compareTo(grossTotal) > 0) {
+            throw new BizException(ResultCode.BIZ_ERROR,
+                    "预付款累计 " + prepaidTotal.add(amount).setScale(2, RoundingMode.HALF_UP)
+                            + " 超出订单有效金额 " + grossTotal);
+        }
+        Settlement s = new Settlement();
+        s.setOrderId(order.getId());
+        s.setArrivalId(null);                       // 预付款无到货（发货前）
+        s.setContractId(order.getContractId());
+        s.setSettleNo(businessNoGenerator.nextNo("JS"));
+        s.setSettledQtyBase(null);                 // 预付款无结算数量
+        s.setType(SettlementType.PREPAYMENT);
+        s.setSettleMode(com.dzgylxt.enums.SettleMode.ONE_TIME);
+        s.setPhaseNo(null);
+        s.setPhaseRatio(null);
+        s.setIsFinal(0);
+        s.setPaymentStage(1);                       // R4：预付款阶段 = 1（进度款=2/尾款=3）
+        s.setPrepaymentDeduction(BigDecimal.ZERO);
+        s.setDeductAmount(BigDecimal.ZERO);
+        s.setAmount(amount.setScale(2, RoundingMode.HALF_UP));
+        s.setRemark(remark);
         s.setStatus(SettlementStatus.PENDING);
         save(s);
         return s.getId();
@@ -337,6 +405,12 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
         if (arrivalId != null) {
             draft.setArrivalStoredQty(sumStoredOfArrival(arrivalId));
         }
+        // R4：已付预付款合计（SETTLED 预付款结算），供预付款/尾款表单展示与累计校验
+        draft.setPrepaidPaid(history.stream()
+                .filter(h -> h.getStatus() == SettlementStatus.SETTLED
+                        && h.getType() == SettlementType.PREPAYMENT)
+                .map(h -> nvl(h.getAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
         return draft;
     }
 
@@ -386,9 +460,9 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    /** 阶段比例 Σ≤100；尾款：Σ已结(SETTLED) + 本次 = 应结总额。 */
+    /** 阶段比例 Σ≤100；尾款（R4）：累计已结(含预付款) + 本次 − 预付款抵扣 = 应结总额。 */
     private void validatePhaseAndFinal(Settlement current, List<Settlement> history,
-                                       BigDecimal orderAmount) {
+                                       BigDecimal grossTotal, BigDecimal prepaidTotal) {
         if (current.getSettleMode() == com.dzgylxt.enums.SettleMode.PHASE) {
             if (current.getPhaseNo() == null
                     || current.getPhaseRatio() == null
@@ -409,14 +483,17 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
             }
         }
         if (current.getIsFinal() != null && current.getIsFinal() == 1) {
-            BigDecimal settled = history.stream()
-                    .filter(h -> h.getStatus() == SettlementStatus.SETTLED)
+            // R4：尾款自动扣减预付款——全部已结算（含预付款）+ 本次 = 应结总额
+            BigDecimal settledExclPrepaid = history.stream()
+                    .filter(h -> h.getStatus() == SettlementStatus.SETTLED
+                            && h.getType() != SettlementType.PREPAYMENT)
                     .map(h -> nvl(h.getAmount()))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            if (settled.add(nvl(current.getAmount())).compareTo(orderAmount) != 0) {
+            BigDecimal allSettled = settledExclPrepaid.add(prepaidTotal).add(nvl(current.getAmount()));
+            if (allSettled.compareTo(grossTotal) != 0) {
                 throw new BizException(ResultCode.BIZ_ERROR,
-                        "尾款结清要求 累计已结 + 本次 = 应结总额 " + orderAmount
-                                + "（当前 " + settled.add(nvl(current.getAmount())) + "）");
+                        "尾款结清要求 累计已结(含预付款) + 本次 − 预付款抵扣 = 应结总额 " + grossTotal
+                                + "（当前 " + allSettled + "）");
             }
         }
     }
