@@ -306,3 +306,48 @@
 - `writeOff` 后再查 `occupiedTotal` 场景未探（核销落正值、口径一致，理论安全）。
 - 前端 UI 未回归（本轮聚焦后端生命周期）；MinIO 真实上传仍降级。
 - 「重提终态=新金额」的**正向断言**在 P2b-9 修复前无法运行态验证——修复后需回归：驳回→改明细→重提应成功且 `used==新金额`。
+
+---
+
+# 第 3 轮收口回归（P2b-9/10 修复验证 · `4971ebd`）
+
+> 验证对象：`develop @ 4971ebd`（`2ad7253` P2b-9/10 根因修复 → `4971ebd` 迁移脚本合并修正）。
+> 方法：**因工作区存在他人未提交的半成品改动（见 4.5），本轮改用 `git worktree` 检出 `4971ebd` 隔离构建**（JDK17 wrapper `clean build`），新建空库 `scm_qa_p2b3` 自动初始化 + 后端 `:18081` 运行态实测 + 直查 DB 对账。未改源码、未 push。
+
+## 4.0 结论先行
+
+**IS_PASS = true（四条验收锚全过；P2b-9/10 修复运行态证实生效；残余仅 P3 级 1 项 + 2 项流程提示）**
+
+| # | 验收锚 | 结论 | 关键 DB 对账数字 |
+|---|---|---|---|
+| 1 | ★重提链路复活 | ✅ | submit 占 10560 → 驳回 `used=0`（RELEASE **+10560 落正**）→ 改明细 5280 → 重提**成功**，**终态 used==5280**（非叠加）；流水 `OCCUPY+10560 / RELEASE+10560 / OCCUPY+5280` |
+| 2 | ★取消/减额精确释放 | ✅ | 同行双占用（awX 10560 + awY 5280，used=15840）→ 下单 3BOX 转移（净0）→ 减额 −1056（used 14784）→ 取消**精确释放 2112**（used **12672** = awX 剩 7392 + awY 5280）；**awY 占用分毫未动**（occupiedTotal(AWARD) awX=7392 / awY=5280）——第 2 轮"超额释放吃同行"缺陷确认修复 |
+| 3 | ★无锚变更拦截 | ✅ | D2 手填合同订单（budget_occupied=0）变更增额 → **`3000 变更增额无预算锚点…预算硬控拦截`**（明细回滚）；减额放行。`budgetOccupied=0` 分支已纳入硬控（P2b-10 修复生效） |
+| 4 | ★全库守恒 + writeOff 抽查 | ✅ | 新口径（used == ΣOCCUPY − ΣRELEASE）**全库零差异**（5 轮混合动作后复检）；结算审批通过 → WRITE_OFF 流水 `action=2, amount=10560（落正）`，**used 核销后不变 10560** |
+| 5 | 单测复跑 | ✅ | 隔离 worktree `clean build` 绿；**20 类 / 106 例 / 0F 0E 0S**（QA 逐类解析 JUnit XML） |
+| 6 | 迁移脚本核验 | ✅ | `p2b_migration.sql` 134 行 = 原版 4 组 ALTER（inquiry×2/award×2/apply×2/contract×1，共 7 列）**完整保留** + P2b-9 翻正段；翻正行为实测：模拟历史负值行 −777 → 跑脚本 → **+777**；**二次执行 no-op（幂等）** |
+
+## 4.1 P2b-9 修复证实（口径定稿：写侧一律正数、查询侧取负）
+
+- `release()` / `transfer()` 落正数（`writeLog(..., RELEASE, take, ...)`），`sumBizOccupied`/`sumNetOccupiedByLine` 对 action∈(1,2) 取负——读写自洽，第 2 轮"双重取反"三实锤场景（驳回重提/作废吞占/取消多释放）运行态全部消除。
+- **注（口径分歧提示）**：`BudgetOccupyLogMapper` javadoc 与 `release()` 内注释分别描述为"查询取负/写侧禁负"与旧"方案A"表述——以**实际代码为准（写正查负）**，建议工程师统一两处注释措辞，避免下一个读者再被误导（P3 级文档问题，不阻断）。
+- ⚠️ **QA 守恒口径同步**：本报告历史章节的守恒 SQL（`Σlog==used` 按 signed 直接相加）是**旧口径**；本轮起 QA 对账 SQL 已更新为 `used == Σ(action=0) − Σ(action=1)`（WRITE_OFF/ADJUST 不参与行级恒等式）。
+
+## 4.2 P2b-10 修复证实（锚点解析外置）
+
+- `changeOrder` 锚点解析已提到 `occupied>0` 门之外（OrderServiceImpl.java:485-508）：增额必经 `buildChangeOccupyCmd` → 无锚 3000 拦截；有锚不足仍走 BUDGET 升级（#47 模式）。第 2 轮 P2b-10 的 `budgetOccupied=0` 静默绕过分支运行态消除。
+- 拦截码为 **3000（BIZ_ERROR）而非字面 4000（PARAM_ERROR）**——与系统"业务规则拒绝"惯例一致（超额拦截同为 3000），语义正确，不判缺陷；如产品要求统一 4000 再调整。
+
+## 4.3 残余（P3 级）
+
+- **P2b-13【P3】无锚订单减额变更致 `budget_occupied` 落负值**：D2 无锚订单（occupied=0）减额放行时 `newOccupied = currentOccupied + amountDelta = −1056`（无 `max(0, …)` 下界保护）。运行态实测：减额后 `budget_occupied=-1056.00`。无资金风险（该字段对无锚订单不参与闸门），但字段语义失真、报表可能出负数。建议 `newOccupied` 做下界 0 保护（锚点订单有真实占用不受影响）。
+- **P2b-12（部分改善，未完全闭环）**：`changeOrder_noAnchor_hardBlocked` 已改真实链路形态（occupied=0、无手工构造拦截），但 `P2bBudgetLifecycleTest` 的"释放→再占用"生命周期仍 mock `budgetOccupyService`——sum 口径类缺陷 mock 依然测不出（本轮由运行态实测弥补）。真实 DB 集成测试建议仍登记为后续项。
+
+## 4.4 本轮环境与边界
+
+- 隔离 worktree `/tmp/qa3/wt-4971ebd`（构建产物）；运行实例 `:18081`（scm_qa_p2b3）保留。翻正验证数据（biz_id=999888）已清理。
+- 未验：前端 UI（本轮聚焦后端）；MinIO 仍降级；scm_qa_p2b2 旧库翻正演练被外部清理（翻正行为已在 p2b3 实测覆盖）。
+
+## 4.5 ⚠️ 流程风险提示（非代码缺陷，需主理人跟进）
+
+**主仓库工作区存在未提交的半成品改动（非 QA 产出、QA 未动）**：`BudgetOccupyServiceImpl.java` 11 行未提交 diff + 未跟踪 `scripts/sql/p2b9_release_sign_migration.sql`——内容为把 P2b-9 从已提交的"写侧落正数"口径改回"写侧落负数（方案A）"，但**查询 SQL 与 writeOff 未同步**，若按当前工作区构建部署，P2b-9 双重取反将原样复活。本轮已用 worktree 隔离规避；**请确认该改动归属并处理（提交完整方案或丢弃）后再统一 push 收口**。
