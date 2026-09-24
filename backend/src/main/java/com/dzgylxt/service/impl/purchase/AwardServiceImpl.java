@@ -420,6 +420,8 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
             item.setQty(vo.getQty());
             item.setQtyInBaseUnit(qtyBase);
             item.setConvRateSnapshot(rate);
+            // P3c-A2：税率继承——有报价来源取报价税率（含税口径一致），无则用手填值
+            item.setTaxRate(resolveTaxRate(req.getInquiryId(), vo, award.getId()));
             item.setRemark(vo.getRemark());
             awardItemMapper.insert(item);
 
@@ -494,5 +496,23 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         // P2b-3：驳回释放该定标全部 AWARD 占用（RELEASE 负向流水 + used 回退），
         // 消除"驳回后假占用"；重提时按当前金额重新占用（覆盖式幂等，见 submit）
         releaseAwardOccupation(award, "定标驳回释放");
+    }
+
+    /**
+     * P3c-A2：定标明细税率解析——优先继承报价税率（含税口径与报价一致，L709/L711），
+     * 无报价来源（D9 线下定标登记）时取手填值，两者皆无返回 null（旧数据兼容展示 "-"）。
+     */
+    private BigDecimal resolveTaxRate(Long inquiryId, AwardSaveReqVO.AwardItemVO vo, Long awardId) {
+        if (inquiryId != null) {
+            List<Quotation> quotes = quotationMapper.selectList(Wrappers.<Quotation>lambdaQuery()
+                    .eq(Quotation::getInquiryId, inquiryId)
+                    .eq(Quotation::getSupplierId, vo.getSupplierId())
+                    .eq(Quotation::getSkuId, vo.getSkuId())
+                    .eq(Quotation::getInvalid, 0));
+            if (!quotes.isEmpty() && quotes.get(0).getTaxRate() != null) {
+                return quotes.get(0).getTaxRate();
+            }
+        }
+        return vo.getTaxRate();
     }
 }

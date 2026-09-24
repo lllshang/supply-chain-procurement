@@ -55,6 +55,73 @@ DELIMITER ;
 CALL p3c_add_a1_objects();
 DROP PROCEDURE IF EXISTS p3c_add_a1_objects;
 
+-- ============================================================
+-- A2 报价含税三件套（PRD L697/L709/L711/L717）
+-- tax_rate 税率% / freight 运费 / delivery_days 承诺交期天数；
+-- 导入时三件套必填，税率合法域 0–13；金额口径 = 含税单价 × 数量（不保留不含税净额）。
+-- ============================================================
+
+DROP PROCEDURE IF EXISTS p3c_add_a2_objects;
+
+DELIMITER $$
+
+CREATE PROCEDURE p3c_add_a2_objects()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'quotation'
+                     AND COLUMN_NAME = 'tax_rate') THEN
+        ALTER TABLE `quotation`
+          ADD COLUMN `tax_rate` DECIMAL(5,2) NULL
+            COMMENT '税率%（P3c-A2 含税口径，0–13）' AFTER `invalid`;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'quotation'
+                     AND COLUMN_NAME = 'freight') THEN
+        ALTER TABLE `quotation`
+          ADD COLUMN `freight` DECIMAL(18,2) NULL
+            COMMENT '运费（P3c-A2 比价维度）' AFTER `tax_rate`;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'quotation'
+                     AND COLUMN_NAME = 'delivery_days') THEN
+        ALTER TABLE `quotation`
+          ADD COLUMN `delivery_days` INT NULL
+            COMMENT '承诺交期天数（P3c-A2）' AFTER `freight`;
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL p3c_add_a2_objects();
+DROP PROCEDURE IF EXISTS p3c_add_a2_objects;
+
+-- P3c-A2：award_item 继承税率（定标含税口径与报价一致；线下定标手填，可空）
+DROP PROCEDURE IF EXISTS p3c_add_a2_award_tax;
+
+DELIMITER $$
+
+CREATE PROCEDURE p3c_add_a2_award_tax()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'award_item'
+                     AND COLUMN_NAME = 'tax_rate') THEN
+        ALTER TABLE `award_item`
+          ADD COLUMN `tax_rate` DECIMAL(5,2) NULL
+            COMMENT '税率%（P3c-A2：报价继承/线下手填）' AFTER `conv_rate_snapshot`;
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL p3c_add_a2_award_tax();
+DROP PROCEDURE IF EXISTS p3c_add_a2_award_tax;
+
 -- 验证（可选执行）：
 -- SHOW TABLES LIKE 'contract_price_item';
 -- SHOW COLUMNS FROM order_item LIKE 'contract_item_id';

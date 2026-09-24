@@ -31,5 +31,7 @@ public class AwardItem extends BaseEntity implements Serializable {
     private BigDecimal qtyInBaseUnit;
     /** 换算快照（取 unit_conversion 当前生效版本） */
     private BigDecimal convRateSnapshot;
+    /** P3c-A2：税率 %（从报价继承含税口径；线下定标手填，可空） */
+    private BigDecimal taxRate;
     private String remark;
 }

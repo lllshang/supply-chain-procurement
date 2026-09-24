@@ -31,6 +31,8 @@ public class AwardSaveReqVO implements Serializable {
         private BigDecimal price;
         /** 定标数量（采购单位） */
         private BigDecimal qty;
+        /** P3c-A2：税率 %（手填兜底；有报价来源时以报价继承值为准） */
+        private BigDecimal taxRate;
         private String remark;
     }
 }

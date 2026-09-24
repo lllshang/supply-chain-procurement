@@ -38,4 +38,10 @@ public class Quotation extends BaseEntity implements Serializable {
     private QuotationStatus status;
     /** 0=有效 1=已失效（新批次导入后旧批次置 1，P2 新增） */
     private Integer invalid;
+    /** P3c-A2：税率 %（PRD L697/L935；含税口径，合法域 0–13） */
+    private BigDecimal taxRate;
+    /** P3c-A2：运费（PRD L717 比价维度之一） */
+    private BigDecimal freight;
+    /** P3c-A2：承诺交期天数（PRD L709 供应商填写） */
+    private Integer deliveryDays;
 }

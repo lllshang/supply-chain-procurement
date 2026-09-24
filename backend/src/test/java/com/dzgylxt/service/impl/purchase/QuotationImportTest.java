@@ -143,6 +143,9 @@ class QuotationImportTest {
         rows.get(0).setSupplierId(String.valueOf(SUPPLIER_A));
         rows.get(0).setQty(BigDecimal.ONE);
         rows.get(0).setPrice(new BigDecimal("100"));
+        rows.get(0).setTaxRate(new BigDecimal("13"));   // P3c-A2 三件套
+        rows.get(0).setFreight(new BigDecimal("50"));
+        rows.get(0).setDeliveryDays(7);
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
         EasyExcel.write(out, QuotationServiceImpl.TemplateRow.class).sheet("报价单").doWrite(rows);
         MockMultipartFile file = new MockMultipartFile("file", "q.xlsx", "application/octet-stream", out.toByteArray());
@@ -216,6 +219,65 @@ class QuotationImportTest {
         r.setSkuId(String.valueOf(SKU_ID));
         r.setQty(BigDecimal.ONE);
         r.setPrice(price);
+        // P3c-A2：含税三件套必填（税率 0–13 合法域）
+        r.setTaxRate(new BigDecimal("13"));
+        r.setFreight(new BigDecimal("50"));
+        r.setDeliveryDays(7);
         return r;
+    }
+
+    // ---------------- P3c-A2：含税三件套校验 ----------------
+
+    private QuotationImportResultVO importRow(long supplierId, BigDecimal price,
+                                              BigDecimal taxRate, BigDecimal freight, Integer days)
+            throws Exception {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        QuotationServiceImpl.TemplateRow r = row(supplierId, price);
+        r.setTaxRate(taxRate);
+        r.setFreight(freight);
+        r.setDeliveryDays(days);
+        EasyExcel.write(out, QuotationServiceImpl.TemplateRow.class).sheet("报价单").doWrite(List.of(r));
+        MockMultipartFile file = new MockMultipartFile("file", "q.xlsx",
+                "application/octet-stream", out.toByteArray());
+        return service.importQuotations(INQUIRY_ID, file);
+    }
+
+    /** 税率超合法域（>13）→ 整批不落库（全有或全无）。 */
+    @Test
+    void importQuotations_taxRateOutOfRange_rejected() throws Exception {
+        QuotationImportResultVO result =
+                importRow(SUPPLIER_A, new BigDecimal("100"), new BigDecimal("25"), BigDecimal.ZERO, 7);
+        assertEquals(0, result.getSuccess());
+        assertEquals(1, result.getFail());
+        assertTrue(result.getErrors().get(0).contains("税率必须在 0–13"));
+        verify(service, never()).saveBatch(anyCollection());
+    }
+
+    /** 缺三件套任一 → 拒绝（含税口径强制）。 */
+    @Test
+    void importQuotations_missingTaxTriple_rejected() throws Exception {
+        QuotationImportResultVO result =
+                importRow(SUPPLIER_A, new BigDecimal("100"), null, BigDecimal.ZERO, 7);
+        assertEquals(0, result.getSuccess());
+        assertTrue(result.getErrors().get(0).contains("税率/运费/交期均必填"));
+    }
+
+    /** 三件套齐全 → 成功且落库带税率。 */
+    @Test
+    void importQuotations_withTaxTriple_persistsTaxRate() throws Exception {
+        QuotationImportResultVO result =
+                importRow(SUPPLIER_A, new BigDecimal("100"), new BigDecimal("13"),
+                        new BigDecimal("50"), 7);
+        assertEquals(1, result.getSuccess());
+        assertEquals(0, result.getFail());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Collection<Quotation>> captor =
+                ArgumentCaptor.forClass(java.util.Collection.class);
+        verify(service).saveBatch(captor.capture());
+        Quotation saved = captor.getValue().iterator().next();
+        assertEquals(0, saved.getTaxRate().compareTo(new BigDecimal("13")));
+        assertEquals(0, saved.getFreight().compareTo(new BigDecimal("50")));
+        assertEquals(7, saved.getDeliveryDays());
     }
 }

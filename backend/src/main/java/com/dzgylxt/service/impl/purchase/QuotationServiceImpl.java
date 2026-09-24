@@ -186,6 +186,23 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
                 result.setFail(result.getFail() + 1);
                 continue;
             }
+            // P3c-A2：含税三件套必填校验（PRD L697/L709/L717）——税率 0–13 合法域
+            if (row.getTaxRate() == null || row.getFreight() == null || row.getDeliveryDays() == null) {
+                result.getErrors().add("第" + lineNo + "行：税率/运费/交期均必填（含税口径）");
+                result.setFail(result.getFail() + 1);
+                continue;
+            }
+            if (row.getTaxRate().compareTo(BigDecimal.ZERO) < 0
+                    || row.getTaxRate().compareTo(new BigDecimal("13")) > 0) {
+                result.getErrors().add("第" + lineNo + "行：税率必须在 0–13 之间：" + row.getTaxRate());
+                result.setFail(result.getFail() + 1);
+                continue;
+            }
+            if (row.getFreight().compareTo(BigDecimal.ZERO) < 0 || row.getDeliveryDays() < 0) {
+                result.getErrors().add("第" + lineNo + "行：运费/交期不得为负");
+                result.setFail(result.getFail() + 1);
+                continue;
+            }
             // 换算快照：报价单位 → 基本单位（当前生效版本，应用时钟）
             String unit = row.getPurchaseUnit() == null ? "" : row.getPurchaseUnit();
             UnitConversion conv = unit == null || unit.isBlank() ? null
@@ -201,6 +218,10 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
             q.setPurchaseUnit(unit);
             q.setQtyInBaseUnit(qtyBase);
             q.setPrice(row.getPrice());
+            // P3c-A2：含税三件套落库（金额口径 = 含税单价 × 数量，L711）
+            q.setTaxRate(row.getTaxRate());
+            q.setFreight(row.getFreight());
+            q.setDeliveryDays(row.getDeliveryDays());
             q.setStatus(QuotationStatus.SUBMITTED);
             q.setInvalid(0);
             batch.add(q);
@@ -345,6 +366,15 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
         private BigDecimal qty;
         @com.alibaba.excel.annotation.ExcelProperty("单价(元)")
         private BigDecimal price;
+        /** P3c-A2：含税税率 %（合法域 0–13） */
+        @com.alibaba.excel.annotation.ExcelProperty("税率(%)")
+        private BigDecimal taxRate;
+        /** P3c-A2：运费（元） */
+        @com.alibaba.excel.annotation.ExcelProperty("运费(元)")
+        private BigDecimal freight;
+        /** P3c-A2：承诺交期（天） */
+        @com.alibaba.excel.annotation.ExcelProperty("交期(天)")
+        private Integer deliveryDays;
         @com.alibaba.excel.annotation.ExcelProperty("备注")
         private String remark;
     }

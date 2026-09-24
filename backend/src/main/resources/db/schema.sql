@@ -1039,4 +1039,14 @@ CREATE TABLE IF NOT EXISTS contract_price_item (
 ALTER TABLE `order_item`
   ADD COLUMN `contract_item_id` BIGINT NULL COMMENT '命中的合同价格清单行（P3c-A1 第四重校验回填）' AFTER `planned_qty`;
 
+-- P3c-A2：quotation 补含税三件套（PRD L697/L709/L717；金额=含税单价×数量 L711）
+ALTER TABLE `quotation`
+  ADD COLUMN `tax_rate`      DECIMAL(5,2)  NULL COMMENT '税率%（P3c-A2 含税口径，0–13）' AFTER `invalid`,
+  ADD COLUMN `freight`       DECIMAL(18,2) NULL COMMENT '运费（P3c-A2 比价维度）' AFTER `tax_rate`,
+  ADD COLUMN `delivery_days` INT           NULL COMMENT '承诺交期天数（P3c-A2）' AFTER `freight`;
+
+-- P3c-A2：award_item 继承税率（定标带价含税口径与报价一致）
+ALTER TABLE `award_item`
+  ADD COLUMN `tax_rate` DECIMAL(5,2) NULL COMMENT '税率%（P3c-A2：报价继承/线下手填）' AFTER `conv_rate_snapshot`;
+
 SET FOREIGN_KEY_CHECKS = 1;
