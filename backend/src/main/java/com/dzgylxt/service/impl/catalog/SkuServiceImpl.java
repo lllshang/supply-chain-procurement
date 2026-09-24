@@ -144,11 +144,17 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements ISkuS
         if (StringUtils.hasText(req.getPurchaseUnit())) {
             unitService.assertExists(req.getPurchaseUnit());
         }
+        // P3c-A6：参考价必填且 ≥0；标准价选填（留空时采购流程走参考价，PRD PM-08 L503）
+        if (req.getReferencePrice() == null) {
+            throw new BizException(ResultCode.PARAM_ERROR, "参考价必填");
+        }
         checkNonNegative("参考价", req.getReferencePrice());
         checkNonNegative("标准价", req.getStandardPrice());
-        // 价格规则校验（R-PRD-09）：参考价/标准价均需在规则范围内
+        // 价格规则校验（R-PRD-09）：参考价必校；标准价为空时跳过（选填）
         priceRuleService.validatePrice(PriceRefType.SPU.getValue(), req.getSpuId(), req.getReferencePrice());
-        priceRuleService.validatePrice(PriceRefType.SPU.getValue(), req.getSpuId(), req.getStandardPrice());
+        if (req.getStandardPrice() != null) {
+            priceRuleService.validatePrice(PriceRefType.SPU.getValue(), req.getSpuId(), req.getStandardPrice());
+        }
     }
 
     private void copy(SkuSaveReqVO req, Sku entity) {

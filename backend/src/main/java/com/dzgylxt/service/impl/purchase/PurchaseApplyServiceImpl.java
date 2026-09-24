@@ -164,6 +164,12 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
             throw new BizException(ResultCode.PARAM_ERROR,
                     "预算科目不存在：" + apply.getBudgetSubjectId());
         }
+        // P3c-A3：用途必填（PRD PR-01 L644"填写部门、申请人、需求时间、用途、预算科目和项目名称"）
+        // 项目名仅统计归属、不参与额度（L608-609），选填不校验
+        if (apply.getPurpose() == null || apply.getPurpose().isBlank()) {
+            throw new BizException(ResultCode.PARAM_ERROR,
+                    "申请未填写采购用途，不可提交（PRD PR-01：用途为必填项）");
+        }
 
         // 预算硬控（<!-- D3 已落地 P3 -->）：提交即预占用（Q1）；不足→拦截+BUDGET 升级审批（行 1/2）
         // QA2-01：控制单元回填科目维度（此前仅部门×月份，990112 案例执行率失真根因）
@@ -304,12 +310,27 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
             BigDecimal price = item.getPriceEstimate();
             if (price == null) {
                 Sku sku = skuMapper.selectById(item.getSkuId());
-                price = sku == null ? BigDecimal.ZERO
-                        : (sku.getStandardPrice() == null ? BigDecimal.ZERO : sku.getStandardPrice());
+                // P3c-A6：取价三处统一口径——标准价优先，NULL 则 fallback 参考价
+                // （PRD PM-08 L503"标准价留空时采购流程使用参考价"）
+                price = sku == null ? BigDecimal.ZERO : resolveSkuPrice(sku);
             }
             total = total.add(qty.multiply(price));
         }
         return total;
+    }
+
+    /**
+     * P3c-A6：SKU 取价统一口径——标准价优先，为空时 fallback 参考价（PRD PM-08 L503）。
+     * 两价均空返回 0（保存期已强制参考价必填，此处仅防御性兜底）。
+     */
+    public static BigDecimal resolveSkuPrice(Sku sku) {
+        if (sku == null) {
+            return BigDecimal.ZERO;
+        }
+        if (sku.getStandardPrice() != null) {
+            return sku.getStandardPrice();
+        }
+        return sku.getReferencePrice() == null ? BigDecimal.ZERO : sku.getReferencePrice();
     }
 
     /** 保存明细：校验有效 SKU（status=0）、逐行落换算快照（selectCurrentEffective，应用时钟）。 */

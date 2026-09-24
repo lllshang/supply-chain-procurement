@@ -66,9 +66,8 @@ public class FrequentPurchaseServiceImpl extends ServiceImpl<FrequentPurchaseMap
             // 最近价：常购 last_price（最近订单/报价价维护口）→ 无则 SKU 标准价
             BigDecimal price = frequent == null ? null : frequent.getLastPrice();
             if (price == null) {
-                price = sku.getStandardPrice() == null
-                        ? (sku.getReferencePrice() == null ? BigDecimal.ZERO : sku.getReferencePrice())
-                        : sku.getStandardPrice();
+                // P3c-A6：与申请/合同取价同口径（标准价优先 → fallback 参考价）
+                price = PurchaseApplyServiceImpl.resolveSkuPrice(sku);
             }
             draft.setPriceEstimate(price);
             draft.setItemType(ItemType.MATERIAL);

@@ -265,7 +265,10 @@ public class ProductImportServiceImpl implements IProductImportService {
                 errors.add(new ImportErrorVO(rowNo, "采购单位", e.getMessage()));
             }
         }
-        if (row.getReferencePrice() != null && row.getReferencePrice().compareTo(BigDecimal.ZERO) < 0) {
+        // P3c-A6：参考价必填且 ≥0（标准价选填，留空走参考价）
+        if (row.getReferencePrice() == null) {
+            errors.add(new ImportErrorVO(rowNo, "参考价", "参考价必填"));
+        } else if (row.getReferencePrice().compareTo(BigDecimal.ZERO) < 0) {
             errors.add(new ImportErrorVO(rowNo, "参考价", "参考价不可为负"));
         }
         if (row.getStandardPrice() != null && row.getStandardPrice().compareTo(BigDecimal.ZERO) < 0) {

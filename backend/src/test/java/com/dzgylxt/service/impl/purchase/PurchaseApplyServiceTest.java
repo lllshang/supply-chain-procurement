@@ -155,6 +155,7 @@ class PurchaseApplyServiceTest {
         apply.setApplyNo("CG-TEST-000001");
         apply.setStatus(PurchaseApplyStatus.DRAFT);
         apply.setBudgetSubjectId(1001L);
+        apply.setPurpose("测试用途");   // P3c-A3：用途必填（PRD PR-01 L644）
         when(applyMapper().selectById(1L)).thenReturn(apply);
 
         PurchaseApplyItem item = new PurchaseApplyItem();
@@ -188,6 +189,7 @@ class PurchaseApplyServiceTest {
         apply.setApplyNo("CG-TEST-000001");
         apply.setStatus(PurchaseApplyStatus.DRAFT);
         apply.setBudgetSubjectId(1001L);
+        apply.setPurpose("测试用途");   // P3c-A3：用途必填（PRD PR-01 L644）
         when(applyMapper().selectById(1L)).thenReturn(apply);
 
         PurchaseApplyItem item = new PurchaseApplyItem();
@@ -295,5 +297,61 @@ class PurchaseApplyServiceTest {
         var e = assertThrows(com.dzgylxt.common.BizException.class, () -> service.createApply(req));
         assertTrue(e.getMessage().contains("停用"));
         verify(itemMapper, never()).insert(any(PurchaseApplyItem.class));
+    }
+
+    // ---------------- P3c-A3：用途必填 ----------------
+
+    /** AC①：缺用途提交 → 校验拒绝（不进入预算占用）。 */
+    @Test
+    void submit_missingPurpose_rejected() {
+        PurchaseApply apply = new PurchaseApply();
+        apply.setId(1L);
+        apply.setDeptId(1L);
+        apply.setStatus(PurchaseApplyStatus.DRAFT);
+        apply.setBudgetSubjectId(1001L);
+        apply.setPurpose(null);          // 缺用途
+        when(applyMapper().selectById(1L)).thenReturn(apply);
+        // 明细非空（用途校验在明细校验之后，需先跨过明细闸门）
+        PurchaseApplyItem item = new PurchaseApplyItem();
+        item.setApplyId(1L);
+        item.setSkuId(9L);
+        item.setQtyInPurchaseUnit(BigDecimal.TEN);
+        item.setPriceEstimate(new BigDecimal("100"));
+        when(itemMapper.selectList(any())).thenReturn(List.of(item));
+
+        var e = assertThrows(com.dzgylxt.common.BizException.class, () -> service.submit(1L));
+        assertTrue(e.getMessage().contains("采购用途"), "实际：" + e.getMessage());
+    }
+
+    /** 用途空白串同样拒绝（防绕过）。 */
+    @Test
+    void submit_blankPurpose_rejected() {
+        PurchaseApply apply = new PurchaseApply();
+        apply.setId(2L);
+        apply.setDeptId(1L);
+        apply.setStatus(PurchaseApplyStatus.DRAFT);
+        apply.setBudgetSubjectId(1001L);
+        apply.setPurpose("   ");         // 空白
+        when(applyMapper().selectById(2L)).thenReturn(apply);
+
+        assertThrows(com.dzgylxt.common.BizException.class, () -> service.submit(2L));
+    }
+
+    // ---------------- P3c-A6：SKU 标准价选填 + 取价 fallback ----------------
+
+    /** AC①②：标准价 90 → 取 90；标准价空参考价 100 → 取 100。 */
+    @Test
+    void resolveSkuPrice_standardPriorityThenReference() {
+        com.dzgylxt.entity.catalog.Sku s1 = new com.dzgylxt.entity.catalog.Sku();
+        s1.setStandardPrice(new BigDecimal("90"));
+        s1.setReferencePrice(new BigDecimal("100"));
+        assertEquals(0, PurchaseApplyServiceImpl.resolveSkuPrice(s1)
+                .compareTo(new BigDecimal("90")), "标准价优先");
+
+        com.dzgylxt.entity.catalog.Sku s2 = new com.dzgylxt.entity.catalog.Sku();
+        s2.setStandardPrice(null);
+        s2.setReferencePrice(new BigDecimal("100"));
+        assertEquals(0, PurchaseApplyServiceImpl.resolveSkuPrice(s2)
+                .compareTo(new BigDecimal("100")), "标准价空 → fallback 参考价");
     }
 }
