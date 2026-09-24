@@ -2,6 +2,7 @@
   <div>
     <el-card>
       <PageHead title="结算管理">
+        <el-button :icon="Coin" @click="openPrepay">发起预付款</el-button>
         <el-button type="primary" :icon="Plus" @click="openCreate">新建结算</el-button>
       </PageHead>
       <div class="toolbar">
@@ -12,8 +13,11 @@
       <el-table :data="rows" v-loading="loading" stripe>
         <el-table-column prop="settleNo" label="结算单号" width="170" />
         <el-table-column prop="orderId" label="订单ID" width="180" show-overflow-tooltip />
-        <el-table-column label="类型" width="100">
+        <el-table-column label="类型" width="110">
           <template #default="{ row }"><StatusTag :value="row.type" enum-key="settlementType" /></template>
+        </el-table-column>
+        <el-table-column label="付款阶段" width="90">
+          <template #default="{ row }">{{ row.paymentStage == null ? '-' : ({ 1: '预付款', 2: '进度款', 3: '尾款' })[row.paymentStage] }}</template>
         </el-table-column>
         <el-table-column label="结算方式" width="90">
           <template #default="{ row }">{{ enumLabel('settleMode', row.settleMode) }}</template>
@@ -21,6 +25,16 @@
         <el-table-column prop="settledQtyBase" label="结算数量" width="100" align="right" />
         <el-table-column prop="deductAmount" label="考核扣款" width="100" align="right" />
         <el-table-column prop="amount" label="结算金额" width="120" align="right" />
+        <el-table-column label="预付款抵扣" width="110" align="right">
+          <template #default="{ row }">{{ row.prepaymentDeduction != null && row.prepaymentDeduction > 0 ? ('¥' + row.prepaymentDeduction) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="付款状态" width="130">
+          <template #default="{ row }">
+            <StatusTag v-if="row.payStatus" :value="row.payStatus" enum-key="settlementPayStatus" />
+            <span v-else>-</span>
+            <span v-if="row.payStatus && row.paidProgress != null && row.paidProgress > 0" style="margin-left: 4px">{{ Math.round(row.paidProgress * 100) }}%</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><StatusTag :value="row.status" enum-key="settlementStatus" /></template>
         </el-table-column>
@@ -128,6 +142,38 @@
       </template>
     </el-dialog>
 
+    <!-- 发起预付款（D10：订单→SETTLEMENT 审批→实付→尾款自动扣减） -->
+    <el-dialog v-model="prepayVisible" title="发起预付款" width="640px" destroy-on-close>
+      <el-form :model="prepayForm" label-width="110px">
+        <el-form-item label="订单ID" required>
+          <el-input v-model="prepayForm.orderId" placeholder="订单ID" :disabled="prepayDraftLoaded" />
+        </el-form-item>
+        <el-form-item label-width="10px">
+          <el-button :disabled="prepayDraftLoaded" :loading="prepayDrafting" @click="loadPrepayDraft">带出预付款草稿</el-button>
+        </el-form-item>
+        <el-descriptions v-if="prepayDraft" :column="3" border size="small" style="margin-bottom: 12px">
+          <el-descriptions-item label="订单号">{{ prepayDraft.orderNo || prepayForm.orderId }}</el-descriptions-item>
+          <el-descriptions-item label="订单金额">{{ prepayDraft.orderAmount }}</el-descriptions-item>
+          <el-descriptions-item label="已付预付款">{{ prepayDraft.prepaidPaid }}</el-descriptions-item>
+          <el-descriptions-item label="可发起余额" :span="3">
+            <b style="color: var(--el-color-danger)">{{ prepayAvailable }}</b>
+          </el-descriptions-item>
+        </el-descriptions>
+        <template v-if="prepayDraft">
+          <el-form-item label="预付金额" required>
+            <el-input-number v-model="prepayForm.amount" :min="0.01" :max="Number(prepayAvailable) || 0" :controls="false" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="备注"><el-input v-model="prepayForm.remark" /></el-form-item>
+          <el-alert type="info" :closable="false" show-icon
+            title="累计预付款（含在途审批中）不得超过订单有效金额；预付款经 SETTLEMENT 审批、实付登记后，将在尾款单中自动抵扣" />
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="prepayVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!prepayDraft" :loading="prepaySaving" @click="onPrepaySave">创建预付款结算单</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 明细 -->
     <el-drawer v-model="detailVisible" title="结算单明细" size="46%">
       <el-descriptions v-if="detail" :column="2" border size="small">
@@ -136,10 +182,19 @@
         <el-descriptions-item label="订单ID">{{ detail.orderId }}</el-descriptions-item>
         <el-descriptions-item label="到货单ID">{{ detail.arrivalId ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="结算类型">{{ enumLabel('settlementType', detail.type) }}</el-descriptions-item>
+        <el-descriptions-item label="付款阶段">{{ detail.paymentStage == null ? '-' : ({ 1: '预付款', 2: '进度款', 3: '尾款' })[detail.paymentStage] }}</el-descriptions-item>
         <el-descriptions-item label="结算方式">{{ enumLabel('settleMode', detail.settleMode) }}</el-descriptions-item>
         <el-descriptions-item label="结算数量">{{ detail.settledQtyBase }}</el-descriptions-item>
         <el-descriptions-item label="考核扣款">{{ detail.deductAmount }}</el-descriptions-item>
         <el-descriptions-item label="结算金额">{{ detail.amount }}</el-descriptions-item>
+        <el-descriptions-item label="预付款抵扣">{{ detail.prepaymentDeduction != null && detail.prepaymentDeduction > 0 ? ('¥' + detail.prepaymentDeduction) : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="付款状态">
+          <template v-if="detail.payStatus">
+            <StatusTag :value="detail.payStatus" enum-key="settlementPayStatus" />
+            <span v-if="detail.paidProgress != null" style="margin-left: 4px">{{ Math.round(detail.paidProgress * 100) }}%</span>
+          </template>
+          <template v-else>-</template>
+        </el-descriptions-item>
         <el-descriptions-item label="尾款结清">{{ detail.isFinal === 1 ? '是' : '否' }}</el-descriptions-item>
         <el-descriptions-item label="合同ID">{{ detail.contractId ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
@@ -149,9 +204,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, Coin } from '@element-plus/icons-vue'
 import PageHead from '@/components/PageHead.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import EnumSelect from '@/components/EnumSelect.vue'
@@ -159,7 +214,8 @@ import { usePagination } from '@/composables/usePagination'
 import { enumLabel } from '@/constants/enums'
 import {
   pageSettlements, getSettlement, draftFromOrder, draftFromArrival,
-  createSettlement, updateSettlement, submitSettlement
+  createSettlement, updateSettlement, submitSettlement,
+  draftPrepaymentFromOrder, createPrepaymentSettlement
 } from '@/api/settlement'
 
 const queryOrderId = ref('')
@@ -174,6 +230,60 @@ function reload() {
 }
 function handlePage(p) {
   onCurrentChange(p).then((data) => { rows.value = data })
+}
+
+// ---- 发起预付款（D10：订单发起→SETTLEMENT 审批→实付→尾款自动抵扣） ----
+const prepayVisible = ref(false)
+const prepayDrafting = ref(false)
+const prepayDraftLoaded = ref(false)
+const prepaySaving = ref(false)
+const prepayDraft = ref(null)
+const prepayForm = reactive({ orderId: '', amount: null, remark: '' })
+const prepayAvailable = computed(() => {
+  if (!prepayDraft.value) return null
+  const gross = Number(prepayDraft.value.orderAmount || 0)
+  const paid = Number(prepayDraft.value.prepaidPaid || 0)
+  return Math.max(0, gross - paid).toFixed(2)
+})
+
+function openPrepay() {
+  Object.assign(prepayForm, { orderId: '', amount: null, remark: '' })
+  prepayDraft.value = null
+  prepayDraftLoaded.value = false
+  prepayVisible.value = true
+}
+
+async function loadPrepayDraft() {
+  if (!prepayForm.orderId) {
+    ElMessage.warning('请输入订单ID')
+    return
+  }
+  prepayDrafting.value = true
+  try {
+    const res = await draftPrepaymentFromOrder(prepayForm.orderId)
+    prepayDraft.value = res.data
+    prepayDraftLoaded.value = true
+  } finally {
+    prepayDrafting.value = false
+  }
+}
+
+async function onPrepaySave() {
+  if (!prepayForm.amount || prepayForm.amount <= 0) {
+    ElMessage.warning('请填写预付金额')
+    return
+  }
+  prepaySaving.value = true
+  try {
+    await createPrepaymentSettlement(prepayForm.orderId, {
+      amount: prepayForm.amount, remark: prepayForm.remark || undefined
+    })
+    ElMessage.success('预付款结算单已创建，经 SETTLEMENT 审批、实付登记后将在尾款单中自动抵扣')
+    prepayVisible.value = false
+    reload()
+  } finally {
+    prepaySaving.value = false
+  }
 }
 
 // ---- 新建 / 编辑（双入口：订单 / 到货，先带草稿再保存） ----
