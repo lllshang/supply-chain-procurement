@@ -65,7 +65,7 @@ export function listBudgetLines(headerId) {
 }
 
 // ---- 预算执行 / 月度调整（P3 §2.3 行13；R8 一律审批留痕） ----
-// 月度调整：调增直生效；调减校验 amount≥used；超 20% 自动转 BUDGET 审批（返回 pending=true）
+// 月度调整：一律转 BUDGET 审批（调减校验 amount≥used）；通过后由审批回调更新台账。返回恒 pending=true
 export function adjustBudgetLine(lineId, data) {
   return request.post(`/api/v1/budgets/execution/${lineId}/adjust`, data)
 }

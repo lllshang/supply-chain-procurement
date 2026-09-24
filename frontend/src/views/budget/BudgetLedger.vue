@@ -49,7 +49,7 @@
       </div>
       <BudgetLedgerTable v-if="lines.length" :lines="lines" :show-project="showProject" v-loading="linesLoading" />
       <el-empty v-else description="请先在上方选择一条预算头查看台账" />
-      <div class="note">注：usedAmount 由 P3 预算占用/核销流水写入；月度调整超 20% 自动转 BUDGET 审批（R8）。</div>
+      <div class="note">注：usedAmount 由 P3 预算占用/核销流水写入；月度调整一律转 BUDGET 审批（R8），审批通过后台账自动更新。</div>
     </el-card>
 
     <!-- 月度调整（P3 §2.3：财务发起，审批后更新台账；调减校验 amount≥used） -->
@@ -168,14 +168,12 @@ async function onAdjust() {
       newAmount: adjustForm.newAmount,
       reason: adjustForm.reason.trim()
     })
-    // 返回 pending=true 表示超 20% 已转 BUDGET 升级审批，台账待审批后更新
-    if (res.data === true) {
-      ElMessage.success('调整已生效，台账已更新')
-    } else {
-      ElMessage.warning('调整幅度超 20%，已转预算升级审批，台账待审批通过后更新')
+    // R8：调整一律转 BUDGET 审批（后端 adjustAmount 恒返回 pending=true，台账由审批回调 BudgetApprovalHandler 更新）
+    if (res.code === 0) {
+      ElMessage.success('已提交预算调整审批，台账待审批通过后更新')
+      adjustVisible.value = false
+      if (selectedHeader.value) setTimeout(() => loadLines(selectedHeader.value), 600)
     }
-    adjustVisible.value = false
-    if (selectedHeader.value) loadLines(selectedHeader.value)
   } finally {
     adjusting.value = false
   }
