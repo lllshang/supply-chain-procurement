@@ -235,3 +235,74 @@
 - **P2b-4 修复无效**（P2b-9 连带：重提 100% 必现 3002，终态幂等不可达）。
 - **P2b-5 部分修复**（有锚三态全过；无锚场景宣称的 4000 硬控不成立，见 P2b-10）。
 - 新增 **P1×2（P2b-9 / P2b-10）**，均为修复引入或修复未覆盖的预算硬控核心缺陷，建议修复后做第 3 轮聚焦回归（重提幂等 / 驳回后作废 / 无锚变更拦截 / 订单取消释放回冲）。
+
+---
+
+# 第 2 轮聚焦复验（P2b-3/4/5/6 修复验证 · `334a8dc`）
+
+> 验证对象：`develop @ 334a8dc`（`d3b94f6` P2b-3/4 生命周期闭环 → `0b851bf` P2b-5/6 锚点回填+ORDER 流水 → `334a8dc` P2b-8 专项单测 +6）。
+> 方法：`clean build`（JDK17 wrapper）+ **新建空库 `scm_qa_p2b2` 自动初始化** + 后端 `:18081` 运行态 HTTP 实测 + 直查 DB/SQL 日志对账；第 1 轮反例（3h/3i/5d）原样重跑 + 终态金额断言。未改源码、未 push。
+
+## 3.0 结论先行
+
+**IS_PASS = false（第 1 轮 P1 修复 3 过 2 不过；新增 P1×2 + P3×2）**
+
+| 复验点 | 结论 | 级别 |
+|---|---|---|
+| 构建 + 单测 106 例 | ✅ 20 类 / 106 例 / 0F 0E 0S（QA 逐类解析 JUnit XML；P2bBudgetLifecycleTest 8、P2bExtensionTest 10、OrderTripleCheckTest 12） | ✅ |
+| ★P2b-3 驳回释放（3h 重跑） | ✅ submit 占 10560 → AWARD 驳回 → `used` **回退 0** + RELEASE −10560 负向流水，守恒零差异 | ✅ |
+| 作废端点闭环 | ✅ 释放+`VOIDED`+remark 留痕；重复作废 3003；**有合同作废 3003 拒绝**（防锚点悬空守卫生效）；API 序列化 `name="VOIDED"` | ✅ |
+| ★P2b-4 重提覆盖式幂等（3i 重跑） | ❌ **驳回后重提永远 3002「预算行并发冲突」**——覆盖式释放试图释放 **21120**（真实余额 0）→ CAS 守卫失败。**运行态重提链路完全不可用**（→ P2b-9 形态①） | 🔴 |
+| ★P2b-5① 有锚超额 → 拦截+BUDGET 升级 | ✅ 拦截 + 任务 payload **含 `subjectId:2`**；升级通过 force 占用落锚点科目行（990402，跨科目诱饵行 990403 未被吃）；重提消费放行标记（`consumed:true`）无重复计账 | ✅ |
+| ★P2b-5② 有锚余额足 | ✅ 变更 +1056 → ORDER 占用流水、`budget_occupied` 2112→3168、`used` 10560→11616 | ✅ |
+| ★P2b-5③ 无锚（D2 手填合同）变更 | ❌ **未拦截**：+2640 静默成功（仅走合同额度），无校验/无占用/无升级任务（→ P2b-10） | 🔴 |
+| P2b-6 ORDER 流水 | ✅ 下单转移落 `biz_type=ORDER` 流水；无锚订单 `budget_occupied=0`；**但减额后取消超额释放**（→ P2b-9 形态②） | ⚠️ |
+| 回归 D1/D9/STANDARD | ✅ D1 拒询价 3003；D9 缺原因 4000/带原因成功；STANDARD 带科目正常占用（**新硬要求：申请必须填预算科目**，QA2-01 修复生效） | ✅ |
+| R2 单中标回归 | ✅ 该逻辑未触碰（`singleSupplierOf` 无 diff）+ `AwardSingleSupplierTest` 4 例全绿 | ✅ |
+| 守恒（Σlog==used，signed 口径） | ✅ 全程零差异；**但 biz 级口径（Σ某单占用==其实际占用）被 P2b-9 破坏** | ⚠️ |
+
+## 3.1 🔴 P2b-9【P1】RELEASE 流水落账负值 × `sumBizOccupied` 取负口径 → 已释放占用被"反向加倍"，重提永久失败 + 取消超额释放
+
+**记账口径自相矛盾（三处证据）**：
+- `BudgetOccupyServiceImpl.release()` **:181**：`writeLog(..., BudgetAction.RELEASE, take.negate(), ...)` —— 释放流水 amount 落**负值**（实测 `action=1, amount=-10560.00`）；
+- `BudgetOccupyServiceImpl.writeOff()` **:229**：`writeLog(..., BudgetAction.WRITE_OFF, take, ...)` —— 核销流水落**正值**（同表格两种约定并存）；
+- `BudgetOccupyLogMapper.sumBizOccupied` **:19-25**（`occupiedTotal` :370 同口径）：`SUM(CASE WHEN action=0 THEN amount WHEN action IN (1,2) THEN -amount ...)` —— 按"1/2 落正数"假设**再取负**。
+
+→ 对任何"曾发生过 RELEASE"的 biz：`occupiedTotal = 占用 + |释放|`（应为 占用 − 释放）。实测：占 10560 + 释 10560 → **sumBizOccupied=21120（真实 0）**。
+
+**形态①（阻断，3i 反例运行态铁证）**：线下定标驳回（used 已回 0）→ 改明细重提 → `submit()` 的覆盖式释放 `releaseAwardOccupation` 算出 21120 → `updateUsedWithRetry(line, -21120)` 被 `changeUsedAmount` 的守卫 `AND used_amount + #{delta} >= 0`（BudgetLineMapper :60）拒绝（used=0）→ 重试同因失败 → **3002**。SQL 日志铁证：`UPDATE budget_line ... WHERE id=990402 AND version=2 ... 参数: -21120.00, 990402, 2, -21120.00`。**重试两次均 3002，重提链路永久不可用**（单测 `awardResubmit_finalAmountNotDoubled` 绿是 mock 未走真实 CAS/落账的假象）。
+
+**形态②（静默腐蚀）**：订单 3BOX（ORDER 占 3168）→ 减额变更至 2BOX（RELEASE −1056）→ 取消：`occupiedTotal(ORDER)=4224`（真实 2112）→ 取消释放 **4224，超额 2112**。因同行还有 AWARD 锚点剩余占用（7392），超额部分直接吃掉**其他 biz 的 used 承载**——`Σ(各 biz occupiedTotal) > used_amount`，后续该行任意 biz 的释放/核销都可能触发形态①或继续腐蚀。两形态同一根因，按场景分别表现为"崩溃"或"静默错账"。
+
+**修复建议**：统一为"1/2 落正数、查询取负"口径——`release()` :181 改 `writeLog(..., take, ...)`；并评估存量 RELEASE 负值数据（新库无存量、老库 3307 有，需迁移脚本翻正）；修复后必须补**真实 DB 集成测试**（见 P2b-12）。
+
+## 3.2 🔴 P2b-10【P1】无锚（D2 手填合同）订单变更增额绕过预算闸——`budgetOccupied>0` 条件短路整个闸门
+
+- `OrderServiceImpl.java:486`：预算闸整体包在 `if (order.getBudgetOccupied() != null && budgetOccupied > 0)` 内；D2 无锚订单按 P2b-6 设计 `budget_occupied=0`（:767-768）→ **变更增额连"无锚 4000 硬控拦截"都到不了**，直接只走合同额度校验。
+- 运行态复现：D2 手填合同（无 awardId/无申请）下单（`budget_occupied=0`）→ 变更 2→5 BOX（+2640）→ **200 成功**，`budget_occupied` 仍 0、无 BUDGET 任务、无预算校验。任务书预期"③无锚 → 4000 硬控拦截"未达成。
+- `OrderTripleCheckTest.changeOrder_noAnchor_hardBlocked` 的场景是 `budgetOccupied=100` + 锚数据丢失（:563），未覆盖 `budgetOccupied=0` 分支——与 P2b-9 同属"单测绿、运行态炸"。
+- 修复建议：`amountDelta>0` 且 `buildChangeOccupyCmd` 无锚时，无论 budgetOccupied 是否为 0 一律 4000（或强制走线下补录通道）；`budgetOccupied=0` 的减额/对冲场景另行放行。
+
+## 3.3 🟡 P3 级新发现
+
+- **P2b-11【P3】余额守卫失败被误报为"并发冲突"**：`updateUsedWithRetry`（:467-483）对 CAS 失败不区分 `version` 冲突与 `used_amount+delta>=0` 守卫失败，统一抛 3002「预算行并发冲突」——本轮 P2b-9 的真实根因（余额守卫）因此被误导性报文掩盖，排障成本高。建议守卫失败单独报"预算余额不足/非法释放"。
+- **P2b-12【P3】mock 单测无法暴露记账口径缺陷**：P2bBudgetLifecycleTest 8 例断言质量良好（cmd captor/终态金额/consumed 标记），但全部 mock `budgetOccupyService`，真实落账链（CAS 守卫+流水符号+sum 口径）零覆盖——P2b-9 的两条 P1 路径单测全绿。建议为"释放→再占用/再释放"生命周期补 1-2 条真实 DB 集成测试（Testcontainers/H2 或 @SpringBootTest+测试库）。
+
+## 3.2bis 已验证通过明细（关键 DB 对账数字）
+
+| 场景 | 证据 |
+|---|---|
+| P2b-3 驳回释放 | submit 后 `used(990402)=10560`；reject 后 `=0`；流水 `[OCCUPY +10560, RELEASE −10560]`；守恒零差异 |
+| 重提终态（在 P2b-9 修复前不可达） | —（形态①阻断，见 3.1） |
+| 作废闭环 | void 后 `used 10560→0`、`status=3(VOIDED)`、remark 留痕；重复作废 3003；**有合同作废 3003「请先终止合同（避免预算锚点悬空）」**；`GET /awards/{id}` 返回 `"status":"VOIDED"`（name 契约） |
+| P2b-5① 升级链 | 拦截报文含「已生成 BUDGET 升级审批」；payload `{"orderChange":true,"orderId":…,"deptId":1,"subjectId":2,"amount":3168,"overAmount":2668,"balance":500,"budgetStatus":2}`；审批通过后 `used 11616→14784`（force +3168 落 990402，科目1 诱饵行 used 保持 0）；重提成功 `consumed:true`，`budget_occupied=6336`（=2112+4224，无重复计账） |
+| P2b-5② 正常增额 | +1056 → `budget_occupied 2112→3168`、`used 10560→11616` |
+| P2b-6 | 下单转移落 `biz_type=ORDER` 流水（+3168）；无锚订单 `budget_occupied=0.00` |
+| 回归 | D1 `3003 日常/框架采购为免比价链路…不允许发起询价`；D9 缺原因 `4000 独立寻源必须填写寻源原因（BR-07）`；STANDARD 带科目 submit 成功 `budget_status=1` |
+
+## 3.4 未验/边界
+
+- 二次驳回事务回滚探针未完成（无 PENDING 样本可用）；理论上与形态①同根因（release 抛异常连累审批事务）。
+- `writeOff` 后再查 `occupiedTotal` 场景未探（核销落正值、口径一致，理论安全）。
+- 前端 UI 未回归（本轮聚焦后端生命周期）；MinIO 真实上传仍降级。
+- 「重提终态=新金额」的**正向断言**在 P2b-9 修复前无法运行态验证——修复后需回归：驳回→改明细→重提应成功且 `used==新金额`。
