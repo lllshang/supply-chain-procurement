@@ -1,5 +1,6 @@
 package com.dzgylxt.vo.order;
 
+import com.dzgylxt.enums.ItemType;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -25,6 +26,8 @@ public class OrderCreateReqVO implements Serializable {
     public static class OrderItemReqVO implements Serializable {
         /** 申请明细（余量扣减对象） */
         private Long applyItemId;
+        /** 行类型（P2b：无申请来源明细必传，MATERIAL/SERVICE；有申请明细时忽略） */
+        private ItemType itemType;
         /** 来源定标明细（可选，与 apply_item_id 并存） */
         private Long sourceAwardItem;
         private Long skuId;

@@ -101,6 +101,7 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
         Contract contract = new Contract();
         contract.setSupplierId(req.getSupplierId());
         contract.setAwardId(req.getAwardId());
+        contract.setSubjectId(req.getSubjectId());
         contract.setNo(businessNoGenerator.nextNo("HT"));
         contract.setTitle(req.getTitle());
         contract.setContractType(req.getContractType() == null ? 0 : req.getContractType().getValue());

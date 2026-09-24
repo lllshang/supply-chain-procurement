@@ -154,14 +154,19 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         // #48 申请头状态闸门：作废（CLOSED）/驳回等非有效状态申请不可下单
         // （仅 APPROVED / PARTIAL_ORDER 为可下单有效态；FULL_ORDER 无余量、DRAFT/BUDGET_PENDING/
         //   PURCHASE_PENDING 未审结、REJECTED/CLOSED 非有效——统一拦截）
-        PurchaseApply applyHead = applyMapper.selectById(req.getApplyId());
-        if (applyHead == null) {
-            throw new BizException(ResultCode.DATA_NOT_FOUND, "采购申请不存在：" + req.getApplyId());
-        }
-        if (applyHead.getStatus() != PurchaseApplyStatus.APPROVED
-                && applyHead.getStatus() != PurchaseApplyStatus.PARTIAL_ORDER) {
-            throw new BizException(ResultCode.STATUS_INVALID, "申请状态不允许下单："
-                    + applyHead.getStatus().getDesc() + "（仅已审批/部分转单可下单）");
+        // P2b/L747 分流：日常订单可不关联申请（applyId=null，预算锚点=award/合同），
+        // 此时跳过申请头闸门与余量闸，仅保留合同额度闸（校验②）+价格校验。
+        PurchaseApply applyHead = null;
+        if (req.getApplyId() != null) {
+            applyHead = applyMapper.selectById(req.getApplyId());
+            if (applyHead == null) {
+                throw new BizException(ResultCode.DATA_NOT_FOUND, "采购申请不存在：" + req.getApplyId());
+            }
+            if (applyHead.getStatus() != PurchaseApplyStatus.APPROVED
+                    && applyHead.getStatus() != PurchaseApplyStatus.PARTIAL_ORDER) {
+                throw new BizException(ResultCode.STATUS_INVALID, "申请状态不允许下单："
+                        + applyHead.getStatus().getDesc() + "（仅已审批/部分转单可下单）");
+            }
         }
 
         // ① Redis 锁（顺序固定 contract → apply；获取失败快速失败）
@@ -169,10 +174,13 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         if (tokenC == null) {
             throw new BizException(ResultCode.BIZ_ERROR, "订单提交繁忙，请稍后重试");
         }
-        String tokenA = redisLockUtil.tryLock("apply:" + req.getApplyId(), LOCK_WAIT_MILLIS);
-        if (tokenA == null) {
-            redisLockUtil.unlock("contract:" + req.getContractId(), tokenC);
-            throw new BizException(ResultCode.BIZ_ERROR, "订单提交繁忙，请稍后重试");
+        String tokenA = null;
+        if (req.getApplyId() != null) {
+            tokenA = redisLockUtil.tryLock("apply:" + req.getApplyId(), LOCK_WAIT_MILLIS);
+            if (tokenA == null) {
+                redisLockUtil.unlock("contract:" + req.getContractId(), tokenC);
+                throw new BizException(ResultCode.BIZ_ERROR, "订单提交繁忙，请稍后重试");
+            }
         }
         try {
             // ② contract 行锁（第一把行锁）
@@ -183,49 +191,60 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             Long supplierId = req.getSupplierId() == null ? contract.getSupplierId() : req.getSupplierId();
 
             // ③ apply_item 行锁（调用方排序去重，配合主键 IN 扫描保证锁序一致，杜绝交叉死锁）
+            // P2b/L747：无申请来源订单（明细不挂 applyItemId）跳过本段，仅走合同额度闸（校验②）
+            Map<Long, PurchaseApplyItem> itemMap = new LinkedHashMap<>();
             List<Long> itemIds = req.getItems().stream()
                     .map(OrderCreateReqVO.OrderItemReqVO::getApplyItemId)
+                    .filter(java.util.Objects::nonNull)
                     .distinct().sorted().toList();
-            List<PurchaseApplyItem> lockedItems = applyItemMapper.selectForUpdateByIds(itemIds);
-            Map<Long, PurchaseApplyItem> itemMap = new LinkedHashMap<>();
-            for (PurchaseApplyItem locked : lockedItems) {
-                itemMap.put(locked.getId(), locked);
+            boolean hasApplyItems = !itemIds.isEmpty();
+            if (hasApplyItems) {
+                List<PurchaseApplyItem> lockedItems = applyItemMapper.selectForUpdateByIds(itemIds);
+                for (PurchaseApplyItem locked : lockedItems) {
+                    itemMap.put(locked.getId(), locked);
+                }
             }
             for (OrderCreateReqVO.OrderItemReqVO item : req.getItems()) {
-                if (!itemMap.containsKey(item.getApplyItemId())) {
+                if (item.getApplyItemId() != null && !itemMap.containsKey(item.getApplyItemId())) {
                     throw new BizException(ResultCode.PARAM_ERROR, "申请明细不存在：" + item.getApplyItemId());
+                }
+                if (item.getApplyItemId() == null && (item.getPurchaseUnit() == null || item.getPurchaseUnit().isBlank())) {
+                    throw new BizException(ResultCode.PARAM_ERROR,
+                            "无申请来源明细必须指定采购单位（无申请明细可取默认单位）：SKU " + item.getSkuId());
                 }
             }
 
             // 逐明细：锁内取换算快照 + 余量校验与条件扣减（version 兜底，失败重试 1 次）
             List<OrderLine> lines = new ArrayList<>();
             for (OrderCreateReqVO.OrderItemReqVO item : req.getItems()) {
-                PurchaseApplyItem applyItem = itemMap.get(item.getApplyItemId());
+                PurchaseApplyItem applyItem = item.getApplyItemId() == null ? null : itemMap.get(item.getApplyItemId());
                 LocalDateTime now = LocalDateTime.now();
                 String unit = item.getPurchaseUnit() == null || item.getPurchaseUnit().isBlank()
-                        ? applyItem.getPurchaseUnit() : item.getPurchaseUnit();
+                        ? (applyItem == null ? null : applyItem.getPurchaseUnit()) : item.getPurchaseUnit();
                 UnitConversion conv = unit == null || unit.isBlank() ? null
                         : unitConversionMapper.selectCurrentEffective(item.getSkuId(), unit, now);
                 BigDecimal rate = conv == null || conv.getRate() == null ? BigDecimal.ONE : conv.getRate();
                 BigDecimal qtyBase = item.getQty().multiply(rate);
 
-                // 校验③：ordered_qty + 本单数量 ≤ apply_qty
-                if (applyItem.getOrderedQty().add(qtyBase).compareTo(applyItem.getApplyQty()) > 0) {
-                    throw new BizException(ResultCode.BIZ_ERROR,
-                            "超出申请余量：明细 " + applyItem.getId()
-                                    + " 余量 " + applyItem.getRemainQty() + "，本单 " + qtyBase);
+                if (applyItem != null) {
+                    // 校验③：ordered_qty + 本单数量 ≤ apply_qty（P2b：无申请来源明细跳过，走合同额度闸）
+                    if (applyItem.getOrderedQty().add(qtyBase).compareTo(applyItem.getApplyQty()) > 0) {
+                        throw new BizException(ResultCode.BIZ_ERROR,
+                                "超出申请余量：明细 " + applyItem.getId()
+                                        + " 余量 " + applyItem.getRemainQty() + "，本单 " + qtyBase);
+                    }
+                    int updated = applyItemMapper.deductRemain(applyItem.getId(), qtyBase, applyItem.getVersion());
+                    if (updated == 0) {
+                        // 乐观版本兜底：冲突重试 1 次（重读版本）
+                        PurchaseApplyItem fresh = applyItemMapper.selectById(applyItem.getId());
+                        updated = applyItemMapper.deductRemain(applyItem.getId(), qtyBase, fresh.getVersion());
+                    }
+                    if (updated == 0) {
+                        throw new BizException(ResultCode.BIZ_ERROR, "申请余量并发冲突，请重试");
+                    }
+                    applyItem.setOrderedQty(applyItem.getOrderedQty().add(qtyBase));
+                    applyItem.setRemainQty(applyItem.getRemainQty().subtract(qtyBase));
                 }
-                int updated = applyItemMapper.deductRemain(applyItem.getId(), qtyBase, applyItem.getVersion());
-                if (updated == 0) {
-                    // 乐观版本兜底：冲突重试 1 次（重读版本）
-                    PurchaseApplyItem fresh = applyItemMapper.selectById(applyItem.getId());
-                    updated = applyItemMapper.deductRemain(applyItem.getId(), qtyBase, fresh.getVersion());
-                }
-                if (updated == 0) {
-                    throw new BizException(ResultCode.BIZ_ERROR, "申请余量并发冲突，请重试");
-                }
-                applyItem.setOrderedQty(applyItem.getOrderedQty().add(qtyBase));
-                applyItem.setRemainQty(applyItem.getRemainQty().subtract(qtyBase));
 
                 OrderLine line = new OrderLine();
                 line.req = item;
@@ -255,7 +274,7 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             List<Long> orderIds = new ArrayList<>();
             for (ItemType type : new ItemType[]{ItemType.MATERIAL, ItemType.SERVICE}) {
                 List<OrderLine> group = lines.stream()
-                        .filter(l -> itemTypeOf(l.applyItem) == type).toList();
+                        .filter(l -> itemTypeOf(l.req, l.applyItem) == type).toList();
                 if (group.isEmpty()) {
                     continue;
                 }
@@ -263,12 +282,16 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             }
             contractMapper.updateById(contract);
 
-            // 申请状态回写：APPROVED → PARTIAL_ORDER / FULL_ORDER
-            updateApplyStatusAfterDeduct(req.getApplyId());
+            // 申请状态回写：APPROVED → PARTIAL_ORDER / FULL_ORDER（P2b：无申请来源订单跳过）
+            if (req.getApplyId() != null) {
+                updateApplyStatusAfterDeduct(req.getApplyId());
+            }
             return orderIds;
         } finally {
-            // 逆序释放 Redis 锁
-            redisLockUtil.unlock("apply:" + req.getApplyId(), tokenA);
+            // 逆序释放 Redis 锁（P2b：无申请来源订单未加 apply 锁）
+            if (tokenA != null) {
+                redisLockUtil.unlock("apply:" + req.getApplyId(), tokenA);
+            }
             redisLockUtil.unlock("contract:" + req.getContractId(), tokenC);
         }
     }
@@ -677,6 +700,14 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
     private ItemType itemTypeOf(PurchaseApplyItem applyItem) {
         return applyItem.getItemType() == null ? ItemType.MATERIAL : applyItem.getItemType();
+    }
+
+    /** 行类型：有申请明细取申请行类型；无申请来源明细（P2b/L747）取 req.itemType，缺省 MATERIAL。 */
+    private ItemType itemTypeOf(OrderCreateReqVO.OrderItemReqVO reqItem, PurchaseApplyItem applyItem) {
+        if (applyItem != null) {
+            return itemTypeOf(applyItem);
+        }
+        return reqItem.getItemType() == null ? ItemType.MATERIAL : reqItem.getItemType();
     }
 
     /** 落单（订单头 + 明细快照 + 来源追溯），返回订单 id。 */

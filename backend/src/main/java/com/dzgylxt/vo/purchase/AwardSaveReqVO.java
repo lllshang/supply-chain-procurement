@@ -15,6 +15,10 @@ public class AwardSaveReqVO implements Serializable {
     private Long inquiryId;
     /** 追溯申请（定标→申请上溯） */
     private Long applyId;
+    /** 预算部门（D9 线下定标登记必填：inquiryId 为空时提交即占预算） */
+    private Long deptId;
+    /** 预算科目（D9 线下定标登记必填） */
+    private Long subjectId;
     private String remark;
     private List<AwardItemVO> items = new ArrayList<>();
 

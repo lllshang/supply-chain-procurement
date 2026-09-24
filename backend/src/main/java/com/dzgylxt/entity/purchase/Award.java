@@ -23,6 +23,10 @@ public class Award extends BaseEntity implements Serializable {
     private String awardNo;
     /** 追溯申请（定标→申请上溯，P2 新增） */
     private Long applyId;
+    /** 预算部门（D9 线下定标登记必填：CP-11 锚点=award，提交即占预算） */
+    private Long deptId;
+    /** 预算科目（D9 线下定标登记必填：占用量化键之一） */
+    private Long subjectId;
     private Long supplierId;
     private BigDecimal amount;
     private AwardStatus status;

@@ -19,6 +19,10 @@ public class ApplySaveReqVO implements Serializable {
     private LocalDate expectedDate;
     /** 预算科目ID（QA2-01：额度控制键=部门×月份×科目，提交前必填） */
     private Long budgetSubjectId;
+    /** 采购用途（PR-01，P2b/S9 选填） */
+    private String purpose;
+    /** 手工项目名（PR-01：无预算项目时的业务归属，P2b/S9 选填） */
+    private String projectName;
     private String remark;
     private List<ApplyItemReqVO> items = new ArrayList<>();
 }

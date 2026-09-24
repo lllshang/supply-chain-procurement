@@ -104,9 +104,35 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createAward(AwardSaveReqVO req) {
-        if (req.getInquiryId() == null || req.getItems() == null || req.getItems().isEmpty()) {
-            throw new BizException(ResultCode.PARAM_ERROR, "定标必须关联询价且至少一条明细");
+        Award award = new Award();
+        award.setAwardNo(businessNoGenerator.nextNo("DB"));
+        award.setStatus(AwardStatus.PENDING_APPROVAL);
+        award.setRemark(req.getRemark());
+        award.setAmount(BigDecimal.ZERO);
+
+        if (req.getInquiryId() == null) {
+            // D9 线下定标登记（CP-11 方案A：预算锚点=award，提交即占预算）
+            // PRD §6.6.1 L682：线下已完成比选和定标时，不补建询价单，直接登记定标
+            if (req.getDeptId() == null || req.getSubjectId() == null) {
+                throw new BizException(ResultCode.PARAM_ERROR,
+                        "线下定标登记必须填写预算部门与预算科目（提交时即占预算）");
+            }
+            if (req.getItems() == null || req.getItems().isEmpty()) {
+                throw new BizException(ResultCode.PARAM_ERROR, "线下定标明细至少一条");
+            }
+            award.setInquiryId(null);
+            award.setApplyId(null);
+            award.setDeptId(req.getDeptId());
+            award.setSubjectId(req.getSubjectId());
+            // R2：单中标供应商（全明细行同供应商），insert 前必须落值
+            award.setSupplierId(singleSupplierOf(req.getItems()));
+            save(award);
+            BigDecimal amount = replaceItems(award, req);
+            award.setAmount(amount);
+            updateById(award);
+            return award.getId();
         }
+
         Inquiry inquiry = inquiryMapper.selectById(req.getInquiryId());
         if (inquiry == null || inquiry.getStatus() != InquiryStatus.CLOSED) {
             throw new BizException(ResultCode.STATUS_INVALID, "仅已截标询价可定标");
@@ -117,13 +143,8 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         if (existed != null && existed > 0) {
             throw new BizException(ResultCode.STATUS_INVALID, "该询价已存在定标单（一询价单一中标供应商）");
         }
-        Award award = new Award();
         award.setInquiryId(req.getInquiryId());
         award.setApplyId(req.getApplyId() == null ? inquiry.getApplyId() : req.getApplyId());
-        award.setAwardNo(businessNoGenerator.nextNo("DB"));
-        award.setStatus(AwardStatus.PENDING_APPROVAL);
-        award.setRemark(req.getRemark());
-        award.setAmount(BigDecimal.ZERO);
         // R2：单中标供应商（全明细行同供应商），insert 前必须落值
         award.setSupplierId(singleSupplierOf(req.getItems()));
         save(award);
@@ -192,10 +213,27 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         // 仅校验不重复占用（占用锚在申请）；不足→拦截提交，转 BUDGET 升级审批（通过后放行确认）
         // QA2-02：无有效申请来源时显式分支（log.warn + remark 标注来源类型），不留静默跳过
         if (award.getApplyId() == null) {
-            log.warn("[R7预算再校验] 定标 {} 无申请来源（独立寻源/线下登记），显式跳过预算再校验，待 P2b 补录口径",
-                    award.getAwardNo());
+            // D9 线下定标（P2b，CP-11 方案A）：预算锚点=award，提交即占预算（QA2-02"跳过"分支退役）。
+            // 不足直接拦截：线下登记为人工行为，先调月度预算再登记（不走升级审批，避免改 P3 已验证的
+            // BudgetApprovalHandler 放行链路，控制回归面——见 P2b 验证报告残余项说明）。
+            if (award.getDeptId() == null || award.getSubjectId() == null) {
+                throw new BizException(ResultCode.PARAM_ERROR,
+                        "线下定标缺少预算锚点（部门/科目），不允许提交：请重新登记并填写部门与预算科目");
+            }
+            BudgetOccupyCmd occupyCmd = new BudgetOccupyCmd();
+            occupyCmd.setDeptId(award.getDeptId());
+            occupyCmd.setSubjectId(award.getSubjectId());
+            occupyCmd.setAmount(award.getAmount() == null ? BigDecimal.ZERO : award.getAmount());
+            occupyCmd.setBizType(BudgetBizType.AWARD);
+            occupyCmd.setBizId(award.getId());
+            occupyCmd.setRemark("线下定标预算占用-" + award.getAwardNo());
+            OccupyResultVO occupied = budgetOccupyService.occupy(occupyCmd);
+            if (!occupied.isAvailable()) {
+                throw new BizException(ResultCode.BIZ_ERROR,
+                        "线下定标预算不足：" + occupied.getMessage() + "（请先调整月度预算再登记）");
+            }
             String note = (award.getRemark() == null || award.getRemark().isBlank()
-                    ? "" : award.getRemark() + "；") + "[预算再校验] 无申请来源（独立寻源），跳过科目级预算再校验";
+                    ? "" : award.getRemark() + "；") + "[预算占用] 线下定标提交即占用（部门×科目×当月）";
             award.setRemark(note);
             updateById(award);
         } else {

@@ -20,6 +20,8 @@ public class ContractSaveReqVO implements Serializable {
     private ItemType contractType;
     /** 合同金额（有来源定标时必须 = Σ 定标明细） */
     private BigDecimal amount;
+    /** 预算科目（S8：统计冗余，P2b 选填） */
+    private Long subjectId;
     private LocalDate validFrom;
     private LocalDate validTo;
     /** 附件 JSON 数组（file_meta.file_key，多附件） */

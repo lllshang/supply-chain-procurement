@@ -96,6 +96,8 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         apply.setStatus(PurchaseApplyStatus.DRAFT);
         apply.setBudgetStatus(0);
         apply.setBudgetSubjectId(req.getBudgetSubjectId());
+        apply.setPurpose(req.getPurpose());
+        apply.setProjectName(req.getProjectName());
         apply.setApplicantId(UserContext.getCurrentUserId());
         apply.setExpectedDate(req.getExpectedDate());
         apply.setRemark(req.getRemark());
@@ -125,6 +127,8 @@ public class PurchaseApplyServiceImpl extends ServiceImpl<PurchaseApplyMapper, P
         // QA2-01：科目随单维护（提交时强校验，编辑期允许为空草稿）
         apply.setBudgetSubjectId(req.getBudgetSubjectId() == null
                 ? apply.getBudgetSubjectId() : req.getBudgetSubjectId());
+        apply.setPurpose(req.getPurpose() == null ? apply.getPurpose() : req.getPurpose());
+        apply.setProjectName(req.getProjectName() == null ? apply.getProjectName() : req.getProjectName());
         apply.setRemark(req.getRemark());
         updateById(apply);
 

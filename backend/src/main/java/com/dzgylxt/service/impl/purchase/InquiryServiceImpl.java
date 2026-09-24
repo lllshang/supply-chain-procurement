@@ -65,21 +65,49 @@ public class InquiryServiceImpl extends ServiceImpl<InquiryMapper, Inquiry> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createInquiry(InquirySaveReqVO req) {
-        if (req.getApplyId() == null) {
-            throw new BizException(ResultCode.PARAM_ERROR, "询价必须关联采购申请");
-        }
-        PurchaseApply apply = purchaseApplyMapper.selectById(req.getApplyId());
-        if (apply == null || apply.getStatus() != PurchaseApplyStatus.APPROVED) {
-            // 仅 APPROVED 申请可发起询价（设计 §2.2；明细子集的圈定由报价导入时的 SKU 校验兜底）
-            throw new BizException(ResultCode.STATUS_INVALID, "仅已审批的申请可发起询价");
-        }
+        String sourceType = req.getSourceType() == null || req.getSourceType().isBlank()
+                ? "APPLY" : req.getSourceType().trim();
         Inquiry inquiry = new Inquiry();
-        inquiry.setApplyId(req.getApplyId());
         inquiry.setInquiryNo(businessNoGenerator.nextNo("XJ"));
         inquiry.setStatus(InquiryStatus.DRAFT);
         inquiry.setDeadline(req.getDeadline());
         inquiry.setCreatedByDept(UserContext.getCurrentDeptId());
         inquiry.setRemark(req.getRemark());
+
+        if ("OFFLINE".equals(sourceType)) {
+            // D9 独立寻源（BR-07 L1082 / §6.6.1 L682）：无申请来源，寻源原因必填
+            if (req.getApplyId() != null) {
+                throw new BizException(ResultCode.PARAM_ERROR, "独立寻源询价不应关联采购申请");
+            }
+            if (req.getSourceReason() == null || req.getSourceReason().isBlank()) {
+                throw new BizException(ResultCode.PARAM_ERROR, "独立寻源必须填写寻源原因（BR-07）");
+            }
+            inquiry.setApplyId(null);
+            inquiry.setSourceType("OFFLINE");
+            inquiry.setSourceReason(req.getSourceReason().trim());
+        } else {
+            // APPLY：申请转询价（标准链路 + B3 允许 FULL_ORDER 补充采购）
+            if (req.getApplyId() == null) {
+                throw new BizException(ResultCode.PARAM_ERROR, "询价必须关联采购申请");
+            }
+            PurchaseApply apply = purchaseApplyMapper.selectById(req.getApplyId());
+            if (apply == null) {
+                throw new BizException(ResultCode.DATA_NOT_FOUND, "采购申请不存在：" + req.getApplyId());
+            }
+            // D1：日常/框架采购走免比价链路（关联合同下单），禁止发询价
+            if (apply.getType() == com.dzgylxt.enums.PurchaseApplyType.DAILY) {
+                throw new BizException(ResultCode.STATUS_INVALID,
+                        "日常/框架采购为免比价链路：请关联合同下单，不允许发起询价");
+            }
+            // B3：APPROVED / PARTIAL_ORDER / FULL_ORDER 均可（补充采购，累计转单量由下单余量校验防超）
+            if (apply.getStatus() != PurchaseApplyStatus.APPROVED
+                    && apply.getStatus() != PurchaseApplyStatus.PARTIAL_ORDER
+                    && apply.getStatus() != PurchaseApplyStatus.FULL_ORDER) {
+                throw new BizException(ResultCode.STATUS_INVALID, "仅已审批（含部分/全部转单）的申请可发起询价");
+            }
+            inquiry.setApplyId(req.getApplyId());
+            inquiry.setSourceType("APPLY");
+        }
         save(inquiry);
 
         // 初始供应商范围（逐家准入校验 + 快照，与发布同口径）

@@ -31,6 +31,10 @@ public class PurchaseApply extends BaseEntity implements Serializable {
      * 占用/再校验/转移均按此科目落预算行；NULL=待补录（存量数据），提交前必须填写。
      */
     private Long budgetSubjectId;
+    /** 采购用途（PR-01，P2b/S9） */
+    private String purpose;
+    /** 手工项目名（PR-01：无预算项目时的业务归属，P2b/S9） */
+    private String projectName;
     private Long applicantId;
     /** 期望到货日期（P2 §1.3.1） */
     private LocalDate expectedDate;

@@ -19,6 +19,10 @@ import java.time.LocalDateTime;
 public class Inquiry extends BaseEntity implements Serializable {
 
     private Long applyId;
+    /** 询价来源：APPLY=申请转询价 / OFFLINE=独立寻源（D9，BR-07） */
+    private String sourceType;
+    /** 寻源原因（source_type=OFFLINE 必填，BR-07 L1082） */
+    private String sourceReason;
     private String inquiryNo;
     /** 截标时间（到期或手动截标→CLOSED，P2 §1.3.3） */
     private LocalDateTime deadline;
