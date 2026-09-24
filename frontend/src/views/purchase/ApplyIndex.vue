@@ -62,6 +62,11 @@
             <el-form-item label="期望到货"><el-date-picker v-model="form.expectedDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="预算科目" required>
+          <el-select v-model="form.budgetSubjectId" placeholder="请选择预算科目" style="width: 100%">
+            <el-option v-for="s in subjects" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="明细行">
           <el-button size="small" :icon="Plus" @click="addItem">加行</el-button>
           <el-button size="small" :icon="Goods" @click="onBringIn">常购带入</el-button>
@@ -132,6 +137,7 @@ import {
   pageApplies, getApplyDetail, createApply, updateApply, submitApply, exportApply,
   frequentBringIn, saveBlob
 } from '@/api/purchase2'
+import { listBudgetSubjects } from '@/api/budget'
 
 const queryTitle = ref('')
 const queryStatus = ref(null)
@@ -139,6 +145,17 @@ const rows = ref([])
 const { current, pageSize, total, loading, load, onCurrentChange } = usePagination((p) =>
   pageApplies({ title: queryTitle.value || undefined, status: queryStatus.value || undefined, ...p })
 )
+
+// 预算科目（S9：申请须带预算科目，后端提交时校验非空并用于预算占用）
+const subjects = ref([])
+async function loadSubjects() {
+  try {
+    const res = await listBudgetSubjects()
+    subjects.value = res.data || []
+  } catch (e) {
+    subjects.value = []
+  }
+}
 
 function reload() {
   return load().then((data) => { rows.value = data })
@@ -150,7 +167,7 @@ function handlePage(p) {
 // ---- 新建 / 编辑 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ id: null, title: '', type: 'STANDARD', expectedDate: null, items: [] })
+const form = reactive({ id: null, title: '', type: 'STANDARD', expectedDate: null, budgetSubjectId: null, items: [] })
 
 function emptyItem() {
   return { skuId: '', qty: 1, purchaseUnit: '', priceEstimate: 0, itemType: 'MATERIAL', remark: '' }
@@ -159,7 +176,7 @@ function addItem() {
   form.items.push(emptyItem())
 }
 function openCreate() {
-  Object.assign(form, { id: null, title: '', type: 'STANDARD', expectedDate: null, items: [emptyItem()] })
+  Object.assign(form, { id: null, title: '', type: 'STANDARD', expectedDate: null, budgetSubjectId: null, items: [emptyItem()] })
   formVisible.value = true
 }
 async function openEdit(row) {
@@ -169,6 +186,7 @@ async function openEdit(row) {
     title: res.data.apply.title,
     type: res.data.apply.type,
     expectedDate: res.data.apply.expectedDate,
+    budgetSubjectId: res.data.apply.budgetSubjectId ?? null,
     items: (res.data.items || []).map((i) => ({
       skuId: String(i.skuId), qty: i.qtyInPurchaseUnit, purchaseUnit: i.purchaseUnit,
       priceEstimate: i.priceEstimate, itemType: i.itemType, remark: i.remark
@@ -195,12 +213,17 @@ async function onSave() {
     ElMessage.warning('请填写申请标题')
     return
   }
+  if (!form.budgetSubjectId) {
+    ElMessage.warning('请选择预算科目')
+    return
+  }
   saving.value = true
   try {
     const payload = {
       title: form.title,
       type: form.type,
       expectedDate: form.expectedDate,
+      budgetSubjectId: form.budgetSubjectId,
       items: form.items.filter((i) => i.skuId).map((i) => ({
         skuId: i.skuId, qty: i.qty, purchaseUnit: i.purchaseUnit,
         priceEstimate: i.priceEstimate, itemType: i.itemType, remark: i.remark
@@ -241,5 +264,5 @@ async function onExport(row) {
   saveBlob(blob, `purchase-apply-${row.applyNo || row.id}.xlsx`)
 }
 
-onMounted(reload)
+onMounted(() => { loadSubjects(); reload() })
 </script>
