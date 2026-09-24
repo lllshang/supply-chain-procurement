@@ -98,7 +98,7 @@ import PageHead from '@/components/PageHead.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { usePagination } from '@/composables/usePagination'
 import {
-  pageAwards, createAward, updateAwardItems, submitAward, listAwardItems, getInquiryComparison
+  pageAwards, createAward, updateAwardItems, submitAward, listAwardItems, getAward, getInquiryComparison
 } from '@/api/purchase2'
 
 const rows = ref([])
@@ -161,9 +161,19 @@ async function onSave() {
 }
 
 async function onSubmit(row) {
-  await ElMessageBox.confirm('提交后走 AWARD 审批（异常价会提示人工复核）。确认提交？', '提交审批')
+  await ElMessageBox.confirm('提交后走 AWARD 审批（异常价会提示人工复核）；系统将按部门×科目×月份再次校验预算（BR-04），预算不足将转预算升级审批。确认提交？', '提交审批')
   await submitAward(row.id)
-  ElMessage.success('已提交审批')
+  // R7 预算再校验已在后端执行；若不足，后端已转 BUDGET 升级审批并写入 remark
+  try {
+    const res = await getAward(row.id)
+    if (res.data && res.data.remark && res.data.remark.includes('预算升级')) {
+      ElMessage.warning('预算不足，已转预算升级审批，请关注预算审批任务')
+    } else {
+      ElMessage.success('已提交审批')
+    }
+  } catch (e) {
+    ElMessage.success('已提交审批')
+  }
   reload()
 }
 
