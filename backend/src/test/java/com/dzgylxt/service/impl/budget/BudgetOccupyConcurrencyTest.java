@@ -1,5 +1,6 @@
 package com.dzgylxt.service.impl.budget;
 
+import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.RedisLockUtil;
 import com.dzgylxt.entity.budget.BudgetLine;
 import com.dzgylxt.entity.budget.BudgetOccupyLog;
@@ -28,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -347,5 +349,46 @@ class BudgetOccupyConcurrencyTest {
         org.mockito.Mockito.verify(budgetLineMapper, never())
                 .adjustAmount(anyLong(), any(BigDecimal.class), anyInt());
         assertEquals(0, usedAmount().compareTo(new BigDecimal("400")), "调整不改 used_amount");
+    }
+
+    // ---------------- B8（P2b-11）：错误分类语义——守卫失败 ≠ 并发冲突 ----------------
+
+    /** B8：CAS 失败但版本未变 = 余额守卫失败 → 业务语义错误（释放超余额），不得误报 3002 并发冲突。 */
+    @Test
+    void updateUsed_guardFailure_reportsBizErrorNotConflict() {
+        BudgetLine line = new BudgetLine();
+        line.setId(LINE_ID);
+        line.setUsedAmount(new BigDecimal("100"));
+        line.setVersion(3);
+        when(budgetLineMapper.changeUsedAmount(eq(LINE_ID), any(BigDecimal.class), eq(3))).thenReturn(0);
+        BudgetLine fresh = new BudgetLine();
+        fresh.setId(LINE_ID);
+        fresh.setVersion(3); // 版本未变 = 无并发写入 = 守卫条件不满足
+        when(budgetLineMapper.selectById(LINE_ID)).thenReturn(fresh);
+
+        BizException e = assertThrows(BizException.class, () ->
+                org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                        service, "updateUsedWithRetry", line, new BigDecimal("-200")));
+        assertTrue(e.getMessage().contains("释放超过占用余额"), e.getMessage());
+        assertFalse(e.getMessage().contains("并发冲突"), e.getMessage());
+    }
+
+    /** B8：版本已变 = 真并发 → 重试一次仍失败 → 3002 并发冲突（可重试语义），不得混淆为守卫失败。 */
+    @Test
+    void updateUsed_versionConflict_reportsConflictAfterRetry() {
+        BudgetLine line = new BudgetLine();
+        line.setId(LINE_ID);
+        line.setUsedAmount(new BigDecimal("100"));
+        line.setVersion(3);
+        when(budgetLineMapper.changeUsedAmount(anyLong(), any(BigDecimal.class), anyInt())).thenReturn(0);
+        BudgetLine fresh = new BudgetLine();
+        fresh.setId(LINE_ID);
+        fresh.setVersion(4); // 版本已变 = 有并发写入
+        when(budgetLineMapper.selectById(LINE_ID)).thenReturn(fresh);
+
+        BizException e = assertThrows(BizException.class, () ->
+                org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                        service, "updateUsedWithRetry", line, new BigDecimal("-200")));
+        assertTrue(e.getMessage().contains("并发冲突"), e.getMessage());
     }
 }

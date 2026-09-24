@@ -654,4 +654,50 @@ class OrderTripleCheckTest {
         Mockito.verify(budgetOccupyService, Mockito.never())
                 .transfer(any(com.dzgylxt.vo.budget.BudgetTransferCmd.class));
     }
+
+    // ---------------- B6（P2b-13）：无锚订单减额——budget_occupied 下界保护 ----------------
+
+    /** B6：无锚订单（D2）occupied=0 减额变更 → budget_occupied 保持 0（release 零余额跳过，不得落负值）。 */
+    @Test
+    void changeOrder_noAnchor_reduction_occupiedStaysZero() {
+        com.dzgylxt.entity.order.PurchaseOrder order = new com.dzgylxt.entity.order.PurchaseOrder();
+        order.setId(730L);
+        order.setOrderNo("DD-TEST-000073");
+        order.setContractId(CONTRACT_ID);
+        order.setApplyId(null);
+        order.setStatus(OrderStatus.CREATED);
+        order.setBudgetOccupied(BigDecimal.ZERO);
+        when(purchaseOrderMapper.selectById(730L)).thenReturn(order);
+
+        Contract contract = baseContract(); // awardId=null → 无锚
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(contract);
+        when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenReturn(1);
+
+        com.dzgylxt.entity.order.OrderItem oi = new com.dzgylxt.entity.order.OrderItem();
+        oi.setId(4301L);
+        oi.setOrderId(730L);
+        oi.setSkuId(9L);
+        oi.setApplyItemId(null);
+        oi.setPrice(new BigDecimal("10"));
+        oi.setQtyPurchase(new BigDecimal("5"));
+        oi.setQtyBase(new BigDecimal("5"));
+        oi.setConvSnapshot("{\"rate\":1}");
+        when(orderItemMapper.selectList(any())).thenReturn(List.of(oi));
+
+        OrderChangeReqVO req = new OrderChangeReqVO();
+        OrderChangeReqVO.ItemChange change = new OrderChangeReqVO.ItemChange();
+        change.setOrderItemId(4301L);
+        change.setNewQty(new BigDecimal("2")); // 减额：5 → 2
+        req.setItems(List.of(change));
+        req.setReason("减购");
+
+        service.changeOrder(730L, req);
+
+        assertEquals(0, order.getBudgetOccupied().compareTo(BigDecimal.ZERO),
+                "无锚订单减额后 budget_occupied 应保持 0，不得落负值");
+        Mockito.verify(budgetOccupyService).release(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class));
+        Mockito.verify(budgetOccupyService, Mockito.never())
+                .occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class));
+    }
 }

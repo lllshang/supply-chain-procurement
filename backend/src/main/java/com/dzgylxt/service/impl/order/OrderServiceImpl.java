@@ -500,7 +500,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             // 生成 BUDGET 升级审批任务，升级通过后 force 占用生效，重提变更时消费放行标记
             BigDecimal currentOccupied = order.getBudgetOccupied() == null
                     ? BigDecimal.ZERO : order.getBudgetOccupied();
-            BigDecimal newOccupied = currentOccupied.add(amountDelta);
+            // B6（P2b-13）：下界保护——无锚订单（D2 手填合同）occupied=0，减额分支 release
+            // 对零余额优雅跳过，此处不得落负值（否则字段语义失真、报表出负数）
+            BigDecimal newOccupied = currentOccupied.add(amountDelta).max(BigDecimal.ZERO);
             if (amountDelta.compareTo(BigDecimal.ZERO) > 0) {
                 // #47 放行标记：存在已审批未消费的变更升级任务 → 消费并跳过占用
                 //（升级通过时已 force 预挂占用，正常占用会重复计账）
