@@ -178,10 +178,9 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
                     continue;
                 }
                 BigDecimal[] snap = updateUsedWithRetry(line, take.negate());
-                // P2b-9 方案 A 口径定稿：RELEASE 落负数（带符号流水，take.negate()），
-                // 查询侧（sumBizOccupied/sumNetOccupiedByLine）对带符号 amount 原样求和——
-                // 唯一禁改点：查询侧不得对 RELEASE 再取反（历史双重取反缺陷根因）
-                writeLog(line, cmd, BudgetAction.RELEASE, take.negate(), snap[0], snap[1]);
+                // P2b-9 口径定稿：amount 一律存正数（动作语义由 action 表达，方向由 balance 快照承载）；
+                // 查询侧（sumBizOccupied/sumNetOccupiedByLine）对 RELEASE 取负——禁止写侧再落负值
+                writeLog(line, cmd, BudgetAction.RELEASE, take, snap[0], snap[1]);
                 released = released.add(take);
                 remaining = remaining.subtract(take);
             }
@@ -291,8 +290,8 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
                 srcCmd.setRemark(cmd.getRemark() == null ? "转移出→" + cmd.getToBizType() + ":" + cmd.getToBizId()
                         : cmd.getRemark());
                 BigDecimal[] srcSnap = updateUsedWithRetry(line, move.negate());
-                // P2b-9 方案 A 口径：RELEASE 落负数（同 release()，查询侧带符号原样求和）
-                writeLog(line, srcCmd, BudgetAction.RELEASE, move.negate(), srcSnap[0], srcSnap[1]);
+                // P2b-9 口径定稿：RELEASE 落正数（同 release()，查询侧取负）
+                writeLog(line, srcCmd, BudgetAction.RELEASE, move, srcSnap[0], srcSnap[1]);
 
                 BudgetOccupyCmd dstCmd = baseCmdOf(line);
                 dstCmd.setBizType(cmd.getToBizType());
@@ -502,7 +501,7 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
         return new BigDecimal[]{before, after};
     }
 
-    /** 写流水（P2b-9 方案 A：OCCUPY/RELEASE 带符号落账，WRITE_OFF/ADJUST 见各调用点；核销 balance 前后相等）。 */
+    /** 写流水（P2b-9：amount 一律存正数，方向由 action + balance 前后快照表达；核销时前后相等）。 */
     private void writeLog(BudgetLine line, BudgetOccupyCmd cmd, BudgetAction action,
                           BigDecimal amount, BigDecimal balanceBefore, BigDecimal balanceAfter) {
         BudgetOccupyLog entry = new BudgetOccupyLog();
