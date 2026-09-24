@@ -32,6 +32,16 @@ export function submitSettlement(id) {
   return request.post(`/api/v1/settlements/${id}/submit`)
 }
 
+// ---- 预付款结算（D10：从订单发起，含在途封顶校验） ----
+// 预付款草稿预览（订单金额/已付预付款 prepaidPaid/可发起余额）
+export function draftPrepaymentFromOrder(orderId) {
+  return request.get(`/api/v1/settlements/prepayment/draft/${orderId}`)
+}
+// 创建预付款结算单（超"订单有效金额−累计预付款(含在途)"返回 3000/4000 原样 toast）
+export function createPrepaymentSettlement(orderId, data) {
+  return request.post(`/api/v1/settlements/prepayment/${orderId}`, data)
+}
+
 // ---- 付款登记（/api/v1/payments） ----
 export function pagePayments(params) {
   return request.get('/api/v1/payments/page', { params })

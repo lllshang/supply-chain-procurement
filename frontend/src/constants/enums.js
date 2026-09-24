@@ -126,14 +126,15 @@ export const STRING_ENUMS = {
     { value: 'EXPIRED', label: '已过期', type: 'danger' },
     { value: 'TERMINATED', label: '已终止', type: 'danger' }
   ],
-  // 订单状态
+  // 订单状态（D11/R5：SETTLED/PAID 已 @Deprecated 不再流转——仅历史数据可能携带，
+  // 新单据的结算/付款进度由派生字段 settleProgress/paidProgress 承载）
   orderStatus: [
     { value: 'CREATED', label: '已创建', type: 'warning' },
     { value: 'PARTIAL_RECEIVED', label: '部分到货', type: 'warning' },
     { value: 'RECEIVED', label: '已到货', type: 'success' },
-    { value: 'SETTLED', label: '已结算', type: 'success' },
+    { value: 'SETTLED', label: '已结算（历史）', type: 'success' },
     { value: 'CANCELLED', label: '已取消', type: 'danger' },
-    { value: 'PAID', label: '已付款', type: 'success' }
+    { value: 'PAID', label: '已付款（历史）', type: 'success' }
   ],
   // 到货验收状态
   arrivalStatus: [
@@ -214,7 +215,8 @@ export const STRING_ENUMS = {
   // 结算类型
   settlementType: [
     { value: 'MATERIAL', label: '物料结算' },
-    { value: 'SERVICE', label: '服务结算' }
+    { value: 'SERVICE', label: '服务结算' },
+    { value: 'PREPAYMENT', label: '预付款结算' }
   ],
   // 结算方式
   settleMode: [
@@ -222,11 +224,16 @@ export const STRING_ENUMS = {
     { value: 'PHASE', label: '阶段' },
     { value: 'FINAL', label: '尾款' }
   ],
-  // 付款状态（R5：UNPAID/PARTIAL/PAID；REJECTED 为审批驳回留痕态）
+  // 付款状态（R6 收敛：付款登记免审批，仅 UNPAID/PAID 两态——REJECTED 已删）
   paymentStatus: [
     { value: 'UNPAID', label: '未付款', type: 'warning' },
-    { value: 'PAID', label: '已付款', type: 'success' },
-    { value: 'REJECTED', label: '已驳回', type: 'danger' }
+    { value: 'PAID', label: '已付款', type: 'success' }
+  ],
+  // 结算单派生付款状态（PB-01：后端结算单派生字段 payStatus，供列表/详情展示）
+  settlementPayStatus: [
+    { value: 'UNPAID', label: '未付款', type: 'warning' },
+    { value: 'PARTIAL', label: '部分付款', type: 'warning' },
+    { value: 'PAID', label: '已付清', type: 'success' }
   ]
 }
 
