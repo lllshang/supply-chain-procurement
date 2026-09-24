@@ -50,7 +50,9 @@ const routes = [
       { path: 'contract', name: 'Contract', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '合同管理' } },
       { path: 'quotation', name: 'Quotation', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '报价定标' } },
       { path: 'order', name: 'Order', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '订单与验收' } },
-      { path: 'settlement', name: 'Settlement', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '结算与付款' } },
+      { path: 'settlement', name: 'Settlement', redirect: '/settlement/list' },
+      { path: 'settlement/list', name: 'SettlementList', component: () => import('@/views/settlement/SettlementIndex.vue'), meta: { title: '结算管理' } },
+      { path: 'settlement/payment', name: 'SettlementPayment', component: () => import('@/views/settlement/PaymentIndex.vue'), meta: { title: '付款登记' } },
       { path: 'approval', name: 'Approval', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '审批中心' } },
       { path: 'report', name: 'Report', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '报表中心' } },
       { path: 'setting', name: 'Setting', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '基础设置' } }

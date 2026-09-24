@@ -90,12 +90,14 @@ export const STRING_ENUMS = {
     { value: 'REJECTED', label: '驳回', type: 'danger' },
     { value: 'CALLBACK_DONE', label: '已完成', type: 'success' }
   ],
-  // 审批业务类型
+  // 审批业务类型（R6：付款登记免审批，无 PAYMENT bizType）
   approvalBizType: [
     { value: 'PURCHASE_APPLY', label: '采购申请' },
     { value: 'AWARD', label: '定标' },
     { value: 'CONTRACT', label: '合同' },
-    { value: 'FULFILLMENT_ADJUST', label: '履约调整' }
+    { value: 'FULFILLMENT_ADJUST', label: '履约调整' },
+    { value: 'BUDGET', label: '预算升级' },
+    { value: 'SETTLEMENT', label: '结算' }
   ],
   // 询价状态
   inquiryStatus: [
@@ -201,6 +203,30 @@ export const STRING_ENUMS = {
   itemType: [
     { value: 'MATERIAL', label: '物料' },
     { value: 'SERVICE', label: '服务' }
+  ],
+  // ---- P3 结算与付款（后端 IEnum 以枚举名序列化） ----
+  // 结算状态
+  settlementStatus: [
+    { value: 'PENDING', label: '待结算', type: 'warning' },
+    { value: 'SETTLED', label: '已结算', type: 'success' },
+    { value: 'PARTIAL', label: '部分结算', type: 'warning' }
+  ],
+  // 结算类型
+  settlementType: [
+    { value: 'MATERIAL', label: '物料结算' },
+    { value: 'SERVICE', label: '服务结算' }
+  ],
+  // 结算方式
+  settleMode: [
+    { value: 'ONE_TIME', label: '一次性' },
+    { value: 'PHASE', label: '阶段' },
+    { value: 'FINAL', label: '尾款' }
+  ],
+  // 付款状态（R5：UNPAID/PARTIAL/PAID；REJECTED 为审批驳回留痕态）
+  paymentStatus: [
+    { value: 'UNPAID', label: '未付款', type: 'warning' },
+    { value: 'PAID', label: '已付款', type: 'success' },
+    { value: 'REJECTED', label: '已驳回', type: 'danger' }
   ]
 }
 

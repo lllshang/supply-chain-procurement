@@ -83,7 +83,18 @@ export const fallbackMenus = [
       { id: 805, parentId: 8, menuName: '服务考核', icon: 'audit', path: '/order/assess', menuType: 2, perms: 'order:assess:read,order:assess:write' }
     ]
   },
-  { id: 9, parentId: 0, menuName: '结算与付款', icon: 'credit-card', path: '/settlement', menuType: 1 },
+  {
+    id: 9,
+    parentId: 0,
+    menuName: '结算与付款',
+    icon: 'credit-card',
+    path: '/settlement',
+    menuType: 1,
+    children: [
+      { id: 901, parentId: 9, menuName: '结算管理', icon: 'money', path: '/settlement/list', menuType: 2, perms: 'settlement:read,settlement:write,settlement:submit' },
+      { id: 902, parentId: 9, menuName: '付款登记', icon: 'credit-card', path: '/settlement/payment', menuType: 2, perms: 'payment:read,payment:write,payment:confirm' }
+    ]
+  },
   { id: 10, parentId: 0, menuName: '审批中心', icon: 'audit', path: '/approval', menuType: 1 },
   { id: 11, parentId: 0, menuName: '报表中心', icon: 'chart', path: '/report', menuType: 1 },
   { id: 12, parentId: 0, menuName: '基础设置', icon: 'tools', path: '/setting', menuType: 1 }
