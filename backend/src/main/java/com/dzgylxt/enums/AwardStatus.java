@@ -8,7 +8,8 @@ import com.baomidou.mybatisplus.annotation.IEnum;
 public enum AwardStatus implements IEnum<Integer> {
     PENDING_APPROVAL(0, "待审批"),
     APPROVED(1, "已审批"),
-    REJECTED(2, "已驳回");
+    REJECTED(2, "已驳回"),
+    VOIDED(3, "已作废");
 
     private final int code;
     private final String desc;

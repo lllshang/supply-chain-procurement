@@ -70,6 +70,15 @@ public class AwardController {
         return R.ok(awardService.submit(id));
     }
 
+    /** 作废/关闭（P2b-3：驳回未用/审批前放弃终态闭环，释放占用+留痕；已登记合同不可作废）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/void")
+    public R<Boolean> voidAward(@PathVariable Long id,
+                                @RequestParam(required = false) String reason) {
+        awardService.voidAward(id, reason);
+        return R.ok(true);
+    }
+
     /** 定标明细（含换算快照）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/{id}/items")

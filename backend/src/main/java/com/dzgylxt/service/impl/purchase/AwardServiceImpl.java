@@ -86,6 +86,9 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
     private com.dzgylxt.mapper.purchase.PurchaseApplyMapper applyMapper;
 
     @Autowired
+    private com.dzgylxt.mapper.contract.ContractMapper contractMapper;
+
+    @Autowired
     private IBudgetOccupyService budgetOccupyService;
 
     @Autowired
@@ -220,6 +223,9 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
                 throw new BizException(ResultCode.PARAM_ERROR,
                         "线下定标缺少预算锚点（部门/科目），不允许提交：请重新登记并填写部门与预算科目");
             }
+            // P2b-4：重提幂等（覆盖式）——先释放本定标历史占用（驳回释放遗漏/待审批改明细再提交），
+            // 再按当前金额占用；终态 used == 当前有效定标金额（不随提交次数叠加，终态断言见单测）
+            releaseAwardOccupation(award, "定标重提覆盖式释放旧占用");
             BudgetOccupyCmd occupyCmd = new BudgetOccupyCmd();
             occupyCmd.setDeptId(award.getDeptId());
             occupyCmd.setSubjectId(award.getSubjectId());
@@ -315,6 +321,48 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         List<AwardItem> items = awardItemMapper.selectList(Wrappers.<AwardItem>lambdaQuery()
                 .eq(AwardItem::getAwardId, awardId));
         createAwardApprovalTask(award, items);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void voidAward(Long id, String reason) {
+        Award award = getById(id);
+        if (award == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "定标单不存在：" + id);
+        }
+        if (award.getStatus() == AwardStatus.VOIDED) {
+            throw new BizException(ResultCode.STATUS_INVALID, "定标单已作废，请勿重复操作");
+        }
+        // 合同链持有预算锚点（下单转移 AWARD→ORDER），有合同引用时不可作废——先终止合同
+        Long contractCount = contractMapper.selectCount(Wrappers.<com.dzgylxt.entity.contract.Contract>lambdaQuery()
+                .eq(com.dzgylxt.entity.contract.Contract::getAwardId, id));
+        if (contractCount != null && contractCount > 0) {
+            throw new BizException(ResultCode.STATUS_INVALID,
+                    "该定标已登记合同，不可作废：请先终止合同（避免预算锚点悬空）");
+        }
+        // P2b-3：作废释放全部 AWARD 占用（RELEASE 负向流水 + used 回退，防永久假占用）
+        releaseAwardOccupation(award, "定标作废释放");
+        award.setStatus(AwardStatus.VOIDED);
+        award.setRemark(reason == null ? "作废" : award.getRemark() == null
+                ? "作废：" + reason : award.getRemark() + "；作废：" + reason);
+        updateById(award);
+    }
+
+    /**
+     * 释放该定标的全部 AWARD 占用（P2b-3/4：驳回/作废/重提覆盖式；按日志余额，守恒回冲）。
+     * 申请来源定标仅 checkOnly 不占用（占用锚在申请），此处为幂等空操作。
+     */
+    private void releaseAwardOccupation(Award award, String reason) {
+        BigDecimal occupied = budgetOccupyService.occupiedTotal(BudgetBizType.AWARD, award.getId());
+        if (occupied == null || occupied.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
+        releaseCmd.setAmount(occupied);
+        releaseCmd.setBizType(BudgetBizType.AWARD);
+        releaseCmd.setBizId(award.getId());
+        releaseCmd.setRemark(reason + "-" + award.getAwardNo());
+        budgetOccupyService.release(releaseCmd);
     }
 
     @Override
@@ -443,5 +491,8 @@ public class AwardServiceImpl extends ServiceImpl<AwardMapper, Award> implements
         }
         award.setStatus(AwardStatus.REJECTED);
         updateById(award);
+        // P2b-3：驳回释放该定标全部 AWARD 占用（RELEASE 负向流水 + used 回退），
+        // 消除"驳回后假占用"；重提时按当前金额重新占用（覆盖式幂等，见 submit）
+        releaseAwardOccupation(award, "定标驳回释放");
     }
 }

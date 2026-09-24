@@ -25,6 +25,13 @@ public interface IAwardService extends IService<Award>, ApprovalCallbackHandler 
     /** R7：BUDGET 升级审批通过后的放行确认——补发 AWARD 审批（预算仅校验不占用，无回滚动作）。 */
     void releaseAfterBudgetApproval(Long awardId);
 
+    /**
+     * 作废/关闭（P2b-3）：驳回未用、审批前放弃的定标终态闭环——
+     * 释放该定标全部 AWARD 占用（RELEASE 负向流水 + used 回退）+ 状态流转 VOIDED + 留痕。
+     * 已登记合同的定标不可作废（合同链持有锚点，需先终止合同）。
+     */
+    void voidAward(Long id, String reason);
+
     /** 定标明细。 */
     List<com.dzgylxt.entity.purchase.AwardItem> listItems(Long awardId);
 }
