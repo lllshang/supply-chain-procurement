@@ -178,7 +178,9 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
                     continue;
                 }
                 BigDecimal[] snap = updateUsedWithRetry(line, take.negate());
-                writeLog(line, cmd, BudgetAction.RELEASE, take.negate(), snap[0], snap[1]);
+                // P2b-9 口径定稿：amount 一律存正数（动作语义由 action 表达，方向由 balance 快照承载）；
+                // 查询侧（sumBizOccupied/sumNetOccupiedByLine）对 RELEASE 取负——禁止写侧再落负值
+                writeLog(line, cmd, BudgetAction.RELEASE, take, snap[0], snap[1]);
                 released = released.add(take);
                 remaining = remaining.subtract(take);
             }
@@ -288,7 +290,8 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
                 srcCmd.setRemark(cmd.getRemark() == null ? "转移出→" + cmd.getToBizType() + ":" + cmd.getToBizId()
                         : cmd.getRemark());
                 BigDecimal[] srcSnap = updateUsedWithRetry(line, move.negate());
-                writeLog(line, srcCmd, BudgetAction.RELEASE, move.negate(), srcSnap[0], srcSnap[1]);
+                // P2b-9 口径定稿：RELEASE 落正数（同 release()，查询侧取负）
+                writeLog(line, srcCmd, BudgetAction.RELEASE, move, srcSnap[0], srcSnap[1]);
 
                 BudgetOccupyCmd dstCmd = baseCmdOf(line);
                 dstCmd.setBizType(cmd.getToBizType());
@@ -464,12 +467,29 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
         }
     }
 
-    /** 条件更新 used_amount（version 兜底，冲突重试 1 次）；返回 [balanceBefore, balanceAfter]。 */
+    /**
+     * 条件更新 used_amount（version 兜底，冲突重试 1 次）；返回 [balanceBefore, balanceAfter]。
+     *
+     * <p>P2b-11：区分两类失败——重读后 version 未变 = 非并发冲突，而是余额守卫
+     * （{@code used + delta < 0}，CHANGE SQL 守卫）→ 报 BIZ_ERROR 业务语义
+     * （如"释放超过占用余额"）；仅 version 确有变化且重试仍失败才报 3002 并发冲突
+     * （历史缺陷：混报 3002 掩盖了 P2b-9 真因）。</p>
+     */
     private BigDecimal[] updateUsedWithRetry(BudgetLine line, BigDecimal delta) {
         BigDecimal before = line.getUsedAmount() == null ? BigDecimal.ZERO : line.getUsedAmount();
         int updated = budgetLineMapper.changeUsedAmount(line.getId(), delta, line.getVersion());
         if (updated == 0) {
             BudgetLine fresh = budgetLineMapper.selectById(line.getId());
+            if (fresh == null) {
+                throw new BizException(ResultCode.DATA_NOT_FOUND, "预算行不存在（行 " + line.getId() + "）");
+            }
+            if (fresh.getVersion() != null && fresh.getVersion().equals(line.getVersion())) {
+                // 版本未变 = 无并发写入，失败源于余额守卫 → 业务语义错误（非 3002）
+                throw new BizException(ResultCode.BIZ_ERROR,
+                        delta.signum() < 0
+                                ? "释放超过占用余额（行 " + line.getId() + "），请按实际占用余额操作"
+                                : "预算行余额守卫失败（行 " + line.getId() + "）");
+            }
             updated = budgetLineMapper.changeUsedAmount(line.getId(), delta, fresh.getVersion());
         }
         if (updated == 0) {
@@ -481,7 +501,7 @@ public class BudgetOccupyServiceImpl implements IBudgetOccupyService {
         return new BigDecimal[]{before, after};
     }
 
-    /** 写流水（balance 前后快照由调用方按动作语义给定；核销时前后相等）。 */
+    /** 写流水（P2b-9：amount 一律存正数，方向由 action + balance 前后快照表达；核销时前后相等）。 */
     private void writeLog(BudgetLine line, BudgetOccupyCmd cmd, BudgetAction action,
                           BigDecimal amount, BigDecimal balanceBefore, BigDecimal balanceAfter) {
         BudgetOccupyLog entry = new BudgetOccupyLog();

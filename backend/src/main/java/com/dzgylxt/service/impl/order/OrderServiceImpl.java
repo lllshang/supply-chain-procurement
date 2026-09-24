@@ -480,48 +480,50 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
                 contractMapper.releaseAvailable(contract.getId(), amountDelta.abs(), contractVersion);
             }
-            // P3 §3 行7/行8（#47 修订）：变更对冲（仅对存在真实预算占用的订单生效）；
-            // 增量被预算拦截时 → 拦截 + 生成 BUDGET 升级审批任务（非纯拦截），
-            // 升级通过后 force 占用生效，重提变更时消费放行标记
-            if (order.getBudgetOccupied() != null
-                    && order.getBudgetOccupied().compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal newOccupied = order.getBudgetOccupied().add(amountDelta);
-                if (amountDelta.compareTo(BigDecimal.ZERO) > 0) {
-                    // #47 放行标记：存在已审批未消费的变更升级任务 → 消费并跳过占用
-                    //（升级通过时已 force 预挂占用，正常占用会重复计账）
-                    boolean upgradeCovered = consumeApprovedBudgetUpgrade(order, amountDelta);
-                    if (!upgradeCovered) {
-                        // P2b-5：变更预算锚点回填链补全（申请 → contract.award_id → award.dept/subject），
-                        // 无申请来源订单不再整体绕过预算硬控
-                        BudgetOccupyCmd occupyCmd = buildChangeOccupyCmd(order, amountDelta);
-                        if (occupyCmd == null) {
-                            // 锚点缺失 = 无法校验 = 硬控拦截（禁止静默绕过；PRD §6.4.3 / P3 #47 意图）
-                            throw new BizException(ResultCode.BIZ_ERROR,
-                                    "变更增额无预算锚点（无申请来源且合同未关联有效定标），预算硬控拦截："
-                                            + "请先补录预算锚点或改走线下补录通道");
-                        }
-                        OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
-                        if (!result.isAvailable()) {
-                            // #47：拦截 + 升级——生成 BUDGET 升级审批任务后回滚本次变更
-                            createBudgetUpgradeTask(order, amountDelta, occupyCmd, result);
-                            throw new BizException(ResultCode.BIZ_ERROR,
-                                    "变更增额超出预算余额：" + result.getMessage()
-                                            + "；已生成 BUDGET 升级审批，通过后请重提变更");
-                        }
-                    } else {
-                        // 升级占用已预挂（含 budgetOccupied 增量），重提不再重复累加
-                        newOccupied = order.getBudgetOccupied();
+            // P3 §3 行7/行8（#47 修订 + P2b-10 根因修复）：变更对冲——
+            // <b>预算锚点解析提到 occupied>0 门之外</b>（原实现把拦截块包在占用门内：
+            // 无锚订单 occupied=0 进不了拦截块（静默绕过）；有锚订单锚链必命中，
+            // occupyCmd==null 分支不可达——双重死代码）。现：变更增额<b>必解析锚点</b>，
+            // 解析失败 → 4000 硬控拦截（不静默、不跳过）；增量被预算拦截 → 拦截 +
+            // 生成 BUDGET 升级审批任务，升级通过后 force 占用生效，重提变更时消费放行标记
+            BigDecimal currentOccupied = order.getBudgetOccupied() == null
+                    ? BigDecimal.ZERO : order.getBudgetOccupied();
+            BigDecimal newOccupied = currentOccupied.add(amountDelta);
+            if (amountDelta.compareTo(BigDecimal.ZERO) > 0) {
+                // #47 放行标记：存在已审批未消费的变更升级任务 → 消费并跳过占用
+                //（升级通过时已 force 预挂占用，正常占用会重复计账）
+                boolean upgradeCovered = consumeApprovedBudgetUpgrade(order, amountDelta);
+                if (!upgradeCovered) {
+                    // P2b-5/10：变更预算锚点回填链（申请 → contract.award_id → award.dept/subject，
+                    // 科目缺省回落 contract.subject_id）——增额必过预算硬控
+                    BudgetOccupyCmd occupyCmd = buildChangeOccupyCmd(order, amountDelta);
+                    if (occupyCmd == null) {
+                        // 锚点缺失 = 无法校验 = 硬控拦截（禁止静默绕过；PRD §6.4.3 / P3 #47 意图）
+                        throw new BizException(ResultCode.BIZ_ERROR,
+                                "变更增额无预算锚点（无申请来源且合同未关联有效定标），预算硬控拦截："
+                                        + "请先补录预算锚点或改走线下补录通道");
                     }
-                } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
-                    BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
-                    releaseCmd.setAmount(amountDelta.negate());
-                    releaseCmd.setBizType(BudgetBizType.ORDER);
-                    releaseCmd.setBizId(id);
-                    releaseCmd.setRemark("订单变更减额释放");
-                    budgetOccupyService.release(releaseCmd);
+                    OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
+                    if (!result.isAvailable()) {
+                        // #47：拦截 + 升级——生成 BUDGET 升级审批任务后回滚本次变更
+                        createBudgetUpgradeTask(order, amountDelta, occupyCmd, result);
+                        throw new BizException(ResultCode.BIZ_ERROR,
+                                "变更增额超出预算余额：" + result.getMessage()
+                                        + "；已生成 BUDGET 升级审批，通过后请重提变更");
+                    }
+                } else {
+                    // 升级占用已预挂（含 budgetOccupied 增量），重提不再重复累加
+                    newOccupied = currentOccupied;
                 }
-                order.setBudgetOccupied(newOccupied);
+            } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
+                BudgetOccupyCmd releaseCmd = new BudgetOccupyCmd();
+                releaseCmd.setAmount(amountDelta.negate());
+                releaseCmd.setBizType(BudgetBizType.ORDER);
+                releaseCmd.setBizId(id);
+                releaseCmd.setRemark("订单变更减额释放");
+                budgetOccupyService.release(releaseCmd);
             }
+            order.setBudgetOccupied(newOccupied);
             for (OrderItem item : items) {
                 orderItemMapper.updateById(item);
             }
@@ -614,7 +616,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                 com.dzgylxt.entity.purchase.Award award = awardMapper.selectById(contract.getAwardId());
                 if (award != null && award.getDeptId() != null) {
                     cmd.setDeptId(award.getDeptId());
-                    cmd.setSubjectId(award.getSubjectId());
+                    // P2b-10：科目锚点二源——award.subject_id 缺省回落 contract.subject_id
+                    cmd.setSubjectId(award.getSubjectId() != null
+                            ? award.getSubjectId() : contract.getSubjectId());
                 }
             }
         }

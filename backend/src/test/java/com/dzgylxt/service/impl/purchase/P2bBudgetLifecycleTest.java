@@ -373,10 +373,12 @@ class P2bBudgetLifecycleTest {
         assertEquals(SUBJECT_ID, occupyCaptor.getValue().getSubjectId());
     }
 
-    /** ⑤ P2b-5：无申请来源且合同未关联定标 → 变更增额硬控拦截（禁止静默绕过）。 */
+    /** ⑤ P2b-10：无申请来源且合同未关联定标 → 变更增额硬控拦截（真实链路：occupied=0 也必过锚点解析）。 */
     @Test
     void changeOrder_noAnchor_hardBlocked() {
         PurchaseOrder order = order();
+        // P2b-6 后无锚订单 budget_occupied=0——真实链路形态（不再手工 mock occupied>0）
+        order.setBudgetOccupied(BigDecimal.ZERO);
         when(purchaseOrderMapper.selectById(ORDER_ID)).thenReturn(order);
         Contract noAnchor = contract();
         noAnchor.setAwardId(null);

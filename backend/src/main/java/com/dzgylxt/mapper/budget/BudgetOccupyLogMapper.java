@@ -13,6 +13,14 @@ import java.math.BigDecimal;
  *
  * <p>对账恒等式（按 budget_line_id）：{@code Σ(占用) − Σ(释放) == used_amount}；
  * 核销（WRITE_OFF）与调整（ADJUST）不参与该恒等式。</p>
+ *
+ * <p><b>P2b-9 口径定稿（写侧一律正数，查询侧取负）</b>：OCCUPY/RELEASE/WRITE_OFF
+ * 的 amount <b>统一存正数</b>（动作语义由 action 表达，金额=本次动作绝对值，
+ * balance 前后快照承载方向）；查询侧对 action∈(RELEASE, WRITE_OFF) 取负。
+ * ADJUST 存带符号 delta、不参与恒等式。
+ * <b>禁止写侧再落负值</b>——历史缺陷：RELEASE 落负 + 查询取负 = 双重取反，
+ * 有释放历史的 bizId 占用总额翻倍（P2b 第 2 轮 QA 三实锤）。
+ * 存量负值行由 {@code scripts/sql/p2b_migration.sql} 幂等翻正。</p>
  */
 @Mapper
 public interface BudgetOccupyLogMapper extends BaseMapper<BudgetOccupyLog> {
