@@ -127,8 +127,9 @@ class SettlementPaymentTest {
         assertEquals(ORDER_ID, cmd.getValue().getBizId());
         assertEquals(0, cmd.getValue().getAmount().compareTo(new BigDecimal("1200")));
         // 订单结清收口
-        assertEquals(OrderStatus.SETTLED, order.getStatus());
-        verify(orderMapper).updateById(order);
+        // R5：订单状态机不再流转 SETTLED——结清进度改派生展示字段，订单状态保持不变
+        assertEquals(OrderStatus.RECEIVED, order.getStatus(), "R5：订单状态不变（不写 SETTLED）");
+        verify(orderMapper, org.mockito.Mockito.never()).updateById(any(PurchaseOrder.class));
     }
 
     /** 结算审批驳回 → 保持 PENDING（无核销、无状态变更）。 */
@@ -170,7 +171,7 @@ class SettlementPaymentTest {
         assertEquals(PaymentStatus.UNPAID, captor.getValue().getStatus());
     }
 
-    /** 登记确认 → PAID + 结算单全部付清 → 订单 PAID（付款确认无预算动作）。 */
+    /** 登记确认 → PAID + 结算单全部付清；R5：订单状态机不再流转 PAID（付款确认无预算动作）。 */
     @Test
     void confirmPayment_marksPaid_andCompletesOrder() {
         Settlement settled = settlement(SettlementStatus.SETTLED);
@@ -186,8 +187,9 @@ class SettlementPaymentTest {
         paymentService.confirmPayment(PAY_ID, "voucher-001.pdf", LocalDate.of(2026, 9, 24));
 
         assertEquals(PaymentStatus.PAID, payment.getStatus());
-        assertEquals(OrderStatus.PAID, order.getStatus(), "全部付清订单 → PAID");
-        verify(orderMapper).updateById(order);
+        // R5：订单状态机不再流转 PAID——付清进度改由派生展示字段 set，订单状态保持不变（入参为 SETTLED，仍不写 PAID）
+        assertEquals(OrderStatus.SETTLED, order.getStatus(), "R5：订单状态不变（不写 PAID）");
+        verify(orderMapper, org.mockito.Mockito.never()).updateById(any(PurchaseOrder.class));
         // 付款确认无预算动作（核销已在结算完成，规格 §5 行 12）
         verify(budgetOccupyService, org.mockito.Mockito.never()).writeOff(any());
         verify(budgetOccupyService, org.mockito.Mockito.never()).occupy(any());
