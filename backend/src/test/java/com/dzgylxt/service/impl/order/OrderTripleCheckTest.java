@@ -20,11 +20,14 @@ import com.dzgylxt.mapper.purchase.AwardMapper;
 import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyItemMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyMapper;
+import com.dzgylxt.vo.order.OrderChangeReqVO;
 import com.dzgylxt.vo.order.OrderCreateReqVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -43,6 +46,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -101,6 +105,10 @@ class OrderTripleCheckTest {
     private com.dzgylxt.service.IBudgetOccupyService budgetOccupyService;
     @Mock
     private com.dzgylxt.service.IPriceHistoryService priceHistoryService;
+    @Mock
+    private com.dzgylxt.approval.ApprovalGateway approvalGateway;
+    @Mock
+    private com.dzgylxt.mapper.approval.ApprovalTaskMapper approvalTaskMapper;
 
     private FakeRow contractRow;
     private FakeRow itemRow;
@@ -470,5 +478,180 @@ class OrderTripleCheckTest {
         assertEquals("BUDGET", spec.getValue().getBizType());
         assertTrue(spec.getValue().getPayloadJson().contains("orderChange"),
                 "payload 应带 orderChange 升级标记");
+    }
+
+    // ---------------- P2b-5：无申请来源订单变更——锚点回填 + 硬控 ----------------
+
+    /** P2b-8③：无申请来源（D9 锚点）订单变更超额 → 预算拦截 + BUDGET 升级任务（含科目锚点）。 */
+    @Test
+    void changeOrder_noApply_awardAnchor_overspend_blockedAndEscalated() {
+        ReflectionTestUtils.setField(service, "approvalGateway", approvalGateway);
+        ReflectionTestUtils.setField(service, "approvalTaskMapper", approvalTaskMapper);
+        when(approvalTaskMapper.selectList(any())).thenReturn(List.of());
+        when(approvalGateway.create(any(com.dzgylxt.approval.ApprovalTaskSpec.class))).thenReturn(1L);
+
+        com.dzgylxt.entity.order.PurchaseOrder order = new com.dzgylxt.entity.order.PurchaseOrder();
+        order.setId(710L);
+        order.setOrderNo("DD-TEST-000071");
+        order.setContractId(CONTRACT_ID);
+        order.setApplyId(null);
+        order.setStatus(OrderStatus.CREATED);
+        order.setBudgetOccupied(new BigDecimal("2112"));
+        when(purchaseOrderMapper.selectById(710L)).thenReturn(order);
+
+        // 合同关联 D9 定标锚点（dept=1, subject=2）；合同额度放行，让请求触达预算闸
+        Contract contract = baseContract();
+        contract.setAwardId(810L);
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(contract);
+        when(contractMapper.selectById(CONTRACT_ID)).thenReturn(contract);
+        when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenReturn(1);
+        com.dzgylxt.entity.purchase.Award award = new com.dzgylxt.entity.purchase.Award();
+        award.setId(810L);
+        award.setDeptId(1L);
+        award.setSubjectId(2L);
+        when(awardMapper.selectById(810L)).thenReturn(award);
+
+        com.dzgylxt.entity.order.OrderItem oi = new com.dzgylxt.entity.order.OrderItem();
+        oi.setId(4101L);
+        oi.setOrderId(710L);
+        oi.setSkuId(9L);
+        oi.setApplyItemId(null);
+        oi.setPrice(new BigDecimal("1056"));
+        oi.setQtyPurchase(new BigDecimal("2"));
+        oi.setQtyBase(new BigDecimal("2"));
+        oi.setConvSnapshot("{\"rate\":1}");
+        when(orderItemMapper.selectList(any())).thenReturn(List.of(oi));
+
+        when(budgetOccupyService.occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.blocked(
+                        new BigDecimal("1000"), new BigDecimal("49688"), "当月预算余额不足"));
+
+        OrderChangeReqVO req = new OrderChangeReqVO();
+        OrderChangeReqVO.ItemChange change = new OrderChangeReqVO.ItemChange();
+        change.setOrderItemId(4101L);
+        change.setNewQty(new BigDecimal("50"));
+        req.setItems(List.of(change));
+        req.setReason("增购");
+
+        BizException e = assertThrows(BizException.class, () -> service.changeOrder(710L, req));
+        assertTrue(e.getMessage().contains("超出预算余额"), e.getMessage());
+
+        // 占用命令落到 award 锚点科目行（P2b-5 回填链）
+        ArgumentCaptor<com.dzgylxt.vo.budget.BudgetOccupyCmd> cmdCap =
+                ArgumentCaptor.forClass(com.dzgylxt.vo.budget.BudgetOccupyCmd.class);
+        Mockito.verify(budgetOccupyService).occupy(cmdCap.capture());
+        assertEquals(1L, cmdCap.getValue().getDeptId());
+        assertEquals(2L, cmdCap.getValue().getSubjectId(), "锚点回填：award.dept/subject");
+        // BUDGET 升级任务：bizId=订单 id（QA2-06），payload 带科目锚点
+        ArgumentCaptor<com.dzgylxt.approval.ApprovalTaskSpec> specCap =
+                ArgumentCaptor.forClass(com.dzgylxt.approval.ApprovalTaskSpec.class);
+        Mockito.verify(approvalGateway).create(specCap.capture());
+        assertEquals("BUDGET", specCap.getValue().getBizType());
+        assertEquals(710L, specCap.getValue().getBizId());
+        assertTrue(specCap.getValue().getPayloadJson().contains("\"subjectId\":2"),
+                "升级 payload 必须带科目锚点，否则 force 占用将跨科目虚占");
+    }
+
+    /** P2b-5：无申请来源且合同未关联定标（无锚点）→ 变更增额硬控拦截（禁止静默绕过）。 */
+    @Test
+    void changeOrder_noAnchor_hardGateRejected() {
+        com.dzgylxt.entity.order.PurchaseOrder order = new com.dzgylxt.entity.order.PurchaseOrder();
+        order.setId(720L);
+        order.setOrderNo("DD-TEST-000072");
+        order.setContractId(CONTRACT_ID);
+        order.setApplyId(null);
+        order.setStatus(OrderStatus.CREATED);
+        order.setBudgetOccupied(new BigDecimal("100"));
+        when(purchaseOrderMapper.selectById(720L)).thenReturn(order);
+
+        Contract contract = baseContract(); // awardId=null
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(contract);
+        when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenReturn(1);
+
+        com.dzgylxt.entity.order.OrderItem oi = new com.dzgylxt.entity.order.OrderItem();
+        oi.setId(4201L);
+        oi.setOrderId(720L);
+        oi.setSkuId(9L);
+        oi.setApplyItemId(null);
+        oi.setPrice(new BigDecimal("10"));
+        oi.setQtyPurchase(new BigDecimal("2"));
+        oi.setQtyBase(new BigDecimal("2"));
+        oi.setConvSnapshot("{\"rate\":1}");
+        when(orderItemMapper.selectList(any())).thenReturn(List.of(oi));
+
+        OrderChangeReqVO req = new OrderChangeReqVO();
+        OrderChangeReqVO.ItemChange change = new OrderChangeReqVO.ItemChange();
+        change.setOrderItemId(4201L);
+        change.setNewQty(new BigDecimal("5"));
+        req.setItems(List.of(change));
+        req.setReason("增购");
+
+        BizException e = assertThrows(BizException.class, () -> service.changeOrder(720L, req));
+        assertTrue(e.getMessage().contains("无预算锚点"), e.getMessage());
+        Mockito.verify(budgetOccupyService, Mockito.never())
+                .occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class));
+    }
+
+    // ---------------- P2b-6：无申请来源下单——占用落 ORDER 流水 / 无锚置 0 ----------------
+
+    /** P2b-6：无申请来源（D9 锚点）下单 → AWARD→ORDER 同行转移落 ORDER 流水。 */
+    @Test
+    void createOrder_noApply_awardAnchor_transfersToOrderFlows() {
+        Contract contract = baseContract();
+        contract.setAwardId(810L);
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(contract);
+        when(contractMapper.selectById(CONTRACT_ID)).thenReturn(contract);
+        when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenReturn(1);
+
+        OrderCreateReqVO req = new OrderCreateReqVO();
+        req.setContractId(CONTRACT_ID);
+        req.setApplyId(null); // 无申请来源
+        OrderCreateReqVO.OrderItemReqVO item = new OrderCreateReqVO.OrderItemReqVO();
+        item.setSkuId(9L);
+        item.setQty(BigDecimal.ONE);
+        item.setPrice(BigDecimal.TEN);
+        item.setPurchaseUnit("BOX");
+        req.setItems(List.of(item));
+
+        service.createOrder(req);
+
+        ArgumentCaptor<com.dzgylxt.vo.budget.BudgetTransferCmd> cap =
+                ArgumentCaptor.forClass(com.dzgylxt.vo.budget.BudgetTransferCmd.class);
+        Mockito.verify(budgetOccupyService).transfer(cap.capture());
+        assertEquals(com.dzgylxt.enums.BudgetBizType.AWARD, cap.getValue().getFromBizType());
+        assertEquals(810L, cap.getValue().getFromBizId());
+        assertEquals(com.dzgylxt.enums.BudgetBizType.ORDER, cap.getValue().getToBizType());
+        assertEquals(0, cap.getValue().getAmount().compareTo(BigDecimal.TEN));
+    }
+
+    /** P2b-6：无锚订单（无申请且合同未关联定标）下单 → budget_occupied 置 0、无转移（不记假占用）。 */
+    @Test
+    void createOrder_noAnchor_budgetOccupiedZero() {
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(baseContract());
+        when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenReturn(1);
+
+        OrderCreateReqVO req = new OrderCreateReqVO();
+        req.setContractId(CONTRACT_ID);
+        req.setApplyId(null);
+        OrderCreateReqVO.OrderItemReqVO item = new OrderCreateReqVO.OrderItemReqVO();
+        item.setSkuId(9L);
+        item.setQty(BigDecimal.ONE);
+        item.setPrice(BigDecimal.TEN);
+        item.setPurchaseUnit("BOX");
+        req.setItems(List.of(item));
+
+        service.createOrder(req);
+
+        ArgumentCaptor<com.dzgylxt.entity.order.PurchaseOrder> cap =
+                ArgumentCaptor.forClass(com.dzgylxt.entity.order.PurchaseOrder.class);
+        Mockito.verify(purchaseOrderMapper).insert(cap.capture());
+        assertEquals(0, BigDecimal.ZERO.compareTo(cap.getValue().getBudgetOccupied()),
+                "无锚订单不得记与预算系统脱钩的假占用");
+        Mockito.verify(budgetOccupyService, Mockito.never())
+                .transfer(any(com.dzgylxt.vo.budget.BudgetTransferCmd.class));
     }
 }

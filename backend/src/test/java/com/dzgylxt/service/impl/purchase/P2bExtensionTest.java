@@ -6,6 +6,7 @@ import com.dzgylxt.entity.catalog.Sku;
 import com.dzgylxt.entity.purchase.Award;
 import com.dzgylxt.entity.purchase.Inquiry;
 import com.dzgylxt.entity.purchase.PurchaseApply;
+import com.dzgylxt.enums.AwardStatus;
 import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.enums.PurchaseApplyStatus;
 import com.dzgylxt.enums.PurchaseApplyType;
@@ -90,6 +91,12 @@ class P2bExtensionTest {
     @Mock
     private com.dzgylxt.service.ISupplierService supplierService;
 
+    @Mock
+    private com.dzgylxt.mapper.contract.ContractMapper contractMapper;
+
+    @Mock
+    private com.dzgylxt.approval.ApprovalGateway approvalGateway;
+
     private InquiryServiceImpl inquiryService;
     private AwardServiceImpl awardService;
 
@@ -111,6 +118,8 @@ class P2bExtensionTest {
         ReflectionTestUtils.setField(awardService, "budgetOccupyService", budgetOccupyService);
         ReflectionTestUtils.setField(awardService, "supplierService", supplierService);
         ReflectionTestUtils.setField(awardService, "businessNoGenerator", businessNoGenerator);
+        ReflectionTestUtils.setField(awardService, "contractMapper", contractMapper);
+        ReflectionTestUtils.setField(awardService, "approvalGateway", approvalGateway);
         ReflectionTestUtils.setField(awardService, "baseMapper", awardMapper);
 
         Sku sku = new Sku();
@@ -217,5 +226,127 @@ class P2bExtensionTest {
         assertEquals(2L, captor.getValue().getSubjectId());
         assertNull(captor.getValue().getInquiryId());
         assertEquals(SUPPLIER_A, captor.getValue().getSupplierId());
+    }
+
+    // ---------------- P2b-3/4：定标占用生命周期（提交即占/驳回释放/重提幂等/作废闭环） ----------------
+
+    private static final long AWARD_ID = 8001L;
+
+    private Award offlineAward(String amount, AwardStatus status) {
+        Award award = new Award();
+        award.setId(AWARD_ID);
+        award.setAwardNo("DB-TEST-000001");
+        award.setDeptId(1L);
+        award.setSubjectId(2L);
+        award.setAmount(new BigDecimal(amount));
+        award.setStatus(status);
+        return award;
+    }
+
+    /** 提交链路通用桩：准入合格、无历史报价、占用/释放成功、审批网关受理。 */
+    private void stubSubmitHappyPath(Award award) {
+        doReturn(award).when(awardService).getById(AWARD_ID);
+        com.dzgylxt.entity.purchase.AwardItem ai = new com.dzgylxt.entity.purchase.AwardItem();
+        ai.setAwardId(AWARD_ID);
+        ai.setSkuId(SKU_ID);
+        ai.setSupplierId(SUPPLIER_A);
+        ai.setPrice(new BigDecimal("88"));
+        ai.setQty(new BigDecimal("10"));
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(ai));
+        com.dzgylxt.vo.supplier.SupplierAdmissionVO admission =
+                new com.dzgylxt.vo.supplier.SupplierAdmissionVO();
+        admission.setQualified(true);
+        when(supplierService.getAdmission(SUPPLIER_A)).thenReturn(admission);
+        when(quotationMapper.selectList(any())).thenReturn(List.of());
+        when(budgetOccupyService.occupy(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
+        when(budgetOccupyService.release(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class)))
+                .thenReturn(com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
+        when(approvalGateway.create(any(com.dzgylxt.approval.ApprovalTaskSpec.class))).thenReturn(1L);
+    }
+
+    /** P2b-8①：线下定标提交即占——cmd 落 部门×科目×金额×bizType=AWARD×bizId=award。 */
+    @Test
+    void submit_offline_occupiesBudgetImmediately() {
+        Award award = offlineAward("10560", AwardStatus.PENDING_APPROVAL);
+        stubSubmitHappyPath(award);
+        when(budgetOccupyService.occupiedTotal(any(), any())).thenReturn(BigDecimal.ZERO);
+
+        awardService.submit(AWARD_ID);
+
+        ArgumentCaptor<com.dzgylxt.vo.budget.BudgetOccupyCmd> captor =
+                ArgumentCaptor.forClass(com.dzgylxt.vo.budget.BudgetOccupyCmd.class);
+        Mockito.verify(budgetOccupyService).occupy(captor.capture());
+        com.dzgylxt.vo.budget.BudgetOccupyCmd cmd = captor.getValue();
+        assertEquals(1L, cmd.getDeptId());
+        assertEquals(2L, cmd.getSubjectId(), "QA2-01：占用必须落到科目行");
+        assertEquals(0, cmd.getAmount().compareTo(new BigDecimal("10560")));
+        assertEquals(com.dzgylxt.enums.BudgetBizType.AWARD, cmd.getBizType());
+        assertEquals(AWARD_ID, cmd.getBizId());
+    }
+
+    /** P2b-8②：驳回 → 释放该定标全部占用（RELEASE 流水 + used 回退），防永久假占用。 */
+    @Test
+    void onRejected_releasesAwardOccupation() {
+        Award award = offlineAward("10560", AwardStatus.PENDING_APPROVAL);
+        doReturn(award).when(awardService).getById(AWARD_ID);
+        when(budgetOccupyService.occupiedTotal(com.dzgylxt.enums.BudgetBizType.AWARD, AWARD_ID))
+                .thenReturn(new BigDecimal("10560"));
+
+        awardService.onRejected(99L, AWARD_ID, "不同意");
+
+        assertEquals(AwardStatus.REJECTED, award.getStatus());
+        ArgumentCaptor<com.dzgylxt.vo.budget.BudgetOccupyCmd> captor =
+                ArgumentCaptor.forClass(com.dzgylxt.vo.budget.BudgetOccupyCmd.class);
+        Mockito.verify(budgetOccupyService).release(captor.capture());
+        assertEquals(0, captor.getValue().getAmount().compareTo(new BigDecimal("10560")));
+        assertEquals(com.dzgylxt.enums.BudgetBizType.AWARD, captor.getValue().getBizType());
+        assertEquals(AWARD_ID, captor.getValue().getBizId());
+    }
+
+    /** P2b-8③：驳回/改明细后重提幂等——覆盖式先释放旧占用，终态=当前定标金额（非叠加 15840）。 */
+    @Test
+    void resubmit_idempotent_finalAmountNotStacked() {
+        Award award = offlineAward("5280", AwardStatus.PENDING_APPROVAL);
+        stubSubmitHappyPath(award);
+        // 历史遗留占用 10560（模拟驳回释放遗漏），覆盖式释放读取后无余额
+        when(budgetOccupyService.occupiedTotal(com.dzgylxt.enums.BudgetBizType.AWARD, AWARD_ID))
+                .thenReturn(new BigDecimal("10560"))
+                .thenReturn(BigDecimal.ZERO);
+
+        awardService.submit(AWARD_ID);
+
+        // 旧占用 10560 被释放
+        ArgumentCaptor<com.dzgylxt.vo.budget.BudgetOccupyCmd> relCap =
+                ArgumentCaptor.forClass(com.dzgylxt.vo.budget.BudgetOccupyCmd.class);
+        Mockito.verify(budgetOccupyService).release(relCap.capture());
+        assertEquals(0, relCap.getValue().getAmount().compareTo(new BigDecimal("10560")));
+        // 终态占用 = 当前有效定标金额 5280（终态金额断言，非 Σlog 守恒可替代）
+        ArgumentCaptor<com.dzgylxt.vo.budget.BudgetOccupyCmd> occCap =
+                ArgumentCaptor.forClass(com.dzgylxt.vo.budget.BudgetOccupyCmd.class);
+        Mockito.verify(budgetOccupyService).occupy(occCap.capture());
+        assertEquals(0, occCap.getValue().getAmount().compareTo(new BigDecimal("5280")),
+                "终态 used 必须等于当前定标金额，而非历史+新金额叠加");
+    }
+
+    /** P2b-3：作废闭环——已登记合同拒绝；无合同时释放占用 + 状态 VOIDED + 留痕。 */
+    @Test
+    void voidAward_contractGuardAndRelease() {
+        Award linked = offlineAward("10560", AwardStatus.APPROVED);
+        doReturn(linked).when(awardService).getById(AWARD_ID);
+        when(contractMapper.selectCount(any())).thenReturn(1L);
+        BizException ex = assertThrows(BizException.class,
+                () -> awardService.voidAward(AWARD_ID, "不用了"));
+        assertTrue(ex.getMessage().contains("合同"), "已登记合同不可作废：" + ex.getMessage());
+
+        when(contractMapper.selectCount(any())).thenReturn(0L);
+        when(budgetOccupyService.occupiedTotal(com.dzgylxt.enums.BudgetBizType.AWARD, AWARD_ID))
+                .thenReturn(new BigDecimal("10560"));
+        awardService.voidAward(AWARD_ID, "登记错误");
+        assertEquals(AwardStatus.VOIDED, linked.getStatus());
+        ArgumentCaptor<com.dzgylxt.vo.budget.BudgetOccupyCmd> captor =
+                ArgumentCaptor.forClass(com.dzgylxt.vo.budget.BudgetOccupyCmd.class);
+        Mockito.verify(budgetOccupyService).release(captor.capture());
+        assertEquals(0, captor.getValue().getAmount().compareTo(new BigDecimal("10560")));
     }
 }
