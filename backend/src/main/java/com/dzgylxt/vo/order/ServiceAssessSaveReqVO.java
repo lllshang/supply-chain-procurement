@@ -20,4 +20,19 @@ public class ServiceAssessSaveReqVO implements Serializable {
     /** 附件 JSON 数组（file_meta.file_key） */
     private List<String> fileKeys;
     private String remark;
+
+    /**
+     * P3c-A5：扣款明细（一条或多条；PRD L812）。传则按明细落 service_deduction_item，
+     * 并以 Σ 明细回填 deduct_amount；不传（旧接口/单条场景）沿用 deduct_amount 原值。
+     */
+    private List<DeductionItemVO> deductionItems;
+
+    /** P3c-A5：扣款明细行。 */
+    @Data
+    public static class DeductionItemVO implements Serializable {
+        /** 扣款项目（取服务考核指标） */
+        private String itemName;
+        private BigDecimal amount;
+        private String reason;
+    }
 }

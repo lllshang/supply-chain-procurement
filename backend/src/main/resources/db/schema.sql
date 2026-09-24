@@ -1049,4 +1049,16 @@ ALTER TABLE `quotation`
 ALTER TABLE `award_item`
   ADD COLUMN `tax_rate` DECIMAL(5,2) NULL COMMENT '税率%（P3c-A2：报价继承/线下手填）' AFTER `conv_rate_snapshot`;
 
+-- P3c-A5：服务扣款明细子表（PRD L812 一条或多条；service_assess.deduct_amount 保留为 Σ 冗余）
+CREATE TABLE IF NOT EXISTS service_deduction_item (
+    id          BIGINT        NOT NULL PRIMARY KEY,
+    assess_id   BIGINT        NOT NULL COMMENT '服务考核单ID',
+    item_name   VARCHAR(100)  NOT NULL COMMENT '扣款项目（取服务考核指标）',
+    amount      DECIMAL(18,2) NOT NULL COMMENT '扣款金额',
+    reason      VARCHAR(200)  NULL COMMENT '扣款原因',
+    created_by BIGINT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='服务扣款明细（P3c-A5）';
+
 SET FOREIGN_KEY_CHECKS = 1;

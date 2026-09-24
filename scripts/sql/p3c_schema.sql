@@ -122,6 +122,39 @@ DELIMITER ;
 CALL p3c_add_a2_award_tax();
 DROP PROCEDURE IF EXISTS p3c_add_a2_award_tax;
 
+-- ============================================================
+-- A5 服务扣款明细子表（PRD L812 一条或多条扣款明细；BR-15 L1090）
+-- service_deduction_item：粒度细化；service_assess.deduct_amount 保留为 Σ 汇总冗余
+-- （结算 R-STL-02 取数口径不变）。应付非负：Σ 明细 ≤ 订单应付基数。
+-- ============================================================
+
+DROP PROCEDURE IF EXISTS p3c_add_a5_objects;
+
+DELIMITER $$
+
+CREATE PROCEDURE p3c_add_a5_objects()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.TABLES
+                   WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'service_deduction_item') THEN
+        CREATE TABLE `service_deduction_item` (
+            id          BIGINT        NOT NULL PRIMARY KEY,
+            assess_id   BIGINT        NOT NULL COMMENT '服务考核单ID',
+            item_name   VARCHAR(100)  NOT NULL COMMENT '扣款项目（取服务考核指标）',
+            amount      DECIMAL(18,2) NOT NULL COMMENT '扣款金额',
+            reason      VARCHAR(200)  NULL COMMENT '扣款原因',
+            created_by BIGINT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_by BIGINT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            deleted TINYINT NOT NULL DEFAULT 0
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='服务扣款明细（P3c-A5）';
+    END IF;
+END$$
+
+DELIMITER ;
+
+CALL p3c_add_a5_objects();
+DROP PROCEDURE IF EXISTS p3c_add_a5_objects;
+
 -- 验证（可选执行）：
 -- SHOW TABLES LIKE 'contract_price_item';
 -- SHOW COLUMNS FROM order_item LIKE 'contract_item_id';
