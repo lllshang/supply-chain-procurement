@@ -27,4 +27,21 @@ public class ContractSaveReqVO implements Serializable {
     /** 附件 JSON 数组（file_meta.file_key，多附件） */
     private List<String> fileKeys;
     private String remark;
+
+    /**
+     * P3c-A1：手工价格清单明细（无来源定标时维护；有定标时忽略，
+     * 由 {@code award_item} 自动继承生成 source_type=1）。
+     */
+    private List<PriceItemVO> priceItems;
+
+    /** P3c-A1：手工价格清单行。 */
+    @Data
+    public static class PriceItemVO implements Serializable {
+        private Long skuId;
+        /** 含税单价（基本单位口径） */
+        private BigDecimal unitPrice;
+        /** 数量（基本单位口径） */
+        private BigDecimal qty;
+        private String remark;
+    }
 }

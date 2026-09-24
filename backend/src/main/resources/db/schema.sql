@@ -1018,4 +1018,25 @@ CREATE TABLE IF NOT EXISTS price_history (
     deleted TINYINT NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='价格历史（P3 §1.4 价格库）';
 
+-- ============================================================
+-- P3c-A1（D13 主批首项）：合同价格清单（PRD BR-26 L1101 合同价格必须与订单一致）
+-- 下单第四重校验取数表；无清单记录的合同免价格校验（框架/存量），走合同额度闸兜底。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS contract_price_item (
+    id             BIGINT        NOT NULL PRIMARY KEY,
+    contract_id    BIGINT        NOT NULL COMMENT '合同ID',
+    sku_id         BIGINT        NOT NULL COMMENT 'SKU',
+    unit_price     DECIMAL(18,2) NULL COMMENT '含税单价（基本单位口径）',
+    qty            DECIMAL(18,3) NULL COMMENT '数量（基本单位口径）',
+    source_type    TINYINT       NOT NULL DEFAULT 1 COMMENT '来源：1=定标继承 2=手工维护',
+    remark         VARCHAR(255)  NULL,
+    created_by BIGINT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='合同价格清单（P3c-A1）';
+
+-- P3c-A1：order_item 补命中清单行ID（第四重校验回填，追溯订单价格来源）
+ALTER TABLE `order_item`
+  ADD COLUMN `contract_item_id` BIGINT NULL COMMENT '命中的合同价格清单行（P3c-A1 第四重校验回填）' AFTER `planned_qty`;
+
 SET FOREIGN_KEY_CHECKS = 1;

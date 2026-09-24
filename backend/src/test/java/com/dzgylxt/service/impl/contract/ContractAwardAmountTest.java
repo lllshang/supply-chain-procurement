@@ -54,6 +54,9 @@ class ContractAwardAmountTest {
     private AwardItemMapper awardItemMapper;
 
     @Mock
+    private com.dzgylxt.mapper.contract.ContractPriceItemMapper contractPriceItemMapper;
+
+    @Mock
     private BusinessNoGenerator businessNoGenerator;
 
     private ContractServiceImpl service;
@@ -72,6 +75,7 @@ class ContractAwardAmountTest {
         service = Mockito.spy(new ContractServiceImpl());
         ReflectionTestUtils.setField(service, "supplierService", supplierService);
         ReflectionTestUtils.setField(service, "awardItemMapper", awardItemMapper);
+        ReflectionTestUtils.setField(service, "contractPriceItemMapper", contractPriceItemMapper);
         ReflectionTestUtils.setField(service, "businessNoGenerator", businessNoGenerator);
 
         SupplierAdmissionVO ok = new SupplierAdmissionVO();
@@ -123,5 +127,53 @@ class ContractAwardAmountTest {
         req.setValidFrom(LocalDate.of(2026, 9, 22));
         req.setValidTo(LocalDate.of(2027, 9, 21));
         return req;
+    }
+
+    // ---------------- P3c-A1：合同价格清单生成（双来源继承） ----------------
+
+    /** AC④：定标 2 SKU → 合同价格清单 2 行，source=1 且单价/数量与定标一致。 */
+    @Test
+    void generatePriceItems_fromAward_inheritsTwoRows() {
+        service.generatePriceItems(9001L, AWARD_ID, null);
+
+        ArgumentCaptor<com.dzgylxt.entity.contract.ContractPriceItem> captor =
+                ArgumentCaptor.forClass(com.dzgylxt.entity.contract.ContractPriceItem.class);
+        verify(contractPriceItemMapper, Mockito.times(2)).insert(captor.capture());
+        List<com.dzgylxt.entity.contract.ContractPriceItem> rows = captor.getAllValues();
+        assertEquals(2, rows.size());
+        assertEquals(1, rows.get(0).getSourceType(), "定标继承 source=1");
+        assertEquals(new BigDecimal("88"), rows.get(0).getUnitPrice());
+        assertEquals(new BigDecimal("144"), rows.get(0).getQty());
+        assertEquals(9001L, rows.get(0).getContractId());
+        assertEquals(new BigDecimal("90"), rows.get(1).getUnitPrice());
+    }
+
+    /** 无定标 + 手工明细 → source=2；缺单价拒绝。 */
+    @Test
+    void generatePriceItems_manual_sourceType2_andValidates() {
+        ContractSaveReqVO.PriceItemVO vo = new ContractSaveReqVO.PriceItemVO();
+        vo.setSkuId(5001L);
+        vo.setUnitPrice(new BigDecimal("88.5"));
+        vo.setQty(new BigDecimal("3"));
+        service.generatePriceItems(9002L, null, List.of(vo));
+
+        ArgumentCaptor<com.dzgylxt.entity.contract.ContractPriceItem> captor =
+                ArgumentCaptor.forClass(com.dzgylxt.entity.contract.ContractPriceItem.class);
+        verify(contractPriceItemMapper).insert(captor.capture());
+        assertEquals(2, captor.getValue().getSourceType(), "手工维护 source=2");
+        assertEquals(new BigDecimal("88.50"), captor.getValue().getUnitPrice());
+
+        ContractSaveReqVO.PriceItemVO bad = new ContractSaveReqVO.PriceItemVO();
+        bad.setSkuId(5002L);   // 缺单价
+        assertThrows(BizException.class, () -> service.generatePriceItems(9003L, null, List.of(bad)));
+        // 覆盖式：重建前先清旧清单（重提/改单场景不残留）
+    }
+
+    /** 无定标且无手工明细 → 不生成清单（该合同免价格校验，走额度闸兜底）。 */
+    @Test
+    void generatePriceItems_none_noRows() {
+        service.generatePriceItems(9004L, null, null);
+        verify(contractPriceItemMapper, Mockito.never())
+                .insert(any(com.dzgylxt.entity.contract.ContractPriceItem.class));
     }
 }

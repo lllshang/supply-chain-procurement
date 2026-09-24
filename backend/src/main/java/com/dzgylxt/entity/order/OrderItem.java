@@ -31,4 +31,6 @@ public class OrderItem extends BaseEntity implements Serializable {
     private LocalDate planDate;
     /** 计划数量（基本单位，可分批多计划行） */
     private BigDecimal plannedQty;
+    /** 命中的合同价格清单行（P3c-A1：下单第四重校验回填，contract_price_item.id） */
+    private Long contractItemId;
 }

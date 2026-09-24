@@ -96,6 +96,9 @@ class P2bBudgetLifecycleTest {
     private AwardItemMapper awardItemMapper;
     @Mock
     private ContractMapper contractMapper;
+
+    @Mock
+    private com.dzgylxt.mapper.contract.ContractPriceItemMapper contractPriceItemMapper;
     @Mock
     private QuotationMapper quotationMapper;
     @Mock
@@ -181,6 +184,8 @@ class P2bBudgetLifecycleTest {
         // ---- OrderServiceImpl（④⑤ 用例）----
         orderService = new com.dzgylxt.service.impl.order.OrderServiceImpl();
         ReflectionTestUtils.setField(orderService, "contractMapper", contractMapper);
+        when(contractPriceItemMapper.selectByContract(any(Long.class))).thenReturn(java.util.List.of());
+        ReflectionTestUtils.setField(orderService, "contractPriceItemMapper", contractPriceItemMapper);
         ReflectionTestUtils.setField(orderService, "awardMapper", awardMapper);
         ReflectionTestUtils.setField(orderService, "applyMapper", applyMapper);
         ReflectionTestUtils.setField(orderService, "orderItemMapper", orderItemMapper);

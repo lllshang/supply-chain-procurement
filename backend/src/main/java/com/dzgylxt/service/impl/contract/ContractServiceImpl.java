@@ -9,9 +9,11 @@ import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.contract.Contract;
+import com.dzgylxt.entity.contract.ContractPriceItem;
 import com.dzgylxt.entity.purchase.AwardItem;
 import com.dzgylxt.enums.ContractStatus;
 import com.dzgylxt.mapper.contract.ContractMapper;
+import com.dzgylxt.mapper.contract.ContractPriceItemMapper;
 import com.dzgylxt.mapper.purchase.AwardItemMapper;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IContractService;
@@ -47,6 +49,10 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
 
     @Autowired
     private AwardItemMapper awardItemMapper;
+
+    /** P3c-A1：合同价格清单（下单第四重校验数据源）。 */
+    @Autowired
+    private ContractPriceItemMapper contractPriceItemMapper;
 
     @Autowired
     private ISupplierService supplierService;
@@ -115,7 +121,56 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
         contract.setVersion(0);
         contract.setRemark(req.getRemark());
         save(contract);
+        // P3c-A1：生成合同价格清单（有定标→继承 award_item；无定标→手工明细）
+        generatePriceItems(contract.getId(), req.getAwardId(), req.getPriceItems());
         return contract.getId();
+    }
+
+    /**
+     * P3c-A1：生成合同价格清单（规格裁决② 双来源继承）。
+     *
+     * <p>有来源定标 → 由 {@code award_item}（单价×基本单位数量）自动生成，source_type=1；
+     * 无定标（D2 手填/框架）→ 取请求中的手工明细，source_type=2；两者皆无 → 不生成清单，
+     * 该合同免价格校验（走合同额度闸兜底，框架协议/存量合同语义）。</p>
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void generatePriceItems(Long contractId, Long awardId,
+                                   List<ContractSaveReqVO.PriceItemVO> manualItems) {
+        // 覆盖式：先清旧清单（重提/改单场景），再重建
+        contractPriceItemMapper.delete(Wrappers.<ContractPriceItem>lambdaQuery()
+                .eq(ContractPriceItem::getContractId, contractId));
+        List<ContractPriceItem> rows = new ArrayList<>();
+        if (awardId != null) {
+            List<AwardItem> awardItems = awardItemMapper.selectList(
+                    Wrappers.<AwardItem>lambdaQuery().eq(AwardItem::getAwardId, awardId));
+            for (AwardItem ai : awardItems) {
+                ContractPriceItem row = new ContractPriceItem();
+                row.setContractId(contractId);
+                row.setSkuId(ai.getSkuId());
+                row.setUnitPrice(ai.getPrice());
+                row.setQty(ai.getQtyInBaseUnit());
+                row.setSourceType(1);
+                row.setRemark("定标继承");
+                rows.add(row);
+            }
+        } else if (manualItems != null && !manualItems.isEmpty()) {
+            for (ContractSaveReqVO.PriceItemVO vo : manualItems) {
+                if (vo.getSkuId() == null || vo.getUnitPrice() == null) {
+                    throw new BizException(ResultCode.PARAM_ERROR, "手工价格清单必须填写 SKU 与单价");
+                }
+                ContractPriceItem row = new ContractPriceItem();
+                row.setContractId(contractId);
+                row.setSkuId(vo.getSkuId());
+                row.setUnitPrice(vo.getUnitPrice().setScale(2, RoundingMode.HALF_UP));
+                row.setQty(vo.getQty());
+                row.setSourceType(2);
+                row.setRemark(vo.getRemark());
+                rows.add(row);
+            }
+        }
+        for (ContractPriceItem row : rows) {
+            contractPriceItemMapper.insert(row);
+        }
     }
 
     @Override

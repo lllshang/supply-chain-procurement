@@ -11,6 +11,7 @@ import com.dzgylxt.common.RedisLockUtil;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.catalog.UnitConversion;
 import com.dzgylxt.entity.contract.Contract;
+import com.dzgylxt.entity.contract.ContractPriceItem;
 import com.dzgylxt.entity.order.Arrival;
 import com.dzgylxt.entity.order.OrderChange;
 import com.dzgylxt.entity.order.OrderItem;
@@ -28,6 +29,7 @@ import com.dzgylxt.enums.OrderStatus;
 import com.dzgylxt.enums.PurchaseApplyStatus;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.contract.ContractMapper;
+import com.dzgylxt.mapper.contract.ContractPriceItemMapper;
 import com.dzgylxt.mapper.order.ArrivalItemMapper;
 import com.dzgylxt.mapper.order.ArrivalMapper;
 import com.dzgylxt.mapper.order.OrderChangeMapper;
@@ -85,6 +87,10 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
     @Autowired
     private ContractMapper contractMapper;
+
+    /** P3c-A1：合同价格清单（下单第四重校验取数）。 */
+    @Autowired
+    private ContractPriceItemMapper contractPriceItemMapper;
 
     @Autowired
     private PurchaseApplyItemMapper applyItemMapper;
@@ -267,6 +273,35 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                 line.qtyBase = qtyBase;
                 line.amount = item.getPrice().multiply(qtyBase).setScale(2, java.math.RoundingMode.HALF_UP);
                 lines.add(line);
+            }
+
+            // 校验④（P3c-A1 / PRD BR-26 L1101）：合同价格清单一致性——硬拦截，无旁路
+            // 无清单记录的合同（框架协议仅控金额 / 存量合同）跳过本重，走合同额度闸兜底
+            List<ContractPriceItem> priceItems = contractPriceItemMapper.selectByContract(contract.getId());
+            boolean priceCheckEnabled = priceItems != null && !priceItems.isEmpty();
+            if (priceCheckEnabled) {
+                Map<Long, List<ContractPriceItem>> bySku = priceItems.stream()
+                        .collect(java.util.stream.Collectors.groupingBy(ContractPriceItem::getSkuId));
+                for (OrderLine line : lines) {
+                    List<ContractPriceItem> hits = bySku.get(line.req.getSkuId());
+                    if (hits == null || hits.isEmpty()) {
+                        throw new BizException(ResultCode.PARAM_ERROR,
+                                "下单价格与合同价格清单不一致：SKU " + line.req.getSkuId() + " 不在合同价格清单中");
+                    }
+                    BigDecimal orderPrice = line.req.getPrice().setScale(2, java.math.RoundingMode.HALF_UP);
+                    ContractPriceItem matched = hits.stream()
+                            .filter(p -> p.getUnitPrice() != null
+                                    && p.getUnitPrice().setScale(2, java.math.RoundingMode.HALF_UP)
+                                            .compareTo(orderPrice) == 0)
+                            .findFirst().orElse(null);
+                    if (matched == null) {
+                        BigDecimal listPrice = hits.get(0).getUnitPrice();
+                        throw new BizException(ResultCode.PARAM_ERROR,
+                                "下单价格与合同价格清单不一致：SKU " + line.req.getSkuId()
+                                        + " 合同清单价 " + listPrice + "，本单 " + orderPrice);
+                    }
+                    line.contractItemId = matched.getId();
+                }
             }
 
             // 校验②：已用额度 + 本单金额 ≤ 合同 amount（扣减式：available_amount -= 本单金额）
@@ -853,6 +888,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             item.setSourceAwardItem(line.req.getSourceAwardItem());
             item.setApplyItemId(line.req.getApplyItemId());
             item.setPlanDate(line.req.getPlanDate());
+            // P3c-A1：回填命中的合同价格清单行（无清单合同为 null=免检）
+            item.setContractItemId(line.contractItemId);
             orderItemMapper.insert(item);
             // 价格库埋点③：订单生成（P3 §1.4；价格取基本单位口径 #27）
             priceHistoryService.record(item.getSkuId(), order.getSupplierId(), item.getPrice(),
@@ -944,5 +981,7 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         BigDecimal rate;
         BigDecimal qtyBase;
         BigDecimal amount;
+        /** P3c-A1：命中的合同价格清单行ID（无清单合同为 null=免检） */
+        Long contractItemId;
     }
 }

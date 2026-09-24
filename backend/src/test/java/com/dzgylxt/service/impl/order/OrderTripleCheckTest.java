@@ -4,6 +4,8 @@ import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.RedisLockUtil;
 import com.dzgylxt.entity.contract.Contract;
+import com.dzgylxt.entity.contract.ContractPriceItem;
+import com.dzgylxt.entity.order.OrderItem;
 import com.dzgylxt.entity.purchase.PurchaseApply;
 import com.dzgylxt.entity.purchase.PurchaseApplyItem;
 import com.dzgylxt.enums.ContractStatus;
@@ -12,6 +14,7 @@ import com.dzgylxt.enums.OrderStatus;
 import com.dzgylxt.enums.PurchaseApplyStatus;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.contract.ContractMapper;
+import com.dzgylxt.mapper.contract.ContractPriceItemMapper;
 import com.dzgylxt.mapper.order.OrderChangeMapper;
 import com.dzgylxt.mapper.order.OrderItemMapper;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
@@ -83,6 +86,9 @@ class OrderTripleCheckTest {
     private PurchaseOrderMapper purchaseOrderMapper;
     @Mock
     private ContractMapper contractMapper;
+
+    @Mock
+    private ContractPriceItemMapper contractPriceItemMapper;
     @Mock
     private PurchaseApplyItemMapper applyItemMapper;
     @Mock
@@ -119,6 +125,9 @@ class OrderTripleCheckTest {
     void setUp() {
         service = new OrderServiceImpl();
         ReflectionTestUtils.setField(service, "contractMapper", contractMapper);
+        // P3c-A1：默认空清单=免价格校验（存量/框架合同语义）；个别用例自行覆盖
+        when(contractPriceItemMapper.selectByContract(any(Long.class))).thenReturn(java.util.List.of());
+        ReflectionTestUtils.setField(service, "contractPriceItemMapper", contractPriceItemMapper);
         ReflectionTestUtils.setField(service, "applyItemMapper", applyItemMapper);
         ReflectionTestUtils.setField(service, "applyMapper", applyMapper);
         ReflectionTestUtils.setField(service, "inquiryMapper", inquiryMapper);
@@ -336,6 +345,68 @@ class OrderTripleCheckTest {
         var e = org.junit.jupiter.api.Assertions.assertThrows(BizException.class,
                 () -> service.createOrder(createReq(new BigDecimal("101"), BigDecimal.ONE)));
         assertTrue(e.getMessage().contains("超出申请余量"));
+    }
+
+    // ---------------- P3c-A1：第四重校验（合同价格清单一致性，BR-26 硬拦截） ----------------
+
+    private ContractPriceItem priceRow(Long id, Long skuId, BigDecimal price) {
+        ContractPriceItem row = new ContractPriceItem();
+        row.setId(id);
+        row.setContractId(CONTRACT_ID);
+        row.setSkuId(skuId);
+        row.setUnitPrice(price);
+        row.setSourceType(2);
+        return row;
+    }
+
+    /** AC②：价格偏离（本单 598 vs 清单 568）→ 拦截不落库，额度不扣。 */
+    @Test
+    void createOrder_priceMismatchContractList_rejected() {
+        when(contractPriceItemMapper.selectByContract(CONTRACT_ID))
+                .thenReturn(List.of(priceRow(7001L, 9L, new BigDecimal("568"))));
+
+        var e = org.junit.jupiter.api.Assertions.assertThrows(BizException.class,
+                () -> service.createOrder(createReq(new BigDecimal("10"), new BigDecimal("598"))));
+        assertTrue(e.getMessage().contains("与合同价格清单不一致"), "实际：" + e.getMessage());
+        assertEquals(0, contractRow.availableAmount.compareTo(new BigDecimal("1000")),
+                "价格拦截先于额度扣减，额度未动");
+    }
+
+    /** SKU 不在清单中 → 拦截。 */
+    @Test
+    void createOrder_skuNotInContractList_rejected() {
+        when(contractPriceItemMapper.selectByContract(CONTRACT_ID))
+                .thenReturn(List.of(priceRow(7002L, 9999L, new BigDecimal("10"))));
+
+        var e = org.junit.jupiter.api.Assertions.assertThrows(BizException.class,
+                () -> service.createOrder(createReq(new BigDecimal("10"), new BigDecimal("10"))));
+        assertTrue(e.getMessage().contains("不在合同价格清单中"));
+    }
+
+    /** AC①：价格与清单一致 → 成功，且 contract_item_id 回填到 order_item。 */
+    @Test
+    void createOrder_priceMatchesContractList_passesAndBackfills() {
+        when(contractPriceItemMapper.selectByContract(CONTRACT_ID))
+                .thenReturn(List.of(priceRow(7003L, 9L, new BigDecimal("10"))));
+
+        List<Long> ids = service.createOrder(createReq(new BigDecimal("10"), new BigDecimal("10")));
+        assertEquals(1, ids.size());
+
+        org.mockito.ArgumentCaptor<OrderItem> captor =
+                org.mockito.ArgumentCaptor.forClass(OrderItem.class);
+        org.mockito.Mockito.verify(orderItemMapper).insert(captor.capture());
+        assertEquals(7003L, captor.getValue().getContractItemId(), "回填命中的清单行ID");
+    }
+
+    /** AC③：合同无清单记录（框架/存量）→ 免检，下单正常走额度闸。 */
+    @Test
+    void createOrder_noContractPriceList_skipsPriceCheck() {
+        when(contractPriceItemMapper.selectByContract(CONTRACT_ID)).thenReturn(List.of());
+
+        List<Long> ids = service.createOrder(createReq(new BigDecimal("10"), new BigDecimal("50")));
+        assertEquals(1, ids.size(), "无清单合同免价格校验（与清单价 568 无关，50 亦放行）");
+        assertEquals(0, contractRow.availableAmount.compareTo(new BigDecimal("500")),
+                "额度闸照常扣减：1000 - 10×50 = 500");
     }
 
     /** 规则①：非 EFFECTIVE 合同拒绝。 */
