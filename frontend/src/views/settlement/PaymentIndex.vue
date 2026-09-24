@@ -22,7 +22,7 @@
         <el-table-column prop="createdAt" label="创建时间" width="180" />
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="['UNPAID', 'REJECTED'].includes(row.status)" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === 'UNPAID'" link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button v-if="row.status === 'UNPAID'" link type="success" @click="openConfirm(row)">登记确认</el-button>
           </template>
         </el-table-column>
