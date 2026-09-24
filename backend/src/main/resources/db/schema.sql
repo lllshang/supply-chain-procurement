@@ -953,7 +953,7 @@ CREATE TABLE IF NOT EXISTS payment (
     pay_amount    DECIMAL(18,2) NULL,
     pay_method    VARCHAR(50)   NULL,
     voucher_file  VARCHAR(200)  NULL,
-    status        TINYINT       NOT NULL DEFAULT 0 COMMENT '0=未付款 1=已付款 2=已驳回',
+    status        TINYINT       NOT NULL DEFAULT 0 COMMENT '付款状态（PB-01：0=未付款 1=已付款；部分付款为结算维度派生，不落库）',
     remark        VARCHAR(255)  NULL,
     created_by BIGINT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_by BIGINT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

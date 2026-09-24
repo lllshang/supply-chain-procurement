@@ -35,11 +35,12 @@ import java.util.List;
  * 付款登记服务实现（P3 设计 §2.2 / T05+T06；R6 修订：付款登记免审批）。
  *
  * <p>R6（PRD §6.11.1 L903）：取消 PAYMENT bizType 与 submit 审批流——付款创建后
- * 直接待登记，财务线下付款后 {@link #confirmPayment} 登记凭证确认。R5：订单状态机
- * 不再流转 PAID——确认后按该结算单累计实付 vs 应付判定 {@code PARTIAL(1)/PAID(2)}
- * （设计 §2.2 原文口径，语义载体=付款单据行）；付清进度由订单 VO 派生字段
- * {@code paidProgress} 展示。{@code reviewed_by/at} 停用保留兼容。付款确认无预算动作
- * （核销已在结算完成，规格 §5 行 12）。</p>
+ * 直接待登记，财务线下付款后 {@link #confirmPayment} 登记凭证确认 → 整单 PAID。
+ * PB-01（规格 §10，裁决 b676143 口径 B）：部分付款属结算维度而非付款单维度——
+ * 付款记录无中间态；"未付款/部分付款/已付清"由结算单派生字段
+ * {@code payStatus/paidProgress} 按 Σ已确认付款 vs（结算应付 − 已抵扣预付）计算。
+ * R5：订单状态机不再流转 PAID，付清进度由订单 VO 派生字段 {@code paidProgress} 展示。
+ * {@code reviewed_by/at} 停用保留兼容。付款确认无预算动作（核销已在结算完成，规格 §5 行 12）。</p>
  */
 @Service
 public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
@@ -120,12 +121,9 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
         p.setPayDate(payDate == null ? LocalDate.now() : payDate);
         p.setConfirmedBy(UserContext.getCurrentUserId());
         p.setConfirmedAt(java.time.LocalDateTime.now());
-        // P2-1（设计 §2.2 原文口径，语义载体=付款单据行）：确认后按该结算单累计实付 vs 应付判定——
-        // 累计实付(含本次) ≥ 应付 → PAID(2)；累计实付 < 应付 → PARTIAL(1)（分期部分付清）
-        Settlement settlement = requireSettlement(p.getSettlementId());
-        BigDecimal paidAfter = nvl(baseMapper.sumPaidAmount(p.getSettlementId())).add(nvl(p.getPayAmount()));
-        p.setStatus(paidAfter.compareTo(nvl(settlement.getAmount())) >= 0
-                ? PaymentStatus.PAID : PaymentStatus.PARTIAL);
+        // PB-01（口径 B）：付款记录无中间态——登记确认即整单 PAID；
+        // "未付款/部分付款/已付清"在结算维度由 Settlement 派生字段（payStatus/paidProgress）计算
+        p.setStatus(PaymentStatus.PAID);
         updateById(p);
         // R5：订单状态机不再流转 PAID——付清进度由订单 VO 派生展示（paidProgress），此处不写订单状态
     }

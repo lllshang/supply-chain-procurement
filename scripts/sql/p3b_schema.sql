@@ -44,8 +44,21 @@ DELIMITER ;
 CALL p3b_add_settlement_columns();
 DROP PROCEDURE IF EXISTS p3b_add_settlement_columns;
 
+-- ============================================================
+-- PB-01（P3b 第二批，PM 裁决 b676143）：payment 状态重编号
+-- 采口径 B：部分付款属结算维度（不落库枚举），付款状态收敛 UNPAID(0)/PAID(1)。
+-- 旧库 2=已付款（P3b-T01 编号）→ 1；PARTIAL 从未落库（QA 实证零赋值点），无数据冲突。
+-- 幂等性：重跑时无 status=2 行，no-op。
+-- ============================================================
+UPDATE `payment` SET `status` = 1 WHERE `status` = 2;
+
+ALTER TABLE `payment`
+  MODIFY COLUMN `status` TINYINT NOT NULL DEFAULT 0
+    COMMENT '付款状态（PB-01：0=未付款 1=已付款；部分付款为结算维度派生，不落库）';
+
 -- 验证（可选执行）：
 -- SHOW COLUMNS FROM settlement LIKE 'payment_stage';
 -- SHOW COLUMNS FROM settlement LIKE 'prepayment_deduction';
+-- SELECT DISTINCT status FROM payment;  -- 应仅 0/1
 
 SET FOREIGN_KEY_CHECKS = 1;

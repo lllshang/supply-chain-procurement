@@ -6,6 +6,7 @@ import com.dzgylxt.vo.settlement.SettlementDraftVO;
 import com.dzgylxt.vo.settlement.SettlementSaveReqVO;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 
 /**
  * 结算服务（P3 设计 §2.1 / T04；R4 预付款结算 + R5 状态机收敛）。
@@ -45,4 +46,11 @@ public interface ISettlementService extends IService<Settlement> {
     com.baomidou.mybatisplus.core.metadata.IPage<Settlement> page(long current, long size,
                                                                   Long orderId, Long supplierId,
                                                                   com.dzgylxt.enums.SettlementStatus status);
+
+    /**
+     * PB-01（口径 B）：回填结算维度派生付款进度——paid=Σ已确认付款、
+     * payable=结算应付−已抵扣预付、payStatus=UNPAID/PARTIAL/PAID、paidProgress=paid/payable
+     * （0~1 封顶）。VO 派生不落库，语义载体=结算单（付款记录无中间态）。
+     */
+    void fillPayProgress(Collection<Settlement> settlements);
 }

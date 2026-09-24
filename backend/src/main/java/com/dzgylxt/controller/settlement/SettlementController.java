@@ -39,6 +39,8 @@ public class SettlementController {
                                           @RequestParam(required = false) Long supplierId,
                                           @RequestParam(required = false) SettlementStatus status) {
         IPage<Settlement> result = settlementService.page(current, size, orderId, supplierId, status);
+        // PB-01：回填结算维度派生付款进度（payStatus/paidProgress，不落库）
+        settlementService.fillPayProgress(result.getRecords());
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
     }
 
@@ -46,7 +48,12 @@ public class SettlementController {
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/{id}")
     public R<Settlement> getById(@PathVariable Long id) {
-        return R.ok(settlementService.getById(id));
+        Settlement settlement = settlementService.getById(id);
+        if (settlement != null) {
+            // PB-01：回填结算维度派生付款进度（payStatus/paidProgress，不落库）
+            settlementService.fillPayProgress(java.util.List.of(settlement));
+        }
+        return R.ok(settlement);
     }
 
     /** 订单入口带出草稿。 */

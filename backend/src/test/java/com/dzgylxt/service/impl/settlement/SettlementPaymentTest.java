@@ -91,6 +91,8 @@ class SettlementPaymentTest {
         ReflectionTestUtils.setField(settlementService, "serviceAssessMapper", serviceAssessMapper);
         ReflectionTestUtils.setField(settlementService, "baseMapper", settlementMapper);
         ReflectionTestUtils.setField(settlementService, "budgetOccupyService", budgetOccupyService);
+        // PB-01：结算维度派生付款进度（fillPayProgress）取数依赖
+        ReflectionTestUtils.setField(settlementService, "paymentMapper", paymentMapper);
 
         // R6：付款免审批——PaymentServiceImpl 无审批网关依赖
         paymentService = new PaymentServiceImpl();

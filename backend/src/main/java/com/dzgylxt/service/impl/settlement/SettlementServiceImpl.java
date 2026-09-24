@@ -26,6 +26,7 @@ import com.dzgylxt.mapper.order.ArrivalMapper;
 import com.dzgylxt.mapper.order.OrderItemMapper;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
 import com.dzgylxt.mapper.order.ServiceAssessMapper;
+import com.dzgylxt.mapper.settlement.PaymentMapper;
 import com.dzgylxt.mapper.settlement.SettlementMapper;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IBudgetOccupyService;
@@ -42,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -77,6 +79,10 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
 
     @Autowired
     private IBudgetOccupyService budgetOccupyService;
+
+    /** PB-01：结算维度派生付款进度取数（Σ已确认付款） */
+    @Autowired
+    private PaymentMapper paymentMapper;
 
     /** 网关经 ObjectProvider 注入（网关 → 回调处理器 → 本服务，防循环依赖）。 */
     private final ApprovalGateway approvalGateway;
@@ -359,6 +365,36 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
             wrapper.eq(Settlement::getStatus, status);
         }
         return page(new Page<>(current, size), wrapper.orderByDesc(Settlement::getId));
+    }
+
+    /**
+     * PB-01（口径 B）：结算维度派生付款进度——付款记录无中间态（UNPAID→PAID），
+     * "未付款/部分付款/已付清"按 Σ已确认付款 vs（结算应付 − 已抵扣预付）在结算单上计算：
+     * paid=0 → UNPAID；0&lt;paid&lt;payable → PARTIAL；paid≥payable → PAID；
+     * paidProgress = paid/payable（0~1 封顶；payable≤0 视为已付清=1）。
+     */
+    @Override
+    public void fillPayProgress(Collection<Settlement> settlements) {
+        if (settlements == null) {
+            return;
+        }
+        for (Settlement s : settlements) {
+            BigDecimal paid = nvl(paymentMapper.sumPaidAmount(s.getId()));
+            BigDecimal payable = nvl(s.getAmount()).subtract(nvl(s.getPrepaymentDeduction()))
+                    .max(BigDecimal.ZERO);
+            s.setPaidAmount(paid);
+            s.setPayableAmount(payable);
+            if (paid.compareTo(BigDecimal.ZERO) == 0) {
+                s.setPayStatus("UNPAID");
+            } else if (paid.compareTo(payable) >= 0) {
+                s.setPayStatus("PAID");
+            } else {
+                s.setPayStatus("PARTIAL");
+            }
+            s.setPaidProgress(payable.compareTo(BigDecimal.ZERO) <= 0
+                    ? BigDecimal.ONE
+                    : paid.divide(payable, 4, RoundingMode.HALF_UP).min(BigDecimal.ONE));
+        }
     }
 
     // ---------------- 内部 ----------------

@@ -1,5 +1,6 @@
 package com.dzgylxt.entity.settlement;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.common.BaseEntity;
 import com.dzgylxt.enums.SettleMode;
@@ -48,4 +49,19 @@ public class Settlement extends BaseEntity implements Serializable {
     /** R4：本单抵扣的预付款合计（尾款结算自动扣减，committed 口径含在途；非尾款结算恒 0） */
     private BigDecimal prepaymentDeduction;
     private String remark;
+
+    // ---------------- PB-01 结算维度派生付款进度（VO 派生，不落库） ----------------
+
+    /** PB-01：Σ已确认付款（该结算单，不落库） */
+    @TableField(exist = false)
+    private BigDecimal paidAmount;
+    /** PB-01：结算应付 = 结算金额 − 已抵扣预付（不落库） */
+    @TableField(exist = false)
+    private BigDecimal payableAmount;
+    /** PB-01：派生付款状态——UNPAID(未付款)/PARTIAL(部分付款)/PAID(已付清)，按 paid vs payable 计算（不落库） */
+    @TableField(exist = false)
+    private String payStatus;
+    /** PB-01：派生付款进度 = paid/payable（0~1 封顶，不落库） */
+    @TableField(exist = false)
+    private BigDecimal paidProgress;
 }
