@@ -260,16 +260,20 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             // 校验②：已用额度 + 本单金额 ≤ 合同 amount（扣减式：available_amount -= 本单金额）
             BigDecimal totalAmount = lines.stream().map(l -> l.amount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            int deducted = contractMapper.deductAvailable(contract.getId(), totalAmount, contract.getVersion());
+            // P2b：D2 线下补录存量合同可能缺 version/available_amount——空值兜底
+            //（version 空=0 首版；available_amount 空=全额可用），避免 NPE 并保证预算闸可达
+            Integer contractVersion = contract.getVersion() == null ? Integer.valueOf(0) : contract.getVersion();
+            int deducted = contractMapper.deductAvailable(contract.getId(), totalAmount, contractVersion);
             if (deducted == 0) {
                 Contract fresh = contractMapper.selectById(contract.getId());
-                deducted = contractMapper.deductAvailable(contract.getId(), totalAmount, fresh.getVersion());
+                Integer freshVersion = fresh.getVersion() == null ? Integer.valueOf(0) : fresh.getVersion();
+                deducted = contractMapper.deductAvailable(contract.getId(), totalAmount, freshVersion);
             }
             if (deducted == 0) {
                 throw new BizException(ResultCode.BIZ_ERROR,
-                        "超出合同可用额度：可用 " + contract.getAvailableAmount() + "，本单 " + totalAmount);
+                        "超出合同可用额度：可用 " + availableAmountOf(contract) + "，本单 " + totalAmount);
             }
-            contract.setAvailableAmount(contract.getAvailableAmount().subtract(totalAmount));
+            contract.setAvailableAmount(availableAmountOf(contract).subtract(totalAmount));
 
             // 落单：物料/服务按 item_type 拆单（设计 §2.6）
             List<Long> orderIds = new ArrayList<>();
@@ -467,13 +471,14 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
             // 金额差额重跑额度校验（规则②）：正差额需有足够额度
             amountDelta = amountDelta.setScale(2, java.math.RoundingMode.HALF_UP);
+            Integer contractVersion = contract.getVersion() == null ? Integer.valueOf(0) : contract.getVersion();
             if (amountDelta.compareTo(BigDecimal.ZERO) > 0) {
-                int updated = contractMapper.deductAvailable(contract.getId(), amountDelta, contract.getVersion());
+                int updated = contractMapper.deductAvailable(contract.getId(), amountDelta, contractVersion);
                 if (updated == 0) {
                     throw new BizException(ResultCode.BIZ_ERROR, "变更超出合同可用额度");
                 }
             } else if (amountDelta.compareTo(BigDecimal.ZERO) < 0) {
-                contractMapper.releaseAvailable(contract.getId(), amountDelta.abs(), contract.getVersion());
+                contractMapper.releaseAvailable(contract.getId(), amountDelta.abs(), contractVersion);
             }
             // P3 §3 行7/行8（#47 修订）：变更对冲（仅对存在真实预算占用的订单生效）；
             // 增量被预算拦截时 → 拦截 + 生成 BUDGET 升级审批任务（非纯拦截），
@@ -486,31 +491,22 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                     //（升级通过时已 force 预挂占用，正常占用会重复计账）
                     boolean upgradeCovered = consumeApprovedBudgetUpgrade(order, amountDelta);
                     if (!upgradeCovered) {
-                        BudgetOccupyCmd occupyCmd = new BudgetOccupyCmd();
-                        // QA #35：与 submit/createOrder 同源回填控制维度（dept×subject×period），
-                        // 否则服务端校验「预算占用命令非法」；无申请来源的订单无预算上下文，不占用
-                        if (order.getApplyId() != null) {
-                            PurchaseApply srcApply = applyMapper.selectById(order.getApplyId());
-                            if (srcApply != null) {
-                                occupyCmd.setDeptId(srcApply.getDeptId());
-                                // QA2-01：变更增量占用落到申请科目行（控制单元=部门×科目×月份）
-                                occupyCmd.setSubjectId(srcApply.getBudgetSubjectId());
-                                occupyCmd.setExpectedDate(srcApply.getExpectedDate());
-                            }
+                        // P2b-5：变更预算锚点回填链补全（申请 → contract.award_id → award.dept/subject），
+                        // 无申请来源订单不再整体绕过预算硬控
+                        BudgetOccupyCmd occupyCmd = buildChangeOccupyCmd(order, amountDelta);
+                        if (occupyCmd == null) {
+                            // 锚点缺失 = 无法校验 = 硬控拦截（禁止静默绕过；PRD §6.4.3 / P3 #47 意图）
+                            throw new BizException(ResultCode.BIZ_ERROR,
+                                    "变更增额无预算锚点（无申请来源且合同未关联有效定标），预算硬控拦截："
+                                            + "请先补录预算锚点或改走线下补录通道");
                         }
-                        occupyCmd.setAmount(amountDelta);
-                        occupyCmd.setBizType(BudgetBizType.ORDER);
-                        occupyCmd.setBizId(id);
-                        occupyCmd.setRemark("订单变更增额");
-                        if (occupyCmd.getDeptId() != null) {
-                            OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
-                            if (!result.isAvailable()) {
-                                // #47：拦截 + 升级——生成 BUDGET 升级审批任务后回滚本次变更
-                                createBudgetUpgradeTask(order, amountDelta, occupyCmd, result);
-                                throw new BizException(ResultCode.BIZ_ERROR,
-                                        "变更增额超出预算余额：" + result.getMessage()
-                                                + "；已生成 BUDGET 升级审批，通过后请重提变更");
-                            }
+                        OccupyResultVO result = budgetOccupyService.occupy(occupyCmd);
+                        if (!result.isAvailable()) {
+                            // #47：拦截 + 升级——生成 BUDGET 升级审批任务后回滚本次变更
+                            createBudgetUpgradeTask(order, amountDelta, occupyCmd, result);
+                            throw new BizException(ResultCode.BIZ_ERROR,
+                                    "变更增额超出预算余额：" + result.getMessage()
+                                            + "；已生成 BUDGET 升级审批，通过后请重提变更");
                         }
                     } else {
                         // 升级占用已预挂（含 budgetOccupied 增量），重提不再重复累加
@@ -597,6 +593,42 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     // ---------------- 内部方法 ----------------
 
     /**
+     * P2b-5：变更增额预算锚点回填链——① order.applyId → apply.dept/subject/expectedDate；
+     * ② contract.award_id → award.dept/subject（D9 线下定标锚点，expectedDate 空 = 提交当月）。
+     * 两条链均未命中返回 null（调用方硬控拦截，禁止静默绕过）。
+     */
+    private BudgetOccupyCmd buildChangeOccupyCmd(PurchaseOrder order, BigDecimal amountDelta) {
+        BudgetOccupyCmd cmd = new BudgetOccupyCmd();
+        if (order.getApplyId() != null) {
+            PurchaseApply apply = applyMapper.selectById(order.getApplyId());
+            if (apply != null && apply.getDeptId() != null) {
+                cmd.setDeptId(apply.getDeptId());
+                // 控制单元=部门×科目×月份（QA2-01 口径）
+                cmd.setSubjectId(apply.getBudgetSubjectId());
+                cmd.setExpectedDate(apply.getExpectedDate());
+            }
+        }
+        if (cmd.getDeptId() == null && order.getContractId() != null) {
+            Contract contract = contractMapper.selectById(order.getContractId());
+            if (contract != null && contract.getAwardId() != null) {
+                com.dzgylxt.entity.purchase.Award award = awardMapper.selectById(contract.getAwardId());
+                if (award != null && award.getDeptId() != null) {
+                    cmd.setDeptId(award.getDeptId());
+                    cmd.setSubjectId(award.getSubjectId());
+                }
+            }
+        }
+        if (cmd.getDeptId() == null) {
+            return null;
+        }
+        cmd.setAmount(amountDelta);
+        cmd.setBizType(BudgetBizType.ORDER);
+        cmd.setBizId(order.getId());
+        cmd.setRemark("订单变更增额");
+        return cmd;
+    }
+
+    /**
      * #47：变更增额被预算拦截时生成 BUDGET 升级审批任务。
      *
      * <p>任务必须在本事务回滚后留存（拦截即回滚）——经 REQUIRES_NEW 独立事务落库；
@@ -612,6 +644,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         payload.set("orderId", order.getId());
         payload.set("applyId", order.getApplyId());
         payload.set("deptId", occupyCmd.getDeptId());
+        // P2b-5：升级 force 占用同样落到锚点科目行（控制单元=部门×科目×月份）
+        payload.set("subjectId", occupyCmd.getSubjectId());
         payload.set("expectedDate", occupyCmd.getExpectedDate() == null
                 ? null : occupyCmd.getExpectedDate().toString());
         payload.set("amount", amountDelta);
@@ -645,7 +679,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
      * @return true=存在匹配任务并已消费（调用方跳过占用）
      */
     private boolean consumeApprovedBudgetUpgrade(PurchaseOrder order, BigDecimal amountDelta) {
-        if (approvalTaskMapper == null || order.getApplyId() == null) {
+        // P2b-5：无申请来源订单（D9 锚点）同样可走升级放行——bizId=订单 id（QA2-06）已可精确定位，
+        // 不再以 applyId 为前置门（原条件导致线下订单升级任务永不消费）
+        if (approvalTaskMapper == null) {
             return false;
         }
         List<com.dzgylxt.entity.approval.ApprovalTask> tasks = approvalTaskMapper.selectList(
@@ -699,6 +735,13 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         }
     }
 
+    /** 合同可用额度空值兜底（D2 线下补录存量合同缺省=全额可用 amount）。 */
+    private BigDecimal availableAmountOf(Contract contract) {
+        return contract.getAvailableAmount() == null
+                ? (contract.getAmount() == null ? BigDecimal.ZERO : contract.getAmount())
+                : contract.getAvailableAmount();
+    }
+
     private ItemType itemTypeOf(PurchaseApplyItem applyItem) {
         return applyItem.getItemType() == null ? ItemType.MATERIAL : applyItem.getItemType();
     }
@@ -721,8 +764,12 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         order.setOrderNo(businessNoGenerator.nextNo("DD"));
         order.setOrderType(type);
         order.setStatus(OrderStatus.CREATED);
-        order.setBudgetOccupied(group.stream().map(l -> l.amount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)); // P3：真实占用（转移自申请）
+        // P3：真实占用（转移自申请）；P2b-6：无预算锚点订单（无申请且合同未关联定标）
+        // budget_occupied 置 0——不得记与预算系统脱钩的假占用（锚点补录走 D2 线下通道）
+        boolean hasAnchor = req.getApplyId() != null || contract.getAwardId() != null;
+        order.setBudgetOccupied(hasAnchor
+                ? group.stream().map(l -> l.amount).reduce(BigDecimal.ZERO, BigDecimal::add)
+                : BigDecimal.ZERO);
         order.setRemark(req.getRemark());
         save(order);
 
@@ -756,6 +803,20 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             transferCmd.setToBizId(order.getId());
             transferCmd.setAmount(order.getBudgetOccupied());
             transferCmd.setRemark("下单转移-订单" + order.getOrderNo());
+            budgetOccupyService.transfer(transferCmd);
+        } else if (req.getApplyId() == null
+                && contract.getAwardId() != null
+                && order.getBudgetOccupied().compareTo(BigDecimal.ZERO) > 0) {
+            // P2b-6：无申请来源订单（D9 线下定标锚点）→ AWARD→ORDER 同行转移落 ORDER 流水，
+            // budget_occupied 与预算系统挂钩（取消/变更释放按 occupiedTotal(ORDER) 守恒回冲）；
+            // award 无占用流水时 transfer 显式告警跳过（D2 手工合同无锚点场景，不阻断下单）
+            BudgetTransferCmd transferCmd = new BudgetTransferCmd();
+            transferCmd.setFromBizType(BudgetBizType.AWARD);
+            transferCmd.setFromBizId(contract.getAwardId());
+            transferCmd.setToBizType(BudgetBizType.ORDER);
+            transferCmd.setToBizId(order.getId());
+            transferCmd.setAmount(order.getBudgetOccupied());
+            transferCmd.setRemark("线下定标下单转移-订单" + order.getOrderNo());
             budgetOccupyService.transfer(transferCmd);
         }
         return order.getId();

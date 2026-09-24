@@ -121,6 +121,8 @@ public class BudgetApprovalHandler implements ApprovalCallbackHandler {
             }
             BudgetOccupyCmd cmd = new BudgetOccupyCmd();
             cmd.setDeptId(payload.getLong("deptId"));
+            // P2b-5：升级 force 占用落到锚点科目行（控制单元=部门×科目×月份）
+            cmd.setSubjectId(payload.getLong("subjectId"));
             cmd.setExpectedDate(payload.get("expectedDate") == null ? null
                     : LocalDate.parse(payload.getStr("expectedDate")));
             cmd.setAmount(amount);
