@@ -63,3 +63,13 @@ export function pageBudgetHeaders(params) {
 export function listBudgetLines(headerId) {
   return request.get(`/api/v1/budgets/${headerId}/lines`)
 }
+
+// ---- 预算执行 / 月度调整（P3 §2.3 行13；R8 一律审批留痕） ----
+// 月度调整：调增直生效；调减校验 amount≥used；超 20% 自动转 BUDGET 审批（返回 pending=true）
+export function adjustBudgetLine(lineId, data) {
+  return request.post(`/api/v1/budgets/execution/${lineId}/adjust`, data)
+}
+// 占用流水分页（P3 执行台账）
+export function pageBudgetLogs(params) {
+  return request.get('/api/v1/budgets/execution/logs', { params })
+}
