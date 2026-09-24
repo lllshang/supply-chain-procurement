@@ -139,12 +139,13 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<Long> createOrder(OrderCreateReqVO req) {
-        if (req.getContractId() == null || req.getApplyId() == null
-                || req.getItems() == null || req.getItems().isEmpty()) {
-            throw new BizException(ResultCode.PARAM_ERROR, "合同/申请/明细均必填");
+        // P2b/L747：日常订单可不关联申请（applyId 可空）——预算占用锚点=award/申请，合同额度闸必须通过
+        if (req.getContractId() == null || req.getItems() == null || req.getItems().isEmpty()) {
+            throw new BizException(ResultCode.PARAM_ERROR, "合同/明细均必填");
         }
         for (OrderCreateReqVO.OrderItemReqVO item : req.getItems()) {
-            if (item.getApplyItemId() == null || item.getSkuId() == null
+            // P2b：有申请明细则 applyItemId 必填；无申请来源明细（applyItemId=null）必须自带 itemType
+            if (item.getSkuId() == null
                     || item.getQty() == null || item.getQty().compareTo(BigDecimal.ZERO) <= 0
                     || item.getPrice() == null || item.getPrice().compareTo(BigDecimal.ZERO) < 0) {
                 throw new BizException(ResultCode.PARAM_ERROR, "下单明细行的申请明细/SKU/数量/单价非法");

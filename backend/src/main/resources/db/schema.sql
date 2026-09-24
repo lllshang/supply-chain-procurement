@@ -996,4 +996,24 @@ ALTER TABLE `purchase_apply`
 ALTER TABLE `contract`
   ADD COLUMN `subject_id` BIGINT NULL COMMENT '预算科目（S8：统计冗余，预算锚点仍=申请/award）' AFTER `contract_type`;
 
+-- ---------------- P3 遗漏合并修复：price_history 建表（原仅存于 scripts/sql/p3_schema.sql，QA 手工执行） ----------------
+-- 缺陷记录：P3 交付时未合并进本文件，导致新库自动初始化后下单埋点（PriceHistoryServiceImpl）报表不存在。
+CREATE TABLE IF NOT EXISTS price_history (
+    id             BIGINT        NOT NULL PRIMARY KEY,
+    sku_id         BIGINT        NOT NULL COMMENT 'SKU',
+    supplier_id    BIGINT        NULL COMMENT '供应商（手工/品类级价可空）',
+    price          DECIMAL(18,2) NOT NULL COMMENT '单价（基本单位口径）',
+    source         TINYINT       NOT NULL COMMENT '0=报价 1=定标 2=订单 3=手工',
+    biz_type       VARCHAR(32)   NULL COMMENT '来源单据类型（QUOTATION/AWARD/ORDER）',
+    biz_id         BIGINT        NULL COMMENT '来源单据ID',
+    effective_date DATE          NOT NULL COMMENT '生效日期（默认来源单据日期）',
+    audit_status   TINYINT       NOT NULL DEFAULT 0 COMMENT '0=待审 1=通过 2=驳回',
+    audit_by       BIGINT        NULL,
+    audit_at       DATETIME      NULL,
+    remark         VARCHAR(512)  NULL,
+    created_by BIGINT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='价格历史（P3 §1.4 价格库）';
+
 SET FOREIGN_KEY_CHECKS = 1;
