@@ -14,20 +14,20 @@ import java.math.BigDecimal;
  * <p>对账恒等式（按 budget_line_id）：{@code Σ(占用) − Σ(释放) == used_amount}；
  * 核销（WRITE_OFF）与调整（ADJUST）不参与该恒等式。</p>
  *
- * <p><b>P2b-9 口径定稿（写侧一律正数，查询侧取负）</b>：OCCUPY/RELEASE/WRITE_OFF
- * 的 amount <b>统一存正数</b>（动作语义由 action 表达，金额=本次动作绝对值，
- * balance 前后快照承载方向）；查询侧对 action∈(RELEASE, WRITE_OFF) 取负。
- * ADJUST 存带符号 delta、不参与恒等式。
- * <b>禁止写侧再落负值</b>——历史缺陷：RELEASE 落负 + 查询取负 = 双重取反，
- * 有释放历史的 bizId 占用总额翻倍（P2b 第 2 轮 QA 三实锤）。
- * 存量负值行由 {@code scripts/sql/p2b_migration.sql} 幂等翻正。</p>
+ * <p><b>P2b-9 口径定稿（方案 A：带符号流水 + 查询原样求和，全库唯一口径）</b>——
+ * 写侧约定：OCCUPY 存正数、RELEASE 存负数（{@code take.negate()}）、
+ * WRITE_OFF 存正数（used_amount 不变的构成转移）、ADJUST 存带符号 delta。
+ * 读取侧一律按带符号 amount 原样求和，仅 WRITE_OFF 取负
+ * （其不减少 used_amount 但核销占用余额）——<b>禁止对 RELEASE 再取反</b>
+ * （历史缺陷：双重取反致占用总额翻倍，P2b 第 2 轮 QA 三实锤）。
+ * 写侧口径自始未变，无存量数据迁移需求。</p>
  */
 @Mapper
 public interface BudgetOccupyLogMapper extends BaseMapper<BudgetOccupyLog> {
 
-    /** 某预算行上某业务单据的占用余额 = Σ(占用) − Σ(释放) − Σ(核销)（按行锁定语义）。 */
-    @Select("SELECT COALESCE(SUM(CASE WHEN action = 0 THEN amount"
-            + " WHEN action IN (1, 2) THEN -amount ELSE 0 END), 0)"
+    /** 某预算行上某业务单据的占用余额 = Σ(带符号占用/释放) − Σ(核销)（按行锁定语义）。 */
+    @Select("SELECT COALESCE(SUM(CASE WHEN action = 2 THEN -amount"
+            + " WHEN action IN (0, 1) THEN amount ELSE 0 END), 0)"
             + " FROM budget_occupy_log WHERE deleted = 0"
             + " AND budget_line_id = #{budgetLineId} AND biz_type = #{bizTypeCode} AND biz_id = #{bizId}")
     BigDecimal sumBizOccupied(@Param("budgetLineId") Long budgetLineId,
@@ -46,9 +46,11 @@ public interface BudgetOccupyLogMapper extends BaseMapper<BudgetOccupyLog> {
     java.util.List<Long> selectLineIdsByBiz(@Param("bizTypeCode") Integer bizTypeCode,
                                             @Param("bizId") Long bizId);
 
-    /** 每日对账：某行的 Σlog(占用−释放)（对齐 budget_line.used_amount 校验）。 */
-    @Select("SELECT COALESCE(SUM(CASE WHEN action = 0 THEN amount"
-            + " WHEN action = 1 THEN -amount ELSE 0 END), 0)"
+    /**
+     * 每日对账：某行的 Σlog(带符号占用/释放)（对齐 budget_line.used_amount 校验；
+     * 核销/调整不参与恒等式——used_amount 不因二者变化）。
+     */
+    @Select("SELECT COALESCE(SUM(CASE WHEN action IN (0, 1) THEN amount ELSE 0 END), 0)"
             + " FROM budget_occupy_log WHERE deleted = 0 AND budget_line_id = #{budgetLineId}")
     BigDecimal sumNetOccupiedByLine(@Param("budgetLineId") Long budgetLineId);
 }

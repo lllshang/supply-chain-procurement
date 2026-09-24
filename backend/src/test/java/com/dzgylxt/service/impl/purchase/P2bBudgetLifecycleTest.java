@@ -5,6 +5,8 @@ import com.dzgylxt.approval.ApprovalTaskSpec;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.RedisLockUtil;
+import com.dzgylxt.entity.budget.BudgetLine;
+import com.dzgylxt.entity.budget.BudgetOccupyLog;
 import com.dzgylxt.entity.catalog.Sku;
 import com.dzgylxt.entity.contract.Contract;
 import com.dzgylxt.entity.order.OrderItem;
@@ -18,6 +20,8 @@ import com.dzgylxt.enums.ContractStatus;
 import com.dzgylxt.enums.OrderStatus;
 import com.dzgylxt.enums.ProductStatus;
 import com.dzgylxt.mapper.approval.ApprovalTaskMapper;
+import com.dzgylxt.mapper.budget.BudgetLineMapper;
+import com.dzgylxt.mapper.budget.BudgetOccupyLogMapper;
 import com.dzgylxt.mapper.catalog.SkuMapper;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.contract.ContractMapper;
@@ -53,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -488,5 +493,201 @@ class P2bBudgetLifecycleTest {
         item.setPrice(new BigDecimal("88"));
         item.setApplyItemId(null);
         return item;
+    }
+
+    // ---------------- P2b-9 方案 A：真实预算链路终态断言（消除 mock 假象） ----------------
+
+    private static final long REAL_LINE_ID = 9001L;
+    /** 内存行/流水状态（真实 BudgetOccupyServiceImpl 的落账对象）。 */
+    private BigDecimal realUsed = BigDecimal.ZERO;
+    private int realVersion = 1;
+    private final List<BudgetOccupyLog> realLogs = new java.util.ArrayList<>();
+
+    /**
+     * 真实 {@code BudgetOccupyServiceImpl} + 内存行/流水模拟（模拟方案 A 修正后 SQL 口径：
+     * 带符号 amount 原样求和、仅 WRITE_OFF 取负）——锁定真实链路语义，不依赖对
+     * {@code IBudgetOccupyService} 的 mock（第 1 轮 mock 绿运行态炸的教训）。
+     */
+    private IBudgetOccupyService realBudgetService() {
+        realUsed = BigDecimal.ZERO;
+        realVersion = 1;
+        realLogs.clear();
+        int period = LocalDate.now().getMonthValue();
+
+        BudgetLineMapper lineMapper = Mockito.mock(BudgetLineMapper.class);
+        BudgetOccupyLogMapper logMapper = Mockito.mock(BudgetOccupyLogMapper.class);
+        RedisLockUtil redis = Mockito.mock(RedisLockUtil.class);
+
+        when(redis.tryLock(anyString(), anyLong())).thenReturn("tok");
+        when(lineMapper.selectMonthlyLines(eq(DEPT_ID), eq(LocalDate.now().getYear()), eq(SUBJECT_ID)))
+                .thenAnswer(inv -> List.of(line()));
+        when(lineMapper.selectForUpdateById(REAL_LINE_ID)).thenAnswer(inv -> line());
+        when(lineMapper.selectById(anyLong())).thenAnswer(inv -> line());
+        // 模拟 CHANGE SQL：version 匹配 && used+delta>=0 才生效（守卫 + 乐观锁）
+        when(lineMapper.changeUsedAmount(eq(REAL_LINE_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenAnswer(inv -> {
+                    BigDecimal delta = inv.getArgument(1);
+                    Integer reqVersion = inv.getArgument(2);
+                    synchronized (this) {
+                        if (realVersion != reqVersion.intValue()) {
+                            return 0;
+                        }
+                        BigDecimal next = realUsed.add(delta);
+                        if (next.compareTo(BigDecimal.ZERO) < 0) {
+                            return 0;
+                        }
+                        realUsed = next;
+                        realVersion++;
+                        return 1;
+                    }
+                });
+        when(logMapper.insert(any(BudgetOccupyLog.class))).thenAnswer(inv -> {
+            synchronized (realLogs) {
+                realLogs.add(inv.getArgument(0, BudgetOccupyLog.class));
+            }
+            return 1;
+        });
+        when(logMapper.selectLineIdsByBiz(anyInt(), anyLong())).thenAnswer(inv -> {
+            int bizType = inv.getArgument(0, Integer.class);
+            long bizId = inv.getArgument(1, Long.class);
+            java.util.Set<Long> ids = new java.util.LinkedHashSet<>();
+            synchronized (realLogs) {
+                for (BudgetOccupyLog l : realLogs) {
+                    if (l.getBizType().getValue() == bizType && l.getBizId() == bizId) {
+                        ids.add(l.getBudgetLineId());
+                    }
+                }
+            }
+            return new java.util.ArrayList<>(ids);
+        });
+        // 模拟方案 A SQL：Σ(带符号 amount)，仅 WRITE_OFF 取负（RELEASE 负值按原样参与求和）
+        when(logMapper.sumBizOccupied(anyLong(), anyInt(), anyLong())).thenAnswer(inv -> {
+            long lineId = inv.getArgument(0, Long.class);
+            int bizType = inv.getArgument(1, Integer.class);
+            long bizId = inv.getArgument(2, Long.class);
+            BigDecimal sum = BigDecimal.ZERO;
+            synchronized (realLogs) {
+                for (BudgetOccupyLog l : realLogs) {
+                    if (l.getBudgetLineId() != null && l.getBudgetLineId() == lineId
+                            && l.getBizType().getValue() == bizType && l.getBizId() == bizId) {
+                        sum = sum.add(l.getAction() == BudgetAction.WRITE_OFF
+                                ? l.getAmount().negate() : l.getAmount());
+                    }
+                }
+            }
+            return sum;
+        });
+
+        com.dzgylxt.service.impl.budget.BudgetOccupyServiceImpl real =
+                new com.dzgylxt.service.impl.budget.BudgetOccupyServiceImpl();
+        ReflectionTestUtils.setField(real, "budgetLineMapper", lineMapper);
+        ReflectionTestUtils.setField(real, "occupyLogMapper", logMapper);
+        ReflectionTestUtils.setField(real, "redisLockUtil", redis);
+        return real;
+    }
+
+    private BudgetLine line() {
+        BudgetLine l = new BudgetLine();
+        l.setId(REAL_LINE_ID);
+        l.setAmount(new BigDecimal("20000"));
+        synchronized (this) {
+            l.setUsedAmount(realUsed);
+            l.setVersion(realVersion);
+        }
+        l.setPeriod(LocalDate.now().getMonthValue());
+        return l;
+    }
+
+    /**
+     * P2b-9/P2b-4 真实链路：驳回→改金额→重提——<b>used 终值=新金额</b>（QA 验收锚①）；
+     * RELEASE 落<b>负值</b>（方案 A）、OCCUPY 落正值、Σ带符号==used（守恒，QA 验收锚④）；
+     * 多轮循环终态正确。
+     */
+    @Test
+    void awardLifecycle_realChain_rejectAndResubmit_finalAmountCorrect() {
+        ReflectionTestUtils.setField(awardService, "budgetOccupyService", realBudgetService());
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(awardItem()));
+
+        awardService.submit(AWARD_ID);
+        assertEquals(0, realUsed.compareTo(AMOUNT_V1), "提交即占：used=10560");
+        awardService.onRejected(1L, AWARD_ID, "驳回");
+        assertEquals(0, realUsed.compareTo(BigDecimal.ZERO), "驳回释放：used 回零");
+
+        awardService.updateAwardItems(AWARD_ID, offlineReq("528"));
+        awardService.submit(AWARD_ID);
+
+        // 终态：used == 当前有效定标金额（非 15840 叠加、非 3002）
+        assertEquals(0, realUsed.compareTo(AMOUNT_V2), "终态 used=5280");
+        // log 序列 + 符号断言（方案 A：OCCUPY 正、RELEASE 负）
+        assertEquals(List.of(BudgetAction.OCCUPY, BudgetAction.RELEASE, BudgetAction.OCCUPY),
+                realLogs.stream().map(BudgetOccupyLog::getAction).toList());
+        assertEquals(0, releaseLog().getAmount().compareTo(AMOUNT_V1.negate()),
+                "方案 A：RELEASE 落负值（-10560）");
+        // Σ带符号 == used（守恒，含 RELEASE 场景——双重取反缺陷下此断言必炸）
+        BigDecimal signed = realLogs.stream()
+                .map(l -> l.getAction() == BudgetAction.WRITE_OFF
+                        ? l.getAmount().negate() : l.getAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertEquals(0, signed.compareTo(realUsed), "Σ带符号 log == used（守恒）");
+
+        // 多轮循环终态正确：再驳回→调整→重提 → used 仍 5280
+        awardService.onRejected(2L, AWARD_ID, "再驳回");
+        awardService.updateAwardItems(AWARD_ID, offlineReq("528"));
+        awardService.submit(AWARD_ID);
+        assertEquals(0, realUsed.compareTo(AMOUNT_V2), "多轮循环终态仍=5280");
+    }
+
+    /** 方案 A：驳回释放的 RELEASE 流水落负值（-10560），used 回零。 */
+    @Test
+    void awardRejected_realChain_releaseStoredNegative() {
+        ReflectionTestUtils.setField(awardService, "budgetOccupyService", realBudgetService());
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(awardItem()));
+        awardService.submit(AWARD_ID);
+        awardService.onRejected(1L, AWARD_ID, "不合格");
+
+        assertEquals(List.of(BudgetAction.OCCUPY, BudgetAction.RELEASE),
+                realLogs.stream().map(BudgetOccupyLog::getAction).toList());
+        assertEquals(0, releaseLog().getAmount().compareTo(AMOUNT_V1.negate()),
+                "P2b-9 方案 A：RELEASE 落负值");
+        assertEquals(0, realUsed.compareTo(BigDecimal.ZERO), "used 回零（无翻倍/无吞占/无负占用）");
+    }
+
+    private BudgetOccupyLog releaseLog() {
+        return realLogs.stream().filter(l -> l.getAction() == BudgetAction.RELEASE)
+                .findFirst().orElseThrow(() -> new AssertionError("未找到 RELEASE 流水"));
+    }
+
+    /** P2b-10 连带：减额变更放行——精确回冲（释放额=减额），无锚也不做锚点解析。 */
+    @Test
+    void changeOrder_decrease_releasesExactDelta() {
+        PurchaseOrder order = order();
+        order.setBudgetOccupied(new BigDecimal("1000"));
+        when(purchaseOrderMapper.selectById(ORDER_ID)).thenReturn(order);
+        Contract noAnchor = contract();
+        noAnchor.setAwardId(null);
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(noAnchor);
+        when(contractMapper.releaseAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenReturn(1);
+        when(orderItemMapper.selectList(any())).thenReturn(List.of(orderItem()));
+        when(budgetOccupyService.occupiedTotal(BudgetBizType.ORDER, ORDER_ID))
+                .thenReturn(new BigDecimal("1000"));
+
+        OrderChangeReqVO req = new OrderChangeReqVO();
+        req.setReason("减量");
+        OrderChangeReqVO.ItemChange change = new OrderChangeReqVO.ItemChange();
+        change.setOrderItemId(ORDER_ITEM_ID);
+        change.setNewQty(new BigDecimal("10"));
+        req.setItems(List.of(change));
+
+        orderService.changeOrder(ORDER_ID, req);
+
+        // 精确回冲：释放额 = 减额（价格 88×(20-10)=880，非全量 1000）
+        ArgumentCaptor<BudgetOccupyCmd> cap = ArgumentCaptor.forClass(BudgetOccupyCmd.class);
+        verify(budgetOccupyService).release(cap.capture());
+        assertEquals(BudgetBizType.ORDER, cap.getValue().getBizType());
+        assertEquals(ORDER_ID, cap.getValue().getBizId());
+        assertEquals(0, cap.getValue().getAmount().compareTo(new BigDecimal("880")));
+        assertEquals(0, order.getBudgetOccupied().compareTo(new BigDecimal("120")),
+                "budget_occupied 回冲后=1000-880");
     }
 }
