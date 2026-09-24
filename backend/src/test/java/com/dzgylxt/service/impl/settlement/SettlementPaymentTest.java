@@ -54,6 +54,7 @@ class SettlementPaymentTest {
     private static final long ORDER_ID = 3001L;
     private static final long SETTLE_ID = 3101L;
     private static final long PAY_ID = 3201L;
+    private static final long PAY_ID2 = 3202L;
 
     @Mock
     private SettlementMapper settlementMapper;
@@ -198,35 +199,55 @@ class SettlementPaymentTest {
         verify(budgetOccupyService, org.mockito.Mockito.never()).occupy(any());
     }
 
-    /** P2-1：分期首笔确认——累计实付 < 应付 → PARTIAL(1)（设计 §2.2 语义载体=付款单据行）。 */
+    /**
+     * PB-01 AC①：同一结算两笔付款各 50% → 两笔付款单均确认 PAID（口径 B：付款记录无中间态）、
+     * 结算维度派生进度 部分付款 → 已付清。
+     */
     @Test
-    void confirmPayment_partialWhenUnderpaid() {
+    void confirmPayment_twoPaymentsHalfEach_settleDerivesPartialThenPaid() {
         Settlement settled = settlement(SettlementStatus.SETTLED); // 应付 1200
-        Payment payment = payment(PaymentStatus.UNPAID);
-        payment.setPayAmount(new BigDecimal("500"));
-        when(paymentMapper.selectById(PAY_ID)).thenReturn(payment);
         when(settlementMapper.selectById(SETTLE_ID)).thenReturn(settled);
-        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(BigDecimal.ZERO);
 
-        paymentService.confirmPayment(PAY_ID, "voucher-002.pdf", LocalDate.of(2026, 9, 24));
+        // 第一笔 50%（600）
+        Payment first = payment(PaymentStatus.UNPAID);
+        first.setPayAmount(new BigDecimal("600"));
+        when(paymentMapper.selectById(PAY_ID)).thenReturn(first);
+        paymentService.confirmPayment(PAY_ID, "voucher-a.pdf", LocalDate.of(2026, 9, 24));
+        assertEquals(PaymentStatus.PAID, first.getStatus(), "付款单确认即整单 PAID（PB-01 口径 B）");
 
-        assertEquals(PaymentStatus.PARTIAL, payment.getStatus(), "首笔 500 < 1200 → PARTIAL");
-        verify(orderMapper, org.mockito.Mockito.never()).updateById(any(PurchaseOrder.class));
+        // 结算维度派生：已付 600 / 应付 1200 → 部分付款
+        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("600"));
+        settlementService.fillPayProgress(List.of(settled));
+        assertEquals("PARTIAL", settled.getPayStatus(), "半额已付 → 派生部分付款");
+        assertEquals(0, settled.getPaidProgress().compareTo(new BigDecimal("0.5000")), "paidProgress=0.5");
+
+        // 第二笔 50%（600）付满
+        Payment second = payment(PaymentStatus.UNPAID);
+        second.setId(PAY_ID2);
+        second.setPayAmount(new BigDecimal("600"));
+        when(paymentMapper.selectById(PAY_ID2)).thenReturn(second);
+        paymentService.confirmPayment(PAY_ID2, "voucher-b.pdf", LocalDate.of(2026, 9, 25));
+        assertEquals(PaymentStatus.PAID, second.getStatus(), "第二笔确认亦 PAID");
+
+        // 结算维度派生：已付 1200 / 应付 1200 → 已付清
+        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("1200"));
+        settlementService.fillPayProgress(List.of(settled));
+        assertEquals("PAID", settled.getPayStatus(), "付满 → 派生已付清");
+        assertEquals(0, settled.getPaidProgress().compareTo(BigDecimal.ONE), "paidProgress=1.0");
     }
 
-    /** P2-1：分期付满确认——累计实付(历史 PAID + 本次) ≥ 应付 → PAID(2)。 */
+    /** PB-01 AC②：同一结算第三笔超额付款 → 3000 拒绝（#39 口径：committed 含在途）。 */
     @Test
-    void confirmPayment_paidWhenFullyPaid() {
+    void createPayment_thirdExcessRejected() {
         Settlement settled = settlement(SettlementStatus.SETTLED); // 应付 1200
-        Payment payment = payment(PaymentStatus.UNPAID);
-        payment.setPayAmount(new BigDecimal("700"));
-        when(paymentMapper.selectById(PAY_ID)).thenReturn(payment);
         when(settlementMapper.selectById(SETTLE_ID)).thenReturn(settled);
-        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("500")); // 首笔已付 500
+        // 两笔 600+600 已承诺（含在途）
+        when(paymentMapper.sumCommittedAmount(SETTLE_ID)).thenReturn(new BigDecimal("1200"));
 
-        paymentService.confirmPayment(PAY_ID, "voucher-003.pdf", LocalDate.of(2026, 9, 24));
-
-        assertEquals(PaymentStatus.PAID, payment.getStatus(), "累计 500+700=1200 → PAID");
+        PaymentSaveReqVO req = new PaymentSaveReqVO();
+        req.setSettlementId(SETTLE_ID);
+        req.setPayAmount(new BigDecimal("300"));
+        assertThrows(com.dzgylxt.common.BizException.class, () -> paymentService.createPayment(req));
     }
 
     /** 对账单：应付 − 已付 = 差额（守恒）。 */

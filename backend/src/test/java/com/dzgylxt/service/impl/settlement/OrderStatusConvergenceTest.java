@@ -143,6 +143,21 @@ class OrderStatusConvergenceTest {
         assertEquals(0, order.getPaidProgress().compareTo(new BigDecimal("0.2500")), "付清进度 300/1200");
     }
 
+    /** PB-01 AC③：订单全部结算付清 → 订单派生付款进度 paidProgress=1.0（派生 PAID 为真）。 */
+    @Test
+    void fillProgress_fullyPaidOrder_paidProgressIsOne() {
+        PurchaseOrder order = order(OrderStatus.RECEIVED);
+        when(orderItemMapper.selectList(any())).thenReturn(List.of(item())); // 应结 1200
+        when(settlementMapper.sumSettledAmount(ORDER_ID)).thenReturn(new BigDecimal("1200"));
+        when(paymentMapper.sumPaidAmountByOrder(ORDER_ID)).thenReturn(new BigDecimal("1200"));
+
+        orderService.fillProgress(List.of(order));
+
+        assertEquals(0, order.getSettleProgress().compareTo(BigDecimal.ONE), "全部结清 → settleProgress=1.0");
+        assertEquals(0, order.getPaidProgress().compareTo(BigDecimal.ONE),
+                "全部付清 → paidProgress=1.0（订单派生 PAID 为真）");
+    }
+
     // ---------------- fixtures ----------------
 
     private Settlement settlement(SettlementStatus status) {
