@@ -108,3 +108,44 @@
 
 - 实例 `:18081`（scm_qa_p3b，48+2 表）保留；脚本 `/tmp/qa3/rt4.py`、`p3b_chain.py`、`p3b_anchors*.py`、`p3b_clean.py`。
 - 测试库含 P1-1 复现数据（订单 2103104985115103233 累计已结 6336），非交付数据。
+
+---
+
+# 第 2 轮聚焦回归（P1-1/P2-1/P2-2 修复验证 · `bdf2af0`）
+
+> 验证对象：`develop @ bdf2af0`（= 任务书基线 `e9f5abf` + 1 笔 B9 台账 docs 提交，不影响代码）。修复链：`f5af0b9`（P1-1 committed 双保险 + P2-2 schema.sql 合并 + P3-1/P3-2）→ `354aafe`（口径B 生产代码）→ `35ed7f6`（D13 docs）→ `e9f5abf`（PB-01 AC 测试）。
+> 方法：`clean build`（JDK17，绝对路径 gradlew）+ **新建空库 `scm_qa_p3b2` 自动初始化**（顺带验证 P2-2 修复）+ 后端 `:18081` 重部署 + 运行态 HTTP 实测 + DB 对账。QA 自建两订单链路（3168 元 / 2112 元）。未改业务源码、未 push。
+
+## 6.0 结论先行
+
+**IS_PASS = false（仅剩 P2×1；P1-1 / P2-2 / 口径B 本体全部修复证实生效，锚A/C/D 全过）**
+
+| 锚 | 结论 | 关键证据 |
+|---|---|---|
+| 构建 + 单测 | ✅ | BUILD SUCCESSFUL 17s；**22 类 / 119 例 / 0F 0E 0S**（QA 逐类解析 JUnit XML；SettlementPrepaymentTest 7 + SettlementPaymentTest 7 + OrderStatusConvergenceTest 4） |
+| 锚A P1-1 资金口径 | ✅ | ① cap 含在途：预付 2000 成功 → 第 2 笔 2000 被 `3000 预付款累计（含在途）4000.00 超出订单有效金额 3168.00` 拦截不落库（committed SQL `status IN(0,1)` = 2001 实测）；② 尾款扣减含在途：自动金额 **1999 = 3168 − 1169(在途预付)**、`prepayment_deduction=1169.00` 回填、**`payment_stage=3` 落值**（P3-2 同步修复生效）；③ 审批兜底：脏数据向量（SQL 造 2500 PENDING 绕过 cap）→ approve 报 `3000 预付款审批拦截：累计预付款（含本单）3668.00 超出订单有效金额 3168.00`，**settlement 保持 PENDING(0)、WRITE_OFF 流水数不变（不核销）、task 保持 status=0** ✅；④ PUT 封顶：committedExclThis+本次 ≤ 应结（代码 `SettlementServiceImpl:266-272` 审读 + 单测覆盖）；运行态另证实 SETTLED 单 PUT 被状态闸拦截（`3003 仅待结算可修改`） |
+| 锚B PB-01 口径 | ⚠️ | ① 两笔付款确认后均 **PAID(1)**（无中间态，payment 全表 status 分布仅 1）✅；结算派生 payStatus 在**无抵扣单**正确：500/1056 → `PARTIAL/0.4735` → 付满 `PAID/1.0` ✅；**含预付抵扣的尾款单派生错误**（→ P2-R2-1 ❌）；② BR-17：付满 1999 后再付 1 / 0.01 → `3000 累计付款（含在途）超出结算金额` ✅；③ 订单 paidProgress 仅尾款付清时 =0.631(<1.0)，全部结算付清后 =1.0 ✅；④ 独立 grep：`PaymentStatus.PARTIAL`/`REJECTED` 代码引用、mapper `status = 2`/`IN (0,1,2)` 字面量**全部零残留**（枚举仅存 javadoc 历史说明）✅ |
+| 锚C 回归面 | ✅ | 物料结算全链（draft→create→submit→审批→核销→付款）；#39 单据封顶；对账单 `payable=4224 paid=4224 balance=0`（= 两订单 3168+1056 精确）；守恒 Σ(OCCUPY)−Σ(RELEASE)==used 全程零差异；**D11：两订单 DB status 全程 =2(RECEIVED)，从未 3/5**；settleProgress/paidProgress 封顶 1.0 |
+| 锚D P2-2 | ✅ | fresh 库 `scm_qa_p3b2` 自动初始化 48 表后 `settlement` **两列已在位**（schema.sql 合并生效）；首个预付款接口直接 200（第 1 轮 500 路径封死）；`p3b_schema.sql` 重跑**幂等 no-op**（exit 0 无报错） |
+| 锚E B9 留白 | ✅ 确认 | 台账 B9 已登记（`bdf2af0`），本轮双 grep 确认无作废/取消端点，不另测 |
+
+## 6.1 新发现问题
+
+### P2-R2-1【后端·P2】尾款单派生 `payable` 重复扣减预付款——含预付抵扣的尾款单 payStatus 永远提前变 PAID，PARTIAL 不可见
+
+- **公式缺陷**：`fillPayProgress`（`SettlementServiceImpl.java:383-384`）`payable = amount − prepaymentDeduction`；但 `createSettlement` 尾款分支的 amount 在创建时**已按"应结总额 − 预付款抵扣"净额化**（自动金额 1999 = 3168 − 1169，且 `validatePhaseAndFinal` 的结清恒等式使"手输 gross 金额"路径不可能通过校验）→ 净额化 + 再减 deduction = **双重扣减**。
+- **运行态实锤**：尾款单 amount=1999、deduction=1169 → 派生 payable=830（真实现金义务应为 1999）；**实付 1000 时（1000/1999）即显示 `payStatus=PAID / paidProgress=1.0`**（1000≥830 被封顶），PARTIAL 在该类单据上永不可见；任务书锚B① 预期的 `PARTIAL(0.5)→PAID(1.0)` 依次推进仅在无抵扣单上成立（实测 500/1056 → PARTIAL/0.4735 → PAID/1.0 ✅）。
+- **台账自洽性旁证**：各结算单现金义务合计 = 预付 1169 + 尾款 payable 830 = 1999 ≠ 订单应结 3168（而 amount 口径合计 1169+1999=3168 精确）——进一步证明 payable 基数应取 `amount` 本身。
+- **影响面**：仅派生展示字段（payStatus/paidProgress/paidAmount/payableAmount 回显）；**资金安全无恙**——付款封顶（BR-17）按 `settlement.amount` 口径（实测 1999 处拒绝第 3 笔），对账单也按 amount 口径精确。
+- **单测假绿根因**：PB-01 AC① 用例的结算单 deduction=0（未覆盖"尾款+预付抵扣"组合），与第 1 轮 P1-1 同型的 mock 盲区。
+- **修复建议**：`fillPayProgress` 的 payable 改为 `amount`（净额已含抵扣）；或尾款创建时不净额化 amount 而由 payable 派生——二者取一，同步修订 AC① 用例补一条 deduction>0 断言。**修复后仅需轻量复验（尾款单 PARTIAL→PAID 推进 + AC 用例）即可收口。**
+
+## 6.2 本轮已验 / 未验边界
+
+**已验**：119 例全量单测；锚A ①②③④（含脏数据兜底向量与运行态守恒）；锚B ①②③④（含无抵扣/含抵扣双路径对比）；锚C 全项；锚D（fresh-init + 幂等重跑）；锚E 登记确认。
+
+**未验/边界**：服务结算运行态（本批仍零改动）；前端 payStatus/paidProgress 消费；MinIO 降级；PUT 封顶的"真越界"运行态样本（PENDING 单在越界前会被 3003 状态闸或 cap 拦截，cap 边界由单测覆盖，运行态构造需复杂前置，判定为低风险）。
+
+## 6.3 第 2 轮结论
+
+P1-1（committed 双保险三处切换 + 审批兜底）、P2-2（schema.sql 合并 + 迁移幂等）、口径B（PARTIAL/REJECTED 收敛 + 派生表达 + BR-17）**全部修复证实生效**；剩余 **P2-R2-1** 一项（尾款单派生 payable 重复扣减，展示域缺陷、资金安全无恙），建议修复（改动点单一）+ 补 deduction>0 断言后做轻量复验即可收口 P3b。
