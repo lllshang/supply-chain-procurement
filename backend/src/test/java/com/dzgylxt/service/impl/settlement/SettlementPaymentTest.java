@@ -236,6 +236,33 @@ class SettlementPaymentTest {
         assertEquals(0, settled.getPaidProgress().compareTo(BigDecimal.ONE), "paidProgress=1.0");
     }
 
+    /**
+     * P2-R2-1（QA 第 2 轮）：含预付抵扣的尾款单（deduction&gt;0）派生口径——
+     * payable 基数 = amount（尾款创建时已净额化，不再减抵扣），PARTIAL 必须可见。
+     * 复现 QA 实锤：尾款 1999/抵扣 1169，双重扣减会误派生 payable=830 → 实付 1000 误判 PAID。
+     */
+    @Test
+    void fillPayProgress_finalWithDeduction_partialVisibleThenPaid() {
+        Settlement finalSettle = settlement(SettlementStatus.SETTLED);
+        finalSettle.setAmount(new BigDecimal("1999"));
+        finalSettle.setPrepaymentDeduction(new BigDecimal("1169"));
+
+        // 实付 1000 < payable 1999 → 派生部分付款（双重扣减缺陷下此处会假绿为 PAID/1.0）
+        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("1000"));
+        settlementService.fillPayProgress(List.of(finalSettle));
+        assertEquals("PARTIAL", finalSettle.getPayStatus(), "实付 1000/1999 → 部分付款（净额口径不双重扣减）");
+        assertEquals(0, finalSettle.getPayableAmount().compareTo(new BigDecimal("1999")),
+                "payable=amount，不再减 prepaymentDeduction");
+        assertEquals(0, finalSettle.getPaidProgress().compareTo(new BigDecimal("0.5003")),
+                "paidProgress=1000/1999=0.5003");
+
+        // 付满 1999 → 已付清
+        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("1999"));
+        settlementService.fillPayProgress(List.of(finalSettle));
+        assertEquals("PAID", finalSettle.getPayStatus(), "付满 1999 → 已付清");
+        assertEquals(0, finalSettle.getPaidProgress().compareTo(BigDecimal.ONE), "paidProgress=1.0");
+    }
+
     /** PB-01 AC②：同一结算第三笔超额付款 → 3000 拒绝（#39 口径：committed 含在途）。 */
     @Test
     void createPayment_thirdExcessRejected() {

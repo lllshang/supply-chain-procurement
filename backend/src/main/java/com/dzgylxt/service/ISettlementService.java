@@ -49,8 +49,9 @@ public interface ISettlementService extends IService<Settlement> {
 
     /**
      * PB-01（口径 B）：回填结算维度派生付款进度——paid=Σ已确认付款、
-     * payable=结算应付−已抵扣预付、payStatus=UNPAID/PARTIAL/PAID、paidProgress=paid/payable
-     * （0~1 封顶）。VO 派生不落库，语义载体=结算单（付款记录无中间态）。
+     * payable=结算应付（P2-R2-1：直接取 amount，尾款单创建时已净额化，不再减抵扣）、
+     * payStatus=UNPAID/PARTIAL/PAID、paidProgress=paid/payable（0~1 封顶）。
+     * VO 派生不落库，语义载体=结算单（付款记录无中间态）。
      */
     void fillPayProgress(Collection<Settlement> settlements);
 }

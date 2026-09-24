@@ -369,9 +369,15 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
 
     /**
      * PB-01（口径 B）：结算维度派生付款进度——付款记录无中间态（UNPAID→PAID），
-     * "未付款/部分付款/已付清"按 Σ已确认付款 vs（结算应付 − 已抵扣预付）在结算单上计算：
+     * "未付款/部分付款/已付清"按 Σ已确认付款 vs 结算应付在结算单上计算：
      * paid=0 → UNPAID；0&lt;paid&lt;payable → PARTIAL；paid≥payable → PAID；
      * paidProgress = paid/payable（0~1 封顶；payable≤0 视为已付清=1）。
+     *
+     * <p>P2-R2-1：payable 基数直接取 {@code amount}——尾款单 amount 创建时已按
+     * "应结总额 − 预付款"净额化（结清恒等式决定手输 gross 不可能通过），再减
+     * {@code prepaymentDeduction} 即双重扣减（实测尾款 1999/抵扣 1169 会误派生
+     * payable=830，实付 1000 即误判 PAID，PARTIAL 永不可见）；预付款单 payable=amount
+     * 同样成立。台账旁证：amount 口径合计精确守恒。</p>
      */
     @Override
     public void fillPayProgress(Collection<Settlement> settlements) {
@@ -380,8 +386,7 @@ public class SettlementServiceImpl extends ServiceImpl<SettlementMapper, Settlem
         }
         for (Settlement s : settlements) {
             BigDecimal paid = nvl(paymentMapper.sumPaidAmount(s.getId()));
-            BigDecimal payable = nvl(s.getAmount()).subtract(nvl(s.getPrepaymentDeduction()))
-                    .max(BigDecimal.ZERO);
+            BigDecimal payable = nvl(s.getAmount()).max(BigDecimal.ZERO);
             s.setPaidAmount(paid);
             s.setPayableAmount(payable);
             if (paid.compareTo(BigDecimal.ZERO) == 0) {

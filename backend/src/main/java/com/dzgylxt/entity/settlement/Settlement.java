@@ -55,7 +55,7 @@ public class Settlement extends BaseEntity implements Serializable {
     /** PB-01：Σ已确认付款（该结算单，不落库） */
     @TableField(exist = false)
     private BigDecimal paidAmount;
-    /** PB-01：结算应付 = 结算金额 − 已抵扣预付（不落库） */
+    /** PB-01：结算应付 = 结算金额（P2-R2-1：尾款单 amount 创建时已按应结−预付净额化，不再减抵扣；不落库） */
     @TableField(exist = false)
     private BigDecimal payableAmount;
     /** PB-01：派生付款状态——UNPAID(未付款)/PARTIAL(部分付款)/PAID(已付清)，按 paid vs payable 计算（不落库） */
