@@ -2,13 +2,15 @@
 
 > 版本：v1.0（待用户拍板 Q1–Q5 后定稿）
 > 依据：`docs/延期需求与占位登记.md` D1/D2/D9/B3、P2 设计 §8 预留口子、P2↔P3 接缝清单 CP-11、审计 R9（PRD BR-07 L1082 / §5.1.1 L341 / §6.6.1 L682）
-> 现状核实（2026-09-24 代码实测）：
+> 现状核实（2026-09-24 代码实测，Grep 工具复核——shell grep 曾静默失败致首版误判"contract 列漂移"，特此修正）：
 > - `PurchaseApplyType` 三链路枚举已在（STANDARD/DAILY/OFFLINE，IEnum 0/1/2）——申请侧口子在；
-> - **`contract` 表实际缺 `award_id`、`renewed_from_id` 列**（P2 设计 §8 声称预留、DDL 未落，台账漂移）→ 本阶段补 ALTER；
+> - `contract` 表 `award_id` / `renewed_from_id` / `contract_type` 列**均已存在**（实体字段齐），**无漂移**；仅缺 S8 `subject_id`；
 > - `inquiry.apply_id` 为 NOT NULL 且无来源字段 → D9 需 ALTER（`apply_id` 可空 + `source_type` + `source_reason`）；
-> - `InquiryServiceImpl:72` 写死"仅 APPROVED 申请可发起询价" → B3 口径与 D9 都改此处；
-> - `AwardServiceImpl:114` award 按 inquiry 唯一；无"线下定标登记"入口 → D9 新增；
-> - CP-11：无申请来源定标的预算占用锚点未定义（现 AwardServiceImpl 对无 applyId 显式跳过再校验并留痕）。
+> - `award.inquiry_id` 为 NOT NULL 且无部门/科目列 → 线下定标需 ALTER（`inquiry_id` 可空 + `dept_id` + `subject_id`）；
+> - `purchase_order.apply_id` **已可空**（L747 无申请订单有列基础）；`OrderCreateReqVO.applyId` 已在；
+> - `InquiryServiceImpl:66` 写死"询价必须关联采购申请"+ 仅 APPROVED → B3/D9 改此处；DAILY 类型未拦截；
+> - `AwardServiceImpl:114` award 按 inquiry 唯一；无"线下定标登记"入口；submit 对无 applyId 显式跳过再校验（QA2-02）→ D9 改为 occupy；
+> - `OrderServiceImpl:189-215` 三重校验第③重（申请余量）依赖明细挂 `applyItemId` → 无申请来源订单需分流（跳余量闸，保留合同额度闸+价格校验）。
 
 ---
 
@@ -26,26 +28,27 @@
 ### 不做（挪 P3b/后续）
 S4 报价税率/运费/交期、S10 到货拒收退货/超收计重、S5 资质批量审核、S11 服务扣款多条明细取数——维持台账登记。
 
-## 2. 数据模型变更（3 ALTER + 0 新表）
+## 2. 数据模型变更（4 组 ALTER + 0 新表，实测收窄后）
 
 ```sql
--- ① contract：补 P2 设计声称预留但未落的列
-ALTER TABLE contract ADD COLUMN award_id      BIGINT       NULL COMMENT '来源定标（D2 线下补录为 NULL）';
-ALTER TABLE contract ADD COLUMN renewed_from_id BIGINT     NULL COMMENT '续签来源合同（D1 框架续签）';
-ALTER TABLE contract ADD COLUMN contract_type TINYINT      NOT NULL DEFAULT 0 COMMENT '类型：0物料/1服务（S8）';
-ALTER TABLE contract ADD COLUMN subject_id    BIGINT       NULL COMMENT '预算科目（S8，线下补录链路预算锚定备用）';
-
--- ② inquiry：独立寻源
-ALTER TABLE inquiry MODIFY COLUMN apply_id BIGINT NULL COMMENT '来源申请（D9 独立寻源为 NULL）';
+-- ① inquiry：独立寻源（D9）
+ALTER TABLE inquiry MODIFY COLUMN apply_id BIGINT NULL COMMENT '来源申请（独立寻源为 NULL）';
 ALTER TABLE inquiry ADD COLUMN source_type   VARCHAR(20)  NOT NULL DEFAULT 'APPLY' COMMENT '来源：APPLY/OFFLINE';
 ALTER TABLE inquiry ADD COLUMN source_reason VARCHAR(500) NULL COMMENT '寻源原因（source_type=OFFLINE 必填，BR-07）';
+
+-- ② award：线下定标登记（D9/CP-11 锚点=award）
+ALTER TABLE award MODIFY COLUMN inquiry_id BIGINT NULL COMMENT '来源询价（线下直接登记为 NULL）';
+ALTER TABLE award ADD COLUMN dept_id    BIGINT NULL COMMENT '预算部门（线下登记必填，提交即占预算）';
+ALTER TABLE award ADD COLUMN subject_id BIGINT NULL COMMENT '预算科目（线下登记必填，提交即占预算）';
 
 -- ③ purchase_apply：S9 剩余字段
 ALTER TABLE purchase_apply ADD COLUMN purpose       VARCHAR(500) NULL COMMENT '采购用途（PR-01）';
 ALTER TABLE purchase_apply ADD COLUMN project_name  VARCHAR(200) NULL COMMENT '手工项目名（无预算项目时业务归属）';
--- expected_date 已有；"需求时间语义"合并进 expected_date，不加列
+
+-- ④ contract：S8 科目（统计冗余，预算锚点仍=申请/award）
+ALTER TABLE contract ADD COLUMN subject_id BIGINT NULL COMMENT '预算科目（统计冗余）';
 ```
-幂等迁移脚本：`scripts/sql/p2b_migration.sql`（information_schema 判断，对齐 p3_qa2_01 风格）。
+幂等迁移脚本：`scripts/sql/p2b_migration.sql`（information_schema 判断，对齐 p3_qa2_01 风格）；同步更新 `backend/src/main/resources/db/schema.sql`（新库自动初始化用）。
 
 ## 3. 三条链路的状态机与规则
 

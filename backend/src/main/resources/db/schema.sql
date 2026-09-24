@@ -975,4 +975,25 @@ ALTER TABLE `approval_task`
 ALTER TABLE `purchase_order`
   ADD COLUMN `phase_plan` TEXT NULL COMMENT '阶段结算比例 JSON（[{"phase":1,"ratio":30}…]；null=一次性）' AFTER `order_type`;
 
+-- ---------------- P2b 扩展链路补丁（D1 日常/框架 · D2 线下补录 · D9 独立寻源） ----------------
+-- 对齐 scripts/sql/p2b_migration.sql；存量库请执行迁移脚本（幂等），本段服务新建库自动初始化。
+-- 新建库若 CREATE TABLE 已含新列，此处 ADD COLUMN 报 1060 可忽略（与上方 ALTER 段同模式）。
+
+ALTER TABLE `inquiry`
+  MODIFY COLUMN `apply_id` BIGINT NULL COMMENT '来源申请（D9 独立寻源为 NULL）',
+  ADD COLUMN `source_type` VARCHAR(20) NOT NULL DEFAULT 'APPLY' COMMENT '询价来源：APPLY=申请转询价 / OFFLINE=独立寻源（BR-07）' AFTER `apply_id`,
+  ADD COLUMN `source_reason` VARCHAR(500) NULL COMMENT '寻源原因（source_type=OFFLINE 必填）' AFTER `source_type`;
+
+ALTER TABLE `award`
+  MODIFY COLUMN `inquiry_id` BIGINT NULL COMMENT '来源询价（D9 线下直接登记为 NULL）',
+  ADD COLUMN `dept_id` BIGINT NULL COMMENT '预算部门（线下登记必填：CP-11 锚点=award，提交即占预算）' AFTER `apply_id`,
+  ADD COLUMN `subject_id` BIGINT NULL COMMENT '预算科目（线下登记必填：占用量化键之一）' AFTER `dept_id`;
+
+ALTER TABLE `purchase_apply`
+  ADD COLUMN `purpose` VARCHAR(500) NULL COMMENT '采购用途（PR-01）' AFTER `budget_subject_id`,
+  ADD COLUMN `project_name` VARCHAR(200) NULL COMMENT '手工项目名（PR-01：无预算项目时的业务归属）' AFTER `purpose`;
+
+ALTER TABLE `contract`
+  ADD COLUMN `subject_id` BIGINT NULL COMMENT '预算科目（S8：统计冗余，预算锚点仍=申请/award）' AFTER `contract_type`;
+
 SET FOREIGN_KEY_CHECKS = 1;
