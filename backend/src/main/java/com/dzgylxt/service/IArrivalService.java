@@ -22,6 +22,12 @@ public interface IArrivalService extends IService<Arrival> {
     /** 差异处理（接受/退货/补货）；退货/补货联动登记 fulfillment_adjust 草稿。 */
     void handleDiff(Long arrivalItemId, HandleType type);
 
+    /**
+     * P3c-A4：整单拒收退货（PRD L827/L809/L1115）——原因+凭证必填，
+     * 全部合格量置 0、差异行标记退货，单据状态 → REJECTED_RETURNED；已全入库单据不可整拒。
+     */
+    void rejectAll(Long arrivalId, String reason, String voucherFileKey);
+
     /** 到货明细。 */
     List<ArrivalItem> listItems(Long arrivalId);
 

@@ -8,7 +8,9 @@ import com.baomidou.mybatisplus.annotation.IEnum;
 public enum ArrivalStatus implements IEnum<Integer> {
     ARRIVAL_CONFIRMED(0, "到货确认"),
     PARTIAL_STORED(1, "部分入库"),
-    STORED(2, "已入库");
+    STORED(2, "已入库"),
+    /** P3c-A4：整单拒收退货（PRD L827/L1115）——全部合格量置 0、差异行退货，须填原因+凭证。 */
+    REJECTED_RETURNED(3, "拒收退货");
 
     private final int code;
     private final String desc;

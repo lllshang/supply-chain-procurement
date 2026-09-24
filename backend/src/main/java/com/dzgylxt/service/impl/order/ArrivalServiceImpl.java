@@ -210,6 +210,53 @@ public class ArrivalServiceImpl extends ServiceImpl<ArrivalMapper, Arrival> impl
         }
     }
 
+    /**
+     * P3c-A4：整单拒收退货（PRD L827 状态机"待验收入库→拒收退货：全部拒收"；
+     * L809"整单拒收：全部合格量置 0，差异行选择退货，必须填写原因并上传凭证"）。
+     *
+     * <p>守卫：已全部入库（STORED）不可整拒（3003）；已拒收单据幂等拒绝；
+     * 原因与凭证必填（L809 强制）。执行后订单到货缺口回到可收状态（合格量归零即可再登记）。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void rejectAll(Long arrivalId, String reason, String voucherFileKey) {
+        Arrival arrival = getById(arrivalId);
+        if (arrival == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "到货单不存在：" + arrivalId);
+        }
+        if (arrival.getStatus() == ArrivalStatus.REJECTED_RETURNED) {
+            throw new BizException(ResultCode.STATUS_INVALID, "该到货单已拒收退货，请勿重复操作");
+        }
+        if (arrival.getStatus() == ArrivalStatus.STORED) {
+            throw new BizException(ResultCode.STATUS_INVALID,
+                    "已全部入库的到货单不可整单拒收（如需退回应走退货流程）");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new BizException(ResultCode.PARAM_ERROR, "整单拒收必须填写原因");
+        }
+        if (voucherFileKey == null || voucherFileKey.isBlank()) {
+            throw new BizException(ResultCode.PARAM_ERROR, "整单拒收必须上传凭证");
+        }
+
+        List<ArrivalItem> items = listItems(arrivalId);
+        for (ArrivalItem item : items) {
+            // 全部合格量置 0（L809）
+            item.setQtyStored(BigDecimal.ZERO);
+            // 差异行统一标记退货
+            if (item.getQtyDiff() != null && item.getQtyDiff().compareTo(BigDecimal.ZERO) != 0) {
+                item.setHandleType(HandleType.RETURN);
+                item.setHandleStatus(HandleStatus.DONE);
+            }
+            arrivalItemMapper.updateById(item);
+        }
+
+        arrival.setStatus(ArrivalStatus.REJECTED_RETURNED);
+        arrival.setRemark(reason);
+        arrival.setVoucherFileKey(voucherFileKey);
+        arrival.setActualQty(BigDecimal.ZERO);
+        updateById(arrival);
+    }
+
     @Override
     public List<ArrivalItem> listItems(Long arrivalId) {
         return arrivalItemMapper.selectList(new LambdaQueryWrapper<ArrivalItem>()

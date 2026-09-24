@@ -81,6 +81,36 @@ public class ArrivalController {
         return R.ok(true);
     }
 
+    /** P3c-A4：整单拒收退货（原因+凭证必填，全部合格量置 0）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PostMapping("/{id}/reject-all")
+    public R<Boolean> rejectAll(@PathVariable Long id, @RequestBody RejectAllReq req) {
+        arrivalService.rejectAll(id, req.getReason(), req.getVoucherFileKey());
+        return R.ok(true);
+    }
+
+    /** P3c-A4：整单拒收请求体。 */
+    public static class RejectAllReq {
+        private String reason;
+        private String voucherFileKey;
+
+        public String getReason() {
+            return reason;
+        }
+
+        public void setReason(String reason) {
+            this.reason = reason;
+        }
+
+        public String getVoucherFileKey() {
+            return voucherFileKey;
+        }
+
+        public void setVoucherFileKey(String voucherFileKey) {
+            this.voucherFileKey = voucherFileKey;
+        }
+    }
+
     /** 入库台账流水（按订单/供应商/日期筛选；Q8 只记台账）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/ledger")
