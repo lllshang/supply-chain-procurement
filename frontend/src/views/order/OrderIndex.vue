@@ -16,6 +16,18 @@
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><StatusTag :value="row.status" enum-key="orderStatus" /></template>
         </el-table-column>
+        <el-table-column label="结清进度" width="100" align="center">
+          <template #default="{ row }">
+            <span v-if="row.settleProgress != null && row.settleProgress > 0">{{ Math.round(row.settleProgress * 100) }}%</span>
+            <span v-else style="color: var(--el-text-color-secondary)">未结算</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="付清进度" width="100" align="center">
+          <template #default="{ row }">
+            <span v-if="row.paidProgress != null && row.paidProgress > 0">{{ Math.round(row.paidProgress * 100) }}%</span>
+            <span v-else style="color: var(--el-text-color-secondary)">未付款</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openItems(row)">明细</el-button>
