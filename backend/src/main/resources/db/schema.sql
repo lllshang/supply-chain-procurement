@@ -942,6 +942,8 @@ ALTER TABLE `settlement`
   ADD COLUMN `phase_no`         INT           NULL COMMENT '阶段号（settle_mode=1 时必填）' AFTER `settle_mode`,
   ADD COLUMN `phase_ratio`      DECIMAL(5,2)  NULL COMMENT '阶段比例%（Σ=100 校验）' AFTER `phase_no`,
   ADD COLUMN `is_final`         TINYINT       NOT NULL DEFAULT 0 COMMENT '是否尾款结清：0/1' AFTER `phase_ratio`,
+  ADD COLUMN `payment_stage`        TINYINT       NULL COMMENT '付款阶段（R4/P3b：1=预付 2=进度款 3=尾款）' AFTER `is_final`,
+  ADD COLUMN `prepayment_deduction` DECIMAL(18,2) NOT NULL DEFAULT 0 COMMENT '本单抵扣的预付款合计（R4/P3b：尾款结算自动扣减回填）' AFTER `payment_stage`,
   ADD UNIQUE KEY `uk_settle_no` (`settle_no`, `deleted`);
 
 -- 1.3.2 payment（P0 骨架表缺 DDL，同上）

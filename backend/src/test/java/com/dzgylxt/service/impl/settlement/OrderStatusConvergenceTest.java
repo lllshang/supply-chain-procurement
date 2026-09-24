@@ -114,11 +114,13 @@ class OrderStatusConvergenceTest {
         verify(orderMapper, never()).updateById(any(PurchaseOrder.class));
     }
 
-    /** 付款登记确认：付款单 PAID，但不写订单 PAID（R5）。 */
+    /** 付款登记确认：按累计实付判定 PAID（付满），但不写订单 PAID（R5）。 */
     @Test
     void confirmPayment_doesNotSetOrderPaid_R5() {
         Payment payment = payment(PaymentStatus.UNPAID);
         when(paymentMapper.selectById(PAY_ID)).thenReturn(payment);
+        when(settlementMapper.selectById(SETTLE_ID)).thenReturn(settlement(SettlementStatus.SETTLED));
+        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("1200"));
 
         paymentService.confirmPayment(PAY_ID, "voucher-001.pdf", LocalDate.of(2026, 9, 24));
 

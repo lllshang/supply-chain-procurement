@@ -26,8 +26,16 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
     @Select("SELECT COUNT(1) FROM settlement WHERE deleted = 0 AND arrival_id = #{arrivalId}")
     boolean existsByArrival(@Param("arrivalId") Long arrivalId);
 
-    /** R4：订单已付预付款合计（仅 SETTLED 预付款结算；尾款自动扣减与累计校验口径）。type=2=PREPAYMENT。 */
+    /** R4：订单已批预付款合计（仅 SETTLED 预付款结算；审批时点复算与草稿展示口径）。type=2=PREPAYMENT。 */
     @Select("SELECT COALESCE(SUM(amount), 0) FROM settlement"
             + " WHERE deleted = 0 AND order_id = #{orderId} AND status = 1 AND type = 2")
     BigDecimal sumPrepaymentPaid(@Param("orderId") Long orderId);
+
+    /**
+     * R4/QA P1-1：订单预付款承诺合计（PENDING+SETTLED，在途计入）——预付款累计上限、
+     * 尾款扣减与结清校验统一口径，堵住"在途不可见时超额创建/结清"窗口。type=2=PREPAYMENT。
+     */
+    @Select("SELECT COALESCE(SUM(amount), 0) FROM settlement"
+            + " WHERE deleted = 0 AND order_id = #{orderId} AND status IN (0, 1) AND type = 2")
+    BigDecimal sumPrepaymentCommitted(@Param("orderId") Long orderId);
 }

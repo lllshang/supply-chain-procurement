@@ -43,8 +43,9 @@ import static org.mockito.Mockito.when;
 /**
  * P3-T04/T05 结算/付款状态机与预算核销联动单测。
  *
- * <p>覆盖：结算审批通过→核销（writeOff ORDER+金额）+ 订单 SETTLED；付款仅 SETTLED
- * 可发起；累计付款 ≤ 结算金额；登记确认→PAID→订单全部付清→PAID；对账单守恒。</p>
+ * <p>覆盖：结算审批通过→核销（writeOff ORDER+金额），R5 订单状态不变；付款仅 SETTLED
+ * 可发起；累计付款 ≤ 结算金额；登记确认按结算单累计实付 vs 应付判定 PARTIAL/PAID（P2-1，
+ * 设计 §2.2），R5 不写订单 PAID；对账单守恒。</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -193,6 +194,37 @@ class SettlementPaymentTest {
         // 付款确认无预算动作（核销已在结算完成，规格 §5 行 12）
         verify(budgetOccupyService, org.mockito.Mockito.never()).writeOff(any());
         verify(budgetOccupyService, org.mockito.Mockito.never()).occupy(any());
+    }
+
+    /** P2-1：分期首笔确认——累计实付 < 应付 → PARTIAL(1)（设计 §2.2 语义载体=付款单据行）。 */
+    @Test
+    void confirmPayment_partialWhenUnderpaid() {
+        Settlement settled = settlement(SettlementStatus.SETTLED); // 应付 1200
+        Payment payment = payment(PaymentStatus.UNPAID);
+        payment.setPayAmount(new BigDecimal("500"));
+        when(paymentMapper.selectById(PAY_ID)).thenReturn(payment);
+        when(settlementMapper.selectById(SETTLE_ID)).thenReturn(settled);
+        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(BigDecimal.ZERO);
+
+        paymentService.confirmPayment(PAY_ID, "voucher-002.pdf", LocalDate.of(2026, 9, 24));
+
+        assertEquals(PaymentStatus.PARTIAL, payment.getStatus(), "首笔 500 < 1200 → PARTIAL");
+        verify(orderMapper, org.mockito.Mockito.never()).updateById(any(PurchaseOrder.class));
+    }
+
+    /** P2-1：分期付满确认——累计实付(历史 PAID + 本次) ≥ 应付 → PAID(2)。 */
+    @Test
+    void confirmPayment_paidWhenFullyPaid() {
+        Settlement settled = settlement(SettlementStatus.SETTLED); // 应付 1200
+        Payment payment = payment(PaymentStatus.UNPAID);
+        payment.setPayAmount(new BigDecimal("700"));
+        when(paymentMapper.selectById(PAY_ID)).thenReturn(payment);
+        when(settlementMapper.selectById(SETTLE_ID)).thenReturn(settled);
+        when(paymentMapper.sumPaidAmount(SETTLE_ID)).thenReturn(new BigDecimal("500")); // 首笔已付 500
+
+        paymentService.confirmPayment(PAY_ID, "voucher-003.pdf", LocalDate.of(2026, 9, 24));
+
+        assertEquals(PaymentStatus.PAID, payment.getStatus(), "累计 500+700=1200 → PAID");
     }
 
     /** 对账单：应付 − 已付 = 差额（守恒）。 */

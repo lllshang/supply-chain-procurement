@@ -38,20 +38,23 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * P3b-T02 D10 预付款结算单测（R4）。
+ * P3b-T02 D10 预付款结算单测（R4）+ QA P1-1 复现即回归。
  *
  * <p>覆盖：预付款从订单发起（无到货、paymentStage=1、type=PREPAYMENT）、累计不超过订单有效金额；
- * 尾款结算自动扣减已付预付款（prepaymentDeduction 回填、金额 = 应结总额 − 预付款）。</p>
+ * 在途（PENDING）预付款计入承诺口径（QA P1-1：3 笔连发第 3 笔拦截 / 在途计入尾款扣减 / 审批时点复算兜底 /
+ * PUT 改额同口径封顶）；尾款结算自动扣减预付款承诺（prepaymentDeduction 回填、paymentStage=3）。</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class SettlementPrepaymentTest {
 
     private static final long ORDER_ID = 3001L;
+    private static final long PREPAY_ID = 4001L;
 
     @Mock
     private SettlementMapper settlementMapper;
@@ -112,7 +115,7 @@ class SettlementPrepaymentTest {
     void createPrepaymentSettlement_marksPrepaymentAndStage1() {
         PurchaseOrder order = order(OrderStatus.CREATED);
         when(orderMapper.selectById(ORDER_ID)).thenReturn(order);
-        when(settlementMapper.sumPrepaymentPaid(ORDER_ID)).thenReturn(BigDecimal.ZERO);
+        when(settlementMapper.sumPrepaymentCommitted(ORDER_ID)).thenReturn(BigDecimal.ZERO);
 
         Long id = settlementService.createPrepaymentSettlement(ORDER_ID, new BigDecimal("300"), "预付款");
 
@@ -127,26 +130,95 @@ class SettlementPrepaymentTest {
         assertEquals(SettlementStatus.PENDING, s.getStatus());
     }
 
-    /** 预付款累计不得超过订单有效金额（应结总额）。 */
+    /** 预付款累计（committed 口径：PENDING+SETTLED 在途计入）不得超过订单有效金额（应结总额）。 */
     @Test
     void createPrepaymentSettlement_capsAtOrderValidAmount() {
         PurchaseOrder order = order(OrderStatus.CREATED);
         when(orderMapper.selectById(ORDER_ID)).thenReturn(order);
         when(orderItemMapper.selectList(any())).thenReturn(List.of(item())); // 应结 1200
-        when(settlementMapper.sumPrepaymentPaid(ORDER_ID)).thenReturn(new BigDecimal("1000"));
+        when(settlementMapper.sumPrepaymentCommitted(ORDER_ID)).thenReturn(new BigDecimal("1000"));
 
-        // 已付 1000 + 本次 300 > 1200 → 拒绝
+        // 已承诺（含在途）1000 + 本次 300 > 1200 → 拒绝
         assertThrows(BizException.class,
                 () -> settlementService.createPrepaymentSettlement(ORDER_ID, new BigDecimal("300"), "超额预付款"));
     }
 
-    /** 尾款结算自动扣减已付预付款：金额 = 应结总额 − 预付款；prepaymentDeduction 回填。 */
+    /** QA P1-1 复现即回归（QA 攻击路径）：订单 1200 连发 3 笔在途预付款 1000/200/100，第 3 笔必须被拦。 */
+    @Test
+    void createPrepaymentSettlement_inFlightCounted_thirdBlocked() {
+        PurchaseOrder order = order(OrderStatus.CREATED);
+        when(orderMapper.selectById(ORDER_ID)).thenReturn(order);
+        // 前两笔在途预付款 1000+200 = 1200 已达 cap（sumPrepaymentCommitted：PENDING 计入）
+        when(settlementMapper.sumPrepaymentCommitted(ORDER_ID)).thenReturn(new BigDecimal("1200"));
+
+        assertThrows(BizException.class,
+                () -> settlementService.createPrepaymentSettlement(ORDER_ID, new BigDecimal("100"), "第3笔在途超额"));
+        verify(settlementMapper, never()).insert(any(Settlement.class));
+    }
+
+    /** QA P1-1：在途预付款存在时创建尾款——扣减额与结清校验按 committed 口径含在途；paymentStage=3（P3-2）。 */
+    @Test
+    void finalSettlement_deductionIncludesInFlightPrepayment() {
+        PurchaseOrder order = order(OrderStatus.RECEIVED);
+        when(orderMapper.selectById(ORDER_ID)).thenReturn(order);
+        when(settlementMapper.sumPrepaymentCommitted(ORDER_ID)).thenReturn(new BigDecimal("200")); // 全部 PENDING 在途
+        when(settlementMapper.selectByOrder(ORDER_ID)).thenReturn(List.of()); // 无历史已结
+
+        SettlementSaveReqVO req = new SettlementSaveReqVO();
+        req.setOrderId(ORDER_ID);
+        req.setSettledQtyBase(new BigDecimal("12"));
+        req.setSettleMode(SettleMode.FINAL);
+        req.setIsFinal(1);
+
+        settlementService.createSettlement(req);
+
+        ArgumentCaptor<Settlement> captor = ArgumentCaptor.forClass(Settlement.class);
+        verify(settlementMapper).insert(captor.capture());
+        Settlement s = captor.getValue();
+        assertEquals(0, s.getAmount().compareTo(new BigDecimal("1000")),
+                "尾款金额 = 1200 − 200(在途预付款承诺) = 1000");
+        assertEquals(0, s.getPrepaymentDeduction().compareTo(new BigDecimal("200")),
+                "扣减额按 committed 口径含在途");
+        assertEquals(Integer.valueOf(3), s.getPaymentStage(), "P3-2：尾款 paymentStage=3");
+    }
+
+    /** QA P1-1 审批兜底：SETTLEMENT 通过时点复算 Σ已批预付款 + 本单 ≤ 订单有效金额，超额抛出且不结清。 */
+    @Test
+    void approval_recomputesPrepaymentCap_andBlocks() {
+        PurchaseOrder order = order(OrderStatus.RECEIVED);
+        when(orderMapper.selectById(ORDER_ID)).thenReturn(order);
+        Settlement prepayment = prepayment(SettlementStatus.PENDING, new BigDecimal("300"));
+        when(settlementMapper.selectById(PREPAY_ID)).thenReturn(prepayment);
+        // 已批 1000 + 本单 300 = 1300 > 订单有效金额 1200（orderItemMapper 已在 setUp 桩为 1200）
+        when(settlementMapper.sumPrepaymentPaid(ORDER_ID)).thenReturn(new BigDecimal("1000"));
+
+        assertThrows(BizException.class,
+                () -> settlementService.handleApproval(9001L, PREPAY_ID, true, "ok"));
+        assertEquals(SettlementStatus.PENDING, prepayment.getStatus(), "审批拦截：不结清、保持 PENDING");
+        verify(budgetOccupyService, never()).writeOff(any(com.dzgylxt.vo.budget.BudgetOccupyCmd.class));
+    }
+
+    /** QA P1-1：PUT /{id} 修改预付款金额同口径封顶——Σ其他预付款(含在途，不含本单) + 本次 ≤ 订单有效金额。 */
+    @Test
+    void updatePrepayment_amountCappedAtOrderValidAmount() {
+        Settlement prepayment = prepayment(SettlementStatus.PENDING, new BigDecimal("1000"));
+        when(settlementMapper.selectById(PREPAY_ID)).thenReturn(prepayment);
+        // committed = 1000（含本单 1000）；剔除本单后其他预付款 = 0，改 1300 > 1200 → 拦截
+        when(settlementMapper.sumPrepaymentCommitted(ORDER_ID)).thenReturn(new BigDecimal("1000"));
+
+        SettlementSaveReqVO req = new SettlementSaveReqVO();
+        req.setAmount(new BigDecimal("1300"));
+        assertThrows(BizException.class, () -> settlementService.updateSettlement(PREPAY_ID, req));
+        assertEquals(0, prepayment.getAmount().compareTo(new BigDecimal("1000")), "拦截后金额不变");
+    }
+
+    /** 尾款结算自动扣减已批预付款：金额 = 应结总额 − 预付款；prepaymentDeduction 回填。 */
     @Test
     void finalSettlement_autoDeductsPrepayment() {
         PurchaseOrder order = order(OrderStatus.RECEIVED);
         when(orderMapper.selectById(ORDER_ID)).thenReturn(order);
         when(orderItemMapper.selectList(any())).thenReturn(List.of(item())); // 应结 1200
-        when(settlementMapper.sumPrepaymentPaid(ORDER_ID)).thenReturn(new BigDecimal("300"));
+        when(settlementMapper.sumPrepaymentCommitted(ORDER_ID)).thenReturn(new BigDecimal("300"));
         when(settlementMapper.selectByOrder(ORDER_ID)).thenReturn(List.of()); // 无历史结算
 
         SettlementSaveReqVO req = new SettlementSaveReqVO();
@@ -167,6 +239,19 @@ class SettlementPrepaymentTest {
     }
 
     // ---------------- fixtures ----------------
+
+    private Settlement prepayment(SettlementStatus status, BigDecimal amount) {
+        Settlement s = new Settlement();
+        s.setId(PREPAY_ID);
+        s.setOrderId(ORDER_ID);
+        s.setSettleNo("JS-202609-000002");
+        s.setAmount(amount);
+        s.setType(SettlementType.PREPAYMENT);
+        s.setIsFinal(0);
+        s.setPaymentStage(1);
+        s.setStatus(status);
+        return s;
+    }
 
     private Arrival arrival() {
         Arrival a = new Arrival();
