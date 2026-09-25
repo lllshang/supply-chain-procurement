@@ -67,7 +67,18 @@ export const fallbackMenus = [
       { id: 504, parentId: 5, menuName: '预算台账', icon: 'money', path: '/budget/ledger', menuType: 2, perms: 'budget:read' }
     ]
   },
-  { id: 6, parentId: 0, menuName: '合同管理', icon: 'document', path: '/contract', menuType: 1 },
+  {
+    id: 6,
+    parentId: 0,
+    menuName: '合同管理',
+    icon: 'document',
+    path: '/contract',
+    menuType: 1,
+    children: [
+      // P4 R3a：合同类型配置（菜单 603，与 data.sql/p4_migration.sql 种子一致）
+      { id: 603, parentId: 6, menuName: '合同类型配置', icon: 'document', path: '/contract/types', menuType: 2, perms: 'contract:type:read,contract:type:write' }
+    ]
+  },
   { id: 7, parentId: 0, menuName: '报价定标', icon: 'trend', path: '/quotation', menuType: 1 },
   {
     id: 8,
@@ -78,7 +89,7 @@ export const fallbackMenus = [
     menuType: 1,
     children: [
       { id: 801, parentId: 8, menuName: '采购订单', icon: 'list', path: '/order/list', menuType: 2, perms: 'order:read,order:write,order:change' },
-      { id: 802, parentId: 8, menuName: '到货验收', icon: 'box', path: '/order/arrival', menuType: 2, perms: 'arrival:read,arrival:write,arrival:confirm' },
+      { id: 802, parentId: 8, menuName: '到货验收', icon: 'box', path: '/order/arrival', menuType: 2, perms: 'arrival:read,arrival:write,arrival:confirm,receipt:over-receive' },
       { id: 803, parentId: 8, menuName: '入库台账', icon: 'money', path: '/order/ledger', menuType: 2, perms: 'arrival:read' },
       { id: 804, parentId: 8, menuName: '履约调整', icon: 'tools', path: '/order/adjust', menuType: 2, perms: 'adjust:read,adjust:write' },
       { id: 805, parentId: 8, menuName: '服务考核', icon: 'audit', path: '/order/assess', menuType: 2, perms: 'order:assess:read,order:assess:write' }
@@ -97,7 +108,20 @@ export const fallbackMenus = [
       { id: 903, parentId: 9, menuName: '对账单', icon: 'document', path: '/settlement/statement', menuType: 2, perms: 'payment:read' }
     ]
   },
-  { id: 10, parentId: 0, menuName: '审批中心', icon: 'audit', path: '/approval', menuType: 1 },
+  {
+    id: 10,
+    parentId: 0,
+    menuName: '审批中心',
+    icon: 'audit',
+    path: '/approval',
+    menuType: 1,
+    children: [
+      // P4：1001 语义升级（perms 迁移 approval:todo/approve，保留 approval:read 兼容一版，偏差②）
+      { id: 1001, parentId: 10, menuName: '待办审批', icon: 'audit', path: '/approval/todo', menuType: 2, perms: 'approval:todo,approval:approve,approval:read' },
+      { id: 1002, parentId: 10, menuName: '已办审批', icon: 'finished', path: '/approval/done', menuType: 2, perms: 'approval:done' },
+      { id: 1003, parentId: 10, menuName: '流程配置', icon: 'setting', path: '/approval/config', menuType: 2, perms: 'approval:config' }
+    ]
+  },
   { id: 11, parentId: 0, menuName: '报表中心', icon: 'chart', path: '/report', menuType: 1 },
   { id: 12, parentId: 0, menuName: '基础设置', icon: 'tools', path: '/setting', menuType: 1 }
 ]
