@@ -100,12 +100,21 @@ app:
   price:
     # 价格库异常价判定阈值：与近期通过价均价偏离百分比（P3 设计 §1.4 = 20%）
     abnormal-percent: 20
+    # P4 R3c：最低价同步标准价开关（默认关，Q12）。开启后订单完成时同 SKU+采购单位+换算口径
+    # 的有效订单取最低正数成交价写 sku.standard_price；切换只影响后续订单不回刷历史。
+    lowest-price-sync-enabled: false
+  receipt:
+    # P4 R3b：超收授权比例（默认 0=禁止超收，Q11 最保守口径 PRD L793）。
+    # 到货数量 > 订单剩余可收时：0 直接拒绝；>0 且超收比例 ≤ 阈值须持 receipt:over-receive 权限放行。
+    over-receive-percent: 0
   order:
     # D14 日常采购「授权」控制开关（默认开启）
     daily-auth-enabled: true
     # D14 单笔授权额度阈值（元）。超过则升级至部门负责人/采购负责人确认。
     # ⚠️ 占位值，待业务拍板（对应主流程 docx 控制规则表"单笔授权额度"，docx 未给具体数值）
     daily-auth-limit: 500000
+    # D17 高频补货自动通过（P4 仅键名预留=关，逻辑 P4 之后，规格 §1.2 Out of Scope）
+    # daily-auto-auth-enabled: false
   redis:
     # 登录用户缓存前缀
     user-token-prefix: "USER:TOKEN:"

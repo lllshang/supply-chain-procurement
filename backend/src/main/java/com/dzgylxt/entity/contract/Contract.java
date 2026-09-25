@@ -33,6 +33,12 @@ public class Contract extends BaseEntity implements Serializable {
     private String fileKeys;
     /** 续签来源合同（<!-- D1: P2b 框架续签 -->，P2 新增） */
     private Long renewedFromId;
+    /** 关联原合同（P4 R3a：补充签订 SUPPLEMENT 指向原合同；续签沿用 renewedFromId 不占本列） */
+    private Long sourceContractId;
+    /** 关联类型：SUPPLEMENT=补充签订（P4 R3a） */
+    private String relationType;
+    /** 合同类型字典引用（P4 R3a；与存量 contractType TINYINT 并存，typeId 优先） */
+    private Long typeId;
     /** 预算科目（S8：统计冗余，预算锚点仍=申请/award，P2b） */
     private Long subjectId;
     /** 终止原因（P2 新增） */

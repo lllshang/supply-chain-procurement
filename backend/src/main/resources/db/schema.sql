@@ -1069,4 +1069,124 @@ CREATE TABLE IF NOT EXISTS service_deduction_item (
     deleted TINYINT NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='服务扣款明细（P3c-A5）';
 
+-- ============================================================
+-- P4 审批中心：真实审批引擎（表驱动节点/角色解析审批人/工作台）
+-- 对齐 docs/P4审批中心设计.md §1 + scripts/sql/p4_migration.sql（双份 DDL 惯例）
+-- 5 新表 + 4 组 ALTER；存量库请执行迁移脚本，本段服务新建库自动初始化
+-- （新建库若 CREATE TABLE 已内联新列，下方 ALTER 报 1060 可忽略，同既有模式）。
+-- ============================================================
+
+-- 1.2.1 approval_flow_def（表驱动硬约束，规格 §3.1）
+CREATE TABLE IF NOT EXISTS approval_flow_def (
+    id           BIGINT       NOT NULL PRIMARY KEY,
+    flow_key     VARCHAR(50)  NOT NULL COMMENT '流程键（=biz_type，8 个：PURCHASE_APPLY/AWARD/CONTRACT/FULFILLMENT_ADJUST/BUDGET/SETTLEMENT/SUPPLIER_QUAL/DAILY_AUTH）',
+    biz_type     VARCHAR(50)  NOT NULL COMMENT '业务类型（与 flow_key 同值，显式冗余便于查询）',
+    flow_version INT          NOT NULL DEFAULT 1 COMMENT '流程版本（每次配置变更 +1；任务创建时快照落 approval_task.flow_version，仅审计对账用，运行期读节点快照）',
+    flow_name    VARCHAR(100) NULL COMMENT '流程名称',
+    enabled      TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用（停用后该 bizType 新任务拒绝创建，在途不受影响）',
+    remark       VARCHAR(255) NULL,
+    created_by   BIGINT       NULL,
+    created_at   DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by   BIGINT       NULL,
+    updated_at   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted      TINYINT      NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_flow_key (flow_key, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='审批流定义（表驱动硬约束，规格 §3.1）';
+
+-- 1.2.2 approval_node_def（节点序/角色/金额区间/签类型/超时免审规则位）
+CREATE TABLE IF NOT EXISTS approval_node_def (
+    id            BIGINT        NOT NULL PRIMARY KEY,
+    flow_key      VARCHAR(50)   NOT NULL COMMENT '所属流程（引用 approval_flow_def.flow_key）',
+    node_code     VARCHAR(50)   NOT NULL COMMENT '节点编码（任务内唯一，如 N1/N2）',
+    node_name     VARCHAR(100)  NULL COMMENT '节点名称（工作台展示）',
+    seq           INT           NOT NULL COMMENT '节点序（1 起，按 seq 升序流转）',
+    approver_type VARCHAR(30)   NOT NULL COMMENT '审批人解析类型：ROLE / DEPT_HEAD_OF_APPLICANT / USER',
+    approver_value VARCHAR(200) NULL COMMENT 'ROLE=角色编码（sys_role.role_code）；DEPT_HEAD_OF_APPLICANT=置 NULL；USER=用户名（兜底慎用）',
+    amount_min    DECIMAL(18,2) NULL COMMENT '节点生效金额区间下界（含）；NULL=无下界',
+    amount_max    DECIMAL(18,2) NULL COMMENT '节点生效金额区间上界（不含）；NULL=无上界；双 NULL=恒生效',
+    sign_type     VARCHAR(10)   NOT NULL DEFAULT 'ANY' COMMENT 'ANY=或签（默认）/ ALL=会签（预留，Q13 未拍板不启用）',
+    timeout_hours INT           NULL COMMENT '超时升级时限（预留位不实现，超时升级列 v1.x，规格 §1.2 Out of Scope）',
+    free_review   TINYINT       NOT NULL DEFAULT 0 COMMENT '免审规则位（预留位：0=必审；本期全部必审，Q7 履约调整一律审批口径固化于种子）',
+    enabled       TINYINT       NOT NULL DEFAULT 1,
+    remark        VARCHAR(255)  NULL,
+    created_by    BIGINT        NULL,
+    created_at    DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    updated_by    BIGINT        NULL,
+    updated_at    DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted       TINYINT       NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_flow_node (flow_key, node_code, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='审批节点定义（节点/角色/金额区间全配置化）';
+
+-- 1.2.3 user_notice（站内通知，规格 §3.6 裁量：站内最小集）
+CREATE TABLE IF NOT EXISTS user_notice (
+    id         BIGINT       NOT NULL PRIMARY KEY,
+    user_id    BIGINT       NOT NULL COMMENT '接收人（sys_user.id）',
+    title      VARCHAR(200) NOT NULL COMMENT '通知标题',
+    content    VARCHAR(1000) NULL COMMENT '正文（终态通知含意见摘要，截断 500 字）',
+    biz_type   VARCHAR(50)  NULL COMMENT '关联业务类型（审批通知=bizType）',
+    biz_id     BIGINT       NULL COMMENT '关联业务单据/任务 id（taskId）',
+    channel    VARCHAR(20)  NOT NULL DEFAULT 'site' COMMENT '渠道：site=站内（预留：sms/wecom/dingtalk 列 v1.x，PRD L1007/L224）',
+    read_flag  TINYINT      NOT NULL DEFAULT 0 COMMENT '0=未读 1=已读（红点角标数据源）',
+    created_by BIGINT       NULL,
+    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT       NULL,
+    updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    TINYINT      NOT NULL DEFAULT 0,
+    KEY idx_user_read (user_id, read_flag, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='站内通知（审批待办/终态通知；外部渠道 Adapter 口子见设计 §3.4）';
+
+-- 1.2.4 contract_type（合同类型字典，R3a，规格 §5.1 / PRD L840）
+CREATE TABLE IF NOT EXISTS contract_type (
+    id         BIGINT       NOT NULL PRIMARY KEY,
+    type_code  VARCHAR(50)  NOT NULL COMMENT '类型编码',
+    type_name  VARCHAR(100) NOT NULL COMMENT '类型名称',
+    enabled    TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用（停用后新建合同不可选，存量不受影响）',
+    remark     VARCHAR(255) NULL,
+    created_by BIGINT       NULL,
+    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT       NULL,
+    updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    TINYINT      NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_type_code (type_code, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='合同类型字典（被引用不可删，PRD L840）';
+
+-- 1.2.5 contract_sku_whitelist（合同 SKU 白名单，D15 方案 A 兜底，规格 §6）
+CREATE TABLE IF NOT EXISTS contract_sku_whitelist (
+    id         BIGINT       NOT NULL PRIMARY KEY,
+    contract_id BIGINT      NOT NULL COMMENT '合同 id（无清单且无定标合同的兜底供货范围）',
+    sku_id     BIGINT       NOT NULL COMMENT '允许下单的 SKU',
+    remark     VARCHAR(255) NULL COMMENT '维护原因（审计）',
+    created_by BIGINT       NULL,
+    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT       NULL,
+    updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted    TINYINT      NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_contract_sku (contract_id, sku_id, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='合同 SKU 白名单（D15 方案 A：无清单无定标合同兜底，空=维持现网额度闸行为）';
+
+-- 1.3.1 approval_task（+5：缺口①③④⑤收敛 + flow_version + 乐观锁）
+ALTER TABLE `approval_task`
+  ADD COLUMN `applicant`     VARCHAR(64)    NULL COMMENT '申请人用户名快照（ApprovalTaskSpec.applicant 落库，缺口④；展示用，通知投递用 applicant_id）' AFTER `flow_key`,
+  ADD COLUMN `applicant_id`  BIGINT         NULL COMMENT '申请人用户 id（通知/重提归属，缺口④）' AFTER `applicant`,
+  ADD COLUMN `amount`        DECIMAL(18,2)  NULL COMMENT '金额摘要（创建时从 payloadJson.amount 提取冗余，工作台列表展示+节点金额区间匹配）' AFTER `applicant_id`,
+  ADD COLUMN `flow_version`  INT            NOT NULL DEFAULT 1 COMMENT '提交时流程版本快照（在途任务按提交时配置走完，拍板清单声明）' AFTER `amount`,
+  ADD COLUMN `version`       INT            NOT NULL DEFAULT 0 COMMENT '乐观锁版本（并发防重审，规格 §3.4；BaseEntity 无 version，任务实体独立加列，与 contract.version 同模式）' AFTER `flow_version`;
+
+-- 1.3.2 approval_node（+4：节点快照机制，设计 §2.9）
+ALTER TABLE `approval_node`
+  ADD COLUMN `node_code`     VARCHAR(50)   NULL COMMENT '节点编码快照（=approval_node_def.node_code）' AFTER `task_id`,
+  ADD COLUMN `seq`           INT           NULL COMMENT '节点序快照' AFTER `node_code`,
+  ADD COLUMN `sign_type`     VARCHAR(10)   NULL COMMENT '签类型快照：ANY/ALL' AFTER `seq`,
+  ADD COLUMN `version`       INT           NOT NULL DEFAULT 0 COMMENT '乐观锁版本（节点行并发防护，规格 §3.4）' AFTER `sign_type`;
+
+-- 1.3.3 approval_record（+1：审计快照，规格 §3.5）
+ALTER TABLE `approval_record`
+  ADD COLUMN `approver_name` VARCHAR(64) NULL COMMENT '审批人姓名快照（留痕防用户改名，规格 §3.5）' AFTER `approver`;
+
+-- 1.3.4 contract（+3：R3a 补充签订；type 字典引用迁移）
+ALTER TABLE `contract`
+  ADD COLUMN `source_contract_id` BIGINT      NULL COMMENT '关联原合同（补充签订 SUPPLEMENT 指向原合同；续签沿用既有 renewed_from_id）' AFTER `renewed_from_id`,
+  ADD COLUMN `relation_type`      VARCHAR(20) NULL COMMENT '关联类型：SUPPLEMENT=补充签订（续签=renewed_from_id 表达，不占本列）' AFTER `source_contract_id`,
+  ADD COLUMN `type_id`            BIGINT      NULL COMMENT '合同类型字典引用（contract_type.id；与存量 contract_type TINYINT 并存，type_id 优先）' AFTER `relation_type`;
+
 SET FOREIGN_KEY_CHECKS = 1;

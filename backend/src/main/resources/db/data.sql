@@ -167,4 +167,62 @@ INSERT IGNORE INTO budget_subject (id, code, name, parent_id, subject_type, stat
 (1, 'BS_EXPENSE', '支出', 0, 1, 0, NOW(), NOW(), 0),
 (2, 'BS_RAW',     '原材料费', 1, 1, 0, NOW(), NOW(), 0);
 
+-- ============================================================
+-- P4 审批中心种子（幂等，对齐 docs/P4审批中心设计.md §1.4 + 拍板清单默认值）
+-- 在途任务口径：配置变更（拍板 UPDATE）只影响新创建任务；
+-- 在途任务按创建时节点快照走完，无需迁移。
+-- ============================================================
+
+-- ---------------- P4 审批角色种子（sys_role 现仅 SUPER_ADMIN；幂等 INSERT IGNORE） ----------------
+INSERT IGNORE INTO sys_role (id, role_code, role_name, remark, status, created_at, updated_at, deleted) VALUES
+(2, 'DEPT_HEAD',       '部门负责人', '采购申请第 1 节点/日常超授权确认（拍板清单第 3 题）', 0, NOW(), NOW(), 0),
+(3, 'PURCHASE_DEPT',   '采购部（招采）', '采购申请第 2 节点/资质审批', 0, NOW(), NOW(), 0),
+(4, 'FINANCE',         '财务负责人', '超预算/调整审批（拍板 2-A）', 0, NOW(), NOW(), 0),
+(5, 'PROCUREMENT_LEAD','采购负责人', '定标/合同/履约/结算审批（拍板 3 表）', 0, NOW(), NOW(), 0),
+(6, 'LEADER',          '分管领导', '合同超阈值第 2 节点（待拍板默认值，P4 设计偏差①）', 0, NOW(), NOW(), 0);
+
+-- ---------------- P4 审批流定义种子（8 bizType，金额默认=50 万占位 Q5/Q6，拍板后 UPDATE 即生效） ----------------
+INSERT IGNORE INTO approval_flow_def (id, flow_key, biz_type, flow_version, flow_name, enabled, remark, created_at, updated_at, deleted) VALUES
+(1, 'PURCHASE_APPLY',      'PURCHASE_APPLY',      1, '采购申请审批流', 1, '两级：部门负责人→采购部（拍板 1-A）', NOW(), NOW(), 0),
+(2, 'AWARD',               'AWARD',               1, '定标审批流',     1, '单级：采购负责人', NOW(), NOW(), 0),
+(3, 'CONTRACT',            'CONTRACT',            1, '合同审批流',     1, '金额>50 万升两级（规格基线 §2.2，Q5 占位）', NOW(), NOW(), 0),
+(4, 'FULFILLMENT_ADJUST',  'FULFILLMENT_ADJUST',  1, '履约调整审批流', 1, 'Q7：一律审批无免审', NOW(), NOW(), 0),
+(5, 'BUDGET',              'BUDGET',              1, '超预算/调整审批流', 1, '拍板 2-A：财务负责人', NOW(), NOW(), 0),
+(6, 'SETTLEMENT',          'SETTLEMENT',          1, '结算审批流',     1, 'Q9：采购负责人', NOW(), NOW(), 0),
+(7, 'SUPPLIER_QUAL',       'SUPPLIER_QUAL',       1, '资质审核流',     1, '拍板 3 表·招采人员', NOW(), NOW(), 0),
+(8, 'DAILY_AUTH',          'DAILY_AUTH',          1, '日常超授权确认流', 1, '拍板 3 表二选一默认部门负责人（偏差③）；50 万阈值仍在 app.order.daily-auth-limit（Q6）', NOW(), NOW(), 0);
+
+-- ---------------- P4 审批节点定义种子（10 节点） ----------------
+INSERT IGNORE INTO approval_node_def (id, flow_key, node_code, node_name, seq, approver_type, approver_value, amount_min, amount_max, sign_type, free_review, enabled, created_at, updated_at, deleted) VALUES
+(1,  'PURCHASE_APPLY',     'N1', '部门负责人审批', 1, 'DEPT_HEAD_OF_APPLICANT', NULL, NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(2,  'PURCHASE_APPLY',     'N2', '采购部审批',     2, 'ROLE', 'PURCHASE_DEPT', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(3,  'AWARD',              'N1', '定标审批',       1, 'ROLE', 'PROCUREMENT_LEAD', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(4,  'CONTRACT',           'N1', '合同审批',       1, 'ROLE', 'PROCUREMENT_LEAD', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(5,  'CONTRACT',           'N2', '合同升级审批',   2, 'ROLE', 'LEADER', 500000, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(6,  'FULFILLMENT_ADJUST', 'N1', '履约调整审批',   1, 'ROLE', 'PROCUREMENT_LEAD', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(7,  'BUDGET',             'N1', '超预算/调整审批', 1, 'ROLE', 'FINANCE', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(8,  'SETTLEMENT',         'N1', '结算审批',       1, 'ROLE', 'PROCUREMENT_LEAD', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(9,  'SUPPLIER_QUAL',      'N1', '资质审核',       1, 'ROLE', 'PURCHASE_DEPT', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0),
+(10, 'DAILY_AUTH',         'N1', '超授权确认',     1, 'ROLE', 'DEPT_HEAD', NULL, NULL, 'ANY', 0, 1, NOW(), NOW(), 0);
+
+-- ---------------- P4 审批中心菜单（1001 语义升级 + 1002/1003 新增；幂等） ----------------
+-- 1001 既有行语义升级：perms 迁移 approval:read → approval:todo/done/approve（approval:read 后端兼容一版不清除，P4 设计偏差②）
+UPDATE sys_menu SET menu_name='待办审批', path='/approval/todo', component='approval/todo/index',
+  perms='approval:todo,approval:approve,approval:read' WHERE id=1001 AND deleted=0;
+
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
+(1002, 10, '已办审批', 2, '/approval/done',   'approval/done/index',   'finished', 'approval:done',   2, 0, NOW(), NOW(), 0),
+(1003, 10, '流程配置', 2, '/approval/config', 'approval/config/index', 'setting',  'approval:config', 3, 0, NOW(), NOW(), 0);
+
+-- ---------------- P4 超管菜单授权（1002/1003；1001 既有授权 id=38 沿用） ----------------
+INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, deleted) VALUES
+(50, 1, 1002, NOW(), NOW(), 0),
+(51, 1, 1003, NOW(), NOW(), 0);
+
+-- ---------------- P4 合同类型字典种子（存量 TINYINT 映射：0=物料 1=服务 2=综合） ----------------
+INSERT IGNORE INTO contract_type (id, type_code, type_name, enabled, remark, created_at, updated_at, deleted) VALUES
+(1, 'MATERIAL', '物料', 1, '存量 contract_type=0 映射', NOW(), NOW(), 0),
+(2, 'SERVICE',  '服务', 1, '存量 contract_type=1 映射', NOW(), NOW(), 0),
+(3, 'MIXED',    '综合', 1, '存量 contract_type=2 映射', NOW(), NOW(), 0);
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -21,4 +21,6 @@ public class ApprovalRecord extends BaseEntity implements Serializable {
     private Long approver;
     private String action;
     private String comment;
+    /** 审批人姓名快照（P4 规格 §3.5：留痕防用户改名） */
+    private String approverName;
 }
