@@ -45,6 +45,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+import static org.junit.jupiter.api.Assertions.assertNull;
+
 /**
  * 报价导入/模板单测（QA 第 1 轮 #21/#23/#24 修复锁定）。
  */
@@ -177,10 +183,44 @@ class QuotationImportTest {
         assertEquals(0, result.getSuccess(), "任一行失败整批不落库（AC④）");
         assertEquals(1, result.getFail());
         assertFalse(result.getErrors().isEmpty());
-        assertNotNull(result.getErrorSheetBase64());
-        assertNotEquals("", result.getErrorSheetBase64());
+        // B4：内联 base64 已移除，错误 Sheet 改由 Redis 暂存 + 独立端点；本测试未注入 Redis，
+        // getErrorSheetBase64 应安全降级返回 null（不抛异常）
+        assertNull(service.getErrorSheetBase64(result.getBatchNo()),
+                "无 Redis 注入时 getErrorSheetBase64 应安全返回 null（降级）");
         verify(service, never()).saveBatch(anyCollection());
         verify(quotationMapper, never()).update(any(), any());
+    }
+
+    /** B4：注入 mock Redis 时，失败批次错误 Sheet 写入并可按批次号取回（端点路径）。 */
+    @Test
+    void importQuotations_errorSheetCached_whenRedisAvailable() throws Exception {
+        StringRedisTemplate redis = Mockito.mock(StringRedisTemplate.class);
+        ValueOperations<String, String> ops = Mockito.mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(ops);
+        final String[] captured = {null};
+        Mockito.doAnswer(inv -> { captured[0] = inv.getArgument(1); return null; })
+                .when(ops).set(any(), any(), any(Duration.class));
+        ReflectionTestUtils.setField(service, "stringRedisTemplate", redis);
+
+        byte[] template = service.exportTemplate(INQUIRY_ID);
+        List<QuotationServiceImpl.TemplateRow> rows = EasyExcel.read(new ByteArrayInputStream(template))
+                .head(QuotationServiceImpl.TemplateRow.class).sheet().doReadSync();
+        rows.get(0).setSupplierId(String.valueOf(SUPPLIER_A));
+        rows.get(0).setQty(BigDecimal.ONE);
+        rows.get(0).setPrice(new BigDecimal("-5")); // 非法：价格 <= 0
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        EasyExcel.write(out, QuotationServiceImpl.TemplateRow.class).sheet("报价单").doWrite(rows);
+        MockMultipartFile file = new MockMultipartFile("file", "q.xlsx", "application/octet-stream", out.toByteArray());
+
+        QuotationImportResultVO result = service.importQuotations(INQUIRY_ID, file);
+        assertEquals(0, result.getSuccess());
+        assertFalse(result.getErrors().isEmpty());
+        assertNotNull(captured[0], "错误 Sheet 应写入 Redis（B4）");
+        assertNotEquals("", captured[0]);
+
+        when(ops.get(any())).thenReturn(captured[0]);
+        String fetched = service.getErrorSheetBase64(result.getBatchNo());
+        assertEquals(captured[0], fetched, "按批次号应取回同一错误 Sheet");
     }
 
     /** QA #23：两家各导入一批互不失效（失效 update 按供应商各一次）。 */

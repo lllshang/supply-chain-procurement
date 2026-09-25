@@ -6,7 +6,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 报价导入结果（设计 §2.3：错误 Sheet 口径——错误行列表返回）。 */
+/** 报价导入结果（设计 §2.3：错误明细随 errors 列表返回；错误 Sheet xlsx 改由独立端点
+ *  /import/error-sheet/{batchNo} 按批次流式下载，B4）。 */
 @Data
 public class QuotationImportResultVO implements Serializable {
 
@@ -16,10 +17,4 @@ public class QuotationImportResultVO implements Serializable {
     private int success;
     private int fail;
     private List<String> errors = new ArrayList<>();
-    /**
-     * 错误 Sheet（xlsx 字节的 base64，单表「行号/原因」列）。
-     *
-     * <p>仅校验失败（整批不落库，AC④ 全有或全无）时填充，前端解码后可直接下载。</p>
-     */
-    private String errorSheetBase64;
 }

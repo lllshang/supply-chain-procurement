@@ -246,3 +246,11 @@ export function downloadErrorSheet(base64, filename) {
   }
   saveBlob(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename)
 }
+
+// B4：错误 Sheet 独立文件流下载（按批次号，后端流式返回 xlsx；与内联 base64 方案互斥）
+export async function downloadErrorSheetByBatch(batchNo, filename) {
+  const blob = await request.get(`/api/v1/quotations/import/error-sheet/${batchNo}`, {
+    responseType: 'blob'
+  })
+  saveBlob(blob, filename || `quotation-error-sheet-${batchNo}.xlsx`)
+}

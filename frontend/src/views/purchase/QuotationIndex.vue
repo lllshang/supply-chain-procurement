@@ -60,7 +60,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Search } from '@element-plus/icons-vue'
 import PageHead from '@/components/PageHead.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import { listQuotations, importQuotations, acceptQuotation, rejectQuotation, downloadErrorSheet } from '@/api/purchase2'
+import { listQuotations, importQuotations, acceptQuotation, rejectQuotation, downloadErrorSheetByBatch } from '@/api/purchase2'
 
 const inquiryId = ref('')
 const rows = ref([])
@@ -114,7 +114,7 @@ async function onImport() {
   }
 }
 function onDownloadErrorSheet() {
-  downloadErrorSheet(importResult.value.errorSheetBase64, 'quotation-error-sheet.xlsx')
+  downloadErrorSheetByBatch(importResult.value.batchNo, 'quotation-error-sheet-' + importResult.value.batchNo + '.xlsx')
 }
 
 async function onAccept(row) {

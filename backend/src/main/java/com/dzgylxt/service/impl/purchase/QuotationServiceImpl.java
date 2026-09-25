@@ -40,6 +40,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.time.Duration;
+
 /**
  * 报价服务实现（设计 §2.3）。
  *
@@ -85,6 +90,15 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
     /** 直接持有 Mapper 用于批量失效旧批次 update 语句。 */
     @Autowired
     private QuotationMapper quotationMapper;
+
+    /** 错误 Sheet 缓存（B4）：导入校验失败整批不落库，错误明细以 xlsx 字节(base64)暂存 Redis，
+     *  供独立下载端点 /import/error-sheet/{batchNo} 按批次号取回；Redis 不可用时降级为仅内联错误列表。 */
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    private static final Logger log = LoggerFactory.getLogger(QuotationServiceImpl.class);
+    private static final String ERROR_SHEET_KEY_PREFIX = "quotation:errorSheet:";
+    private static final Duration ERROR_SHEET_TTL = Duration.ofMinutes(30);
 
     // ---------------- 模板 ----------------
 
@@ -232,8 +246,14 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
         if (!result.getErrors().isEmpty()) {
             result.setFail(result.getErrors().size());
             result.setSuccess(0);
-            result.setErrorSheetBase64(Base64.getEncoder()
-                    .encodeToString(buildErrorSheet(result.getErrors())));
+            byte[] sheet = buildErrorSheet(result.getErrors());
+            try {
+                stringRedisTemplate.opsForValue().set(ERROR_SHEET_KEY_PREFIX + result.getBatchNo(),
+                        Base64.getEncoder().encodeToString(sheet), ERROR_SHEET_TTL);
+            } catch (Exception e) {
+                // Redis 不可用时降级：错误明细仍随 errors 列表返回，仅独立下载端点返回 404
+                log.warn("错误 Sheet 缓存失败，降级为仅内联错误列表：{}", e.getMessage());
+            }
             return result;
         }
 
@@ -297,6 +317,19 @@ public class QuotationServiceImpl extends ServiceImpl<QuotationMapper, Quotation
                 .eq(Quotation::getInvalid, 0)
                 .eq(batchNo != null && !batchNo.isBlank(), Quotation::getBatchNo, batchNo)
                 .orderByDesc(Quotation::getId));
+    }
+
+    @Override
+    public String getErrorSheetBase64(String batchNo) {
+        if (batchNo == null || batchNo.isBlank()) {
+            return null;
+        }
+        try {
+            return stringRedisTemplate.opsForValue().get(ERROR_SHEET_KEY_PREFIX + batchNo);
+        } catch (Exception e) {
+            log.warn("错误 Sheet 读取失败：{}", e.getMessage());
+            return null;
+        }
     }
 
     /** 采纳/否决：仅 SUBMITTED 可流转（状态机一次性）。 */

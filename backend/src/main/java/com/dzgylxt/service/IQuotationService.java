@@ -19,6 +19,9 @@ public interface IQuotationService extends IService<Quotation> {
      */
     QuotationImportResultVO importQuotations(Long inquiryId, MultipartFile file);
 
+    /** B4：按批次号取回导入错误 Sheet 的 xlsx 字节（base64，源自 Redis 暂存；不存在返回 null）。 */
+    String getErrorSheetBase64(String batchNo);
+
     /** 比价采纳：SUBMITTED → ACCEPTED。 */
     void accept(Long quotationId);
 

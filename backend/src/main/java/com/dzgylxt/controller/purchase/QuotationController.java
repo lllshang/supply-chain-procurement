@@ -18,7 +18,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Base64;
 import java.util.List;
+
+import com.dzgylxt.common.BizException;
+import com.dzgylxt.common.ResultCode;
 
 /** 报价管理（设计 §5.2：/api/v1/quotations + 询价下的导入端点）。 */
 @RestController
@@ -49,6 +53,18 @@ public class QuotationController extends BaseController<IQuotationService, Quota
     public R<QuotationImportResultVO> importQuotations(@RequestParam Long inquiryId,
                                                        @RequestParam("file") MultipartFile file) {
         return R.ok(quotationService.importQuotations(inquiryId, file));
+    }
+
+    /** 错误 Sheet 独立文件流下载（B4：替代内联 base64，按批次号从 Redis 取 xlsx 字节流式返回）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @GetMapping("/import/error-sheet/{batchNo}")
+    public ResponseEntity<byte[]> errorSheet(@PathVariable String batchNo) {
+        String b64 = quotationService.getErrorSheetBase64(batchNo);
+        if (b64 == null || b64.isBlank()) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "错误 Sheet 不存在或已过期（请重新导入）");
+        }
+        byte[] bytes = Base64.getDecoder().decode(b64);
+        return xlsx(bytes, "quotation-error-sheet-" + batchNo + ".xlsx");
     }
 
     /** 比价采纳。 */
