@@ -4,7 +4,7 @@
       <PageHead title="合同台账">
         <el-button type="primary" :icon="Plus" v-permission="'contract:write'" @click="openCreate">合同登记</el-button>
       </PageHead>
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe :row-class-name="rowClassName">
         <el-table-column prop="no" label="合同编号" width="170" />
         <el-table-column prop="title" label="名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="supplierId" label="供应商" width="200" />
@@ -77,6 +77,9 @@
 </template>
 
 <script setup>
+// P4：审批中心来源单据跳转定位（route.query.bizId 行高亮）
+import { useQueryLocate } from '@/composables/useQueryLocate'
+const { rowClassName } = useQueryLocate()
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'

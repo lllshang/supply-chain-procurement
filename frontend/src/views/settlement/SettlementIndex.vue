@@ -10,7 +10,7 @@
         <EnumSelect v-model="queryStatus" enum-key="settlementStatus" placeholder="状态" style="--filter-width: 140px" />
         <el-button type="primary" :icon="Search" @click="reload">查询</el-button>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe :row-class-name="rowClassName">
         <el-table-column prop="settleNo" label="结算单号" width="170" />
         <el-table-column prop="orderId" label="订单ID" width="180" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
@@ -205,6 +205,9 @@
 </template>
 
 <script setup>
+// P4：审批中心来源单据跳转定位（route.query.bizId 行高亮）
+import { useQueryLocate } from '@/composables/useQueryLocate'
+const { rowClassName } = useQueryLocate()
 import { onMounted, reactive, ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Coin } from '@element-plus/icons-vue'

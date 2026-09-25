@@ -123,6 +123,14 @@ INSERT IGNORE INTO sys_role (id, role_code, role_name, remark, status, created_a
 (5, 'PROCUREMENT_LEAD','采购负责人', '定标/合同/履约/结算审批（拍板 3 表）', 0, NOW(), NOW(), 0),
 (6, 'LEADER',          '分管领导', '合同超阈值第 2 节点（待拍板默认值，P4 设计偏差①）', 0, NOW(), NOW(), 0);
 
+-- admin（user_id=1）兼任全部审批角色：角色驱动候选人解析下保证 SUPER_ADMIN 全功能可用
+INSERT IGNORE INTO sys_user_role (id, user_id, role_id, created_at, updated_at, deleted) VALUES
+(2, 1, 2, NOW(), NOW(), 0),
+(3, 1, 3, NOW(), NOW(), 0),
+(4, 1, 4, NOW(), NOW(), 0),
+(5, 1, 5, NOW(), NOW(), 0),
+(6, 1, 6, NOW(), NOW(), 0);
+
 INSERT IGNORE INTO approval_flow_def (id, flow_key, biz_type, flow_version, flow_name, enabled, remark, created_at, updated_at, deleted) VALUES
 (1, 'PURCHASE_APPLY',      'PURCHASE_APPLY',      1, '采购申请审批流', 1, '两级：部门负责人→采购部（拍板 1-A）', NOW(), NOW(), 0),
 (2, 'AWARD',               'AWARD',               1, '定标审批流',     1, '单级：采购负责人', NOW(), NOW(), 0),

@@ -9,7 +9,7 @@
         <EnumSelect v-model="queryStatus" enum-key="applyStatus" placeholder="状态" style="--filter-width: 140px" />
         <el-button type="primary" :icon="Search" @click="reload">查询</el-button>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe :row-class-name="rowClassName">
         <el-table-column prop="applyNo" label="申请单号" width="170" />
         <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
         <el-table-column label="类型" width="140">

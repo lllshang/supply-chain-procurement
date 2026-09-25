@@ -35,6 +35,38 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <!-- P4 站内通知红点（设计 §3.2：顶栏消息位挂角标，下拉最近 20 条 + 全部已读） -->
+          <el-badge :value="unread" :hidden="!unread" :max="99" class="notice-badge">
+            <el-dropdown trigger="click" @visible-change="onNoticeDropdown">
+              <span class="notice-bell" title="站内通知">
+                <el-icon><Bell /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu class="notice-menu">
+                  <div class="notice-head">
+                    <span>站内通知</span>
+                    <el-button link type="primary" size="small" @click="onReadAll">全部已读</el-button>
+                  </div>
+                  <template v-if="notices.length">
+                    <el-dropdown-item
+                      v-for="n in notices"
+                      :key="n.id"
+                      :class="{ 'notice-unread': !n.readFlag }"
+                      @click="onNoticeClick(n)"
+                    >
+                      <div class="notice-item">
+                        <div class="notice-title">{{ n.title }}</div>
+                        <div class="notice-content">{{ n.content || '' }}</div>
+                        <div class="notice-time">{{ n.createdAt }}</div>
+                      </div>
+                    </el-dropdown-item>
+                  </template>
+                  <el-dropdown-item v-else disabled>暂无通知</el-dropdown-item>
+                  <el-dropdown-item divided command="goto-todo">前往待办审批</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </el-badge>
           <!-- 样式占位，功能未实现：胶囊按钮仅还原原型观感，不触发任何动作 -->
           <el-button class="header-pill" size="small" round>演示数据</el-button>
           <el-button class="header-pill" size="small" round>供应商H5示例</el-button>
@@ -141,12 +173,74 @@ onMounted(async () => {
       // 后端不可用时忽略，按钮级权限将按“放行”兜底
     }
   }
+  fetchUnread()
+  // P4 红点轮询（60s；通知失败静默，不影响主流程）
+  noticeTimer = setInterval(fetchUnread, 60000)
 })
+
+onBeforeUnmount(() => {
+  if (noticeTimer) clearInterval(noticeTimer)
+})
+
+// ---------------- P4 站内通知红点 ----------------
+let noticeTimer = null
+const unread = ref(0)
+const notices = ref([])
+
+async function fetchUnread() {
+  try {
+    const res = await unreadCount()
+    // #28 契约：Long→String 序列化后转 Number 供 badge 展示
+    unread.value = Number(res?.data) || 0
+  } catch (e) {
+    /* 静默 */
+  }
+}
+
+async function onNoticeDropdown(visible) {
+  if (!visible) return
+  try {
+    const res = await pageNotices({ current: 1, size: 20 })
+    notices.value = res?.data?.records || []
+  } catch (e) {
+    /* 静默 */
+  }
+}
+
+async function onReadAll() {
+  try {
+    await readAllNotices()
+    unread.value = 0
+    notices.value = notices.value.map((n) => ({ ...n, readFlag: 1 }))
+  } catch (e) {
+    /* 静默 */
+  }
+}
+
+async function onNoticeClick(n) {
+  if (!n.readFlag) {
+    try {
+      await markNoticeRead(n.id)
+      n.readFlag = 1
+      fetchUnread()
+    } catch (e) {
+      /* 静默 */
+    }
+  }
+  // 点击通知跳转工作台待办（设计 §3.2）
+  gotoTodo()
+}
+
+function gotoTodo() {
+  router.push('/approval/todo')
+}
 
 function onCommand(cmd) {
   if (cmd === 'logout') {
     userStore.logout()
     router.push('/login')
+  } else if (cmd === 'goto-todo') {
+    gotoTodo()
   }
 }
 </script>
@@ -286,6 +380,61 @@ function onCommand(cmd) {
 }
 .user-trigger:hover {
   background: rgba(255, 255, 255, 0.14);
+}
+
+/* ---- P4 站内通知红点 ---- */
+.notice-badge {
+  display: inline-flex;
+  margin-right: 6px;
+}
+.notice-bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 17px;
+  cursor: pointer;
+}
+.notice-bell:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.notice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  font-weight: 600;
+  color: #303744;
+}
+.notice-menu {
+  width: 320px;
+  max-height: 420px;
+  overflow: auto;
+}
+.notice-item {
+  line-height: 1.4;
+}
+.notice-item .notice-title {
+  font-weight: 500;
+}
+.notice-item .notice-content {
+  color: #606266;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.notice-item .notice-time {
+  color: #909399;
+  font-size: 11px;
+}
+:deep(.notice-unread) {
+  background: #f0f7ff;
 }
 
 /* ---- 内容区 ---- */

@@ -19,6 +19,9 @@
 </template>
 
 <script setup>
+// P4：审批中心来源单据跳转定位（route.query.bizId 行高亮）
+import { useQueryLocate } from '@/composables/useQueryLocate'
+const { rowClassName } = useQueryLocate()
 import { computed } from 'vue'
 import { PERIOD_OPTIONS } from '@/constants/enums'
 

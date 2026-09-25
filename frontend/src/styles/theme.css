@@ -233,3 +233,10 @@ body {
   gap: 8px;
   margin-bottom: 14px;
 }
+
+/* ==========================================================================
+   P4 审批中心：来源单据跳转定位高亮（composables/useQueryLocate.js）
+   ========================================================================== */
+.el-table .located-row > td.el-table__cell {
+  background: var(--el-color-warning-light-9, #fdf6ec) !important;
+}

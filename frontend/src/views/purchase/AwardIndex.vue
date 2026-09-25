@@ -5,7 +5,7 @@
         <el-button type="primary" :icon="Plus" v-permission="'purchase:award:write'" @click="openCreate">新建定标</el-button>
         <el-button :icon="Document" v-permission="'purchase:award:write'" @click="openOfflineCreate">线下定标登记</el-button>
       </PageHead>
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe :row-class-name="rowClassName">
         <el-table-column prop="awardNo" label="定标单号" width="170" />
         <el-table-column prop="inquiryId" label="来源询价" width="200" />
         <el-table-column prop="supplierId" label="主供应商" width="200" />

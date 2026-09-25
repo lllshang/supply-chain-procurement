@@ -90,14 +90,16 @@ export const STRING_ENUMS = {
     { value: 'REJECTED', label: '驳回', type: 'danger' },
     { value: 'CALLBACK_DONE', label: '已完成', type: 'success' }
   ],
-  // 审批业务类型（R6：付款登记免审批，无 PAYMENT bizType）
+  // 审批业务类型（R6：付款登记免审批，无 PAYMENT bizType；P4 补齐 8 类：+SUPPLIER_QUAL/DAILY_AUTH）
   approvalBizType: [
     { value: 'PURCHASE_APPLY', label: '采购申请' },
     { value: 'AWARD', label: '定标' },
     { value: 'CONTRACT', label: '合同' },
     { value: 'FULFILLMENT_ADJUST', label: '履约调整' },
     { value: 'BUDGET', label: '预算升级' },
-    { value: 'SETTLEMENT', label: '结算' }
+    { value: 'SETTLEMENT', label: '结算' },
+    { value: 'SUPPLIER_QUAL', label: '供应商资质' },
+    { value: 'DAILY_AUTH', label: '日常超授权' }
   ],
   // 询价状态
   inquiryStatus: [

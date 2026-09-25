@@ -4,7 +4,7 @@
       <PageHead title="采购订单">
         <el-button type="primary" :icon="Plus" v-permission="'order:write'" @click="openCreate">下单</el-button>
       </PageHead>
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe :row-class-name="rowClassName">
         <el-table-column prop="orderNo" label="订单号" width="180" />
         <el-table-column prop="contractId" label="合同" width="200" />
         <el-table-column prop="applyId" label="来源申请" width="200" />
@@ -120,6 +120,9 @@
 </template>
 
 <script setup>
+// P4：审批中心来源单据跳转定位（route.query.bizId 行高亮）
+import { useQueryLocate } from '@/composables/useQueryLocate'
+const { rowClassName } = useQueryLocate()
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'

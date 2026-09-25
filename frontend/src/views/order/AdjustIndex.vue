@@ -4,7 +4,7 @@
       <PageHead title="履约调整">
         <el-button type="primary" :icon="Plus" v-permission="'adjust:write'" @click="openCreate">新建调整</el-button>
       </PageHead>
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe :row-class-name="rowClassName">
         <el-table-column prop="adjustNo" label="调整单号" width="190" />
         <el-table-column label="业务" width="90">
           <template #default="{ row }"><StatusTag :value="row.bizType" enum-key="adjustBizType" /></template>
@@ -54,6 +54,9 @@
 </template>
 
 <script setup>
+// P4：审批中心来源单据跳转定位（route.query.bizId 行高亮）
+import { useQueryLocate } from '@/composables/useQueryLocate'
+const { rowClassName } = useQueryLocate()
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'

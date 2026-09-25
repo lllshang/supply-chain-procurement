@@ -46,7 +46,11 @@ const routes = [
       { path: 'order/ledger', name: 'OrderLedger', component: () => import('@/views/order/LedgerIndex.vue'), meta: { title: '入库台账' } },
       { path: 'order/adjust', name: 'OrderAdjust', component: () => import('@/views/order/AdjustIndex.vue'), meta: { title: '履约调整' } },
       { path: 'order/assess', name: 'OrderAssess', component: () => import('@/views/order/AssessIndex.vue'), meta: { title: '服务考核' } },
-      { path: 'approval/tasks', name: 'ApprovalTasks', component: () => import('@/views/approval/TasksIndex.vue'), meta: { title: '待我审批' } },
+      // ---- P4 审批中心工作台（替换占位；/approval 现网路径保留，Q15） ----
+      { path: 'approval', redirect: '/approval/todo' },
+      { path: 'approval/todo', name: 'ApprovalTodo', component: () => import('@/views/approval/TodoList.vue'), meta: { title: '待办审批' } },
+      { path: 'approval/done', name: 'ApprovalDone', component: () => import('@/views/approval/DoneList.vue'), meta: { title: '已办审批' } },
+      { path: 'approval/config', name: 'ApprovalConfig', component: () => import('@/views/approval/FlowConfig.vue'), meta: { title: '流程配置' } },
       // ---- 其余模块占位（保持不变） ----
       { path: 'system', name: 'System', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '系统管理' } },
       { path: 'contract', name: 'Contract', component: () => import('@/views/ModulePlaceholder.vue'), meta: { title: '合同管理' } },

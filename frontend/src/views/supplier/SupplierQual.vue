@@ -10,7 +10,7 @@
       </el-select>
     </div>
 
-    <el-table :data="quals" v-loading="loading" stripe>
+    <el-table :data="quals" v-loading="loading" stripe :row-class-name="rowClassName">
       <el-table-column prop="id" label="ID" width="160" />
       <el-table-column prop="type" label="类型" width="120" />
       <el-table-column prop="qualName" label="资质名称" min-width="140" />
@@ -55,6 +55,9 @@
 </template>
 
 <script setup>
+// P4：审批中心来源单据跳转定位（route.query.bizId 行高亮）
+import { useQueryLocate } from '@/composables/useQueryLocate'
+const { rowClassName } = useQueryLocate()
 import { onMounted, reactive, ref } from 'vue'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'

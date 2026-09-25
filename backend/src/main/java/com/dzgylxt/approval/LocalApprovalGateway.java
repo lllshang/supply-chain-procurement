@@ -7,7 +7,7 @@ import com.dzgylxt.enums.ApprovalStatus;
 import com.dzgylxt.mapper.approval.ApprovalTaskMapper;
 import com.dzgylxt.service.impl.approval.ApprovalTaskServiceImpl;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,8 +15,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 本地自建审批中心实现（一期，即审即过）。后续可新增 {@code RemoteApprovalGateway}
- * 对接企业审批中心（<!-- D5 -->：P4 仅替换本实现，spec/callback 契约不变）。
+ * 本地自建审批中心实现——<b>P4 起降级为测试桩</b>（{@code @Profile("local-approval")}，
+ * 生产上下文不再实例化；真实引擎见 {@link WorkflowApprovalGateway}）。
  *
  * <p>P2 契约（设计 §3）：</p>
  * <ol>
@@ -26,18 +26,16 @@ import java.util.Map;
  *       旧任务保留留痕，业务侧以 biz_type+biz_id 取最新任务；</li>
  *   <li><b>回调事务性</b>：任务状态流转与业务状态机回写同事务
  *       （业务处理器经 {@link ApprovalCallbackHandler} 按.bizType 分发，
- *       {@code ObjectProvider} 延迟解析避免与业务 Service 的循环依赖）；</li>
- *   <li><b>两级节点语义</b>：PURCHASE_APPLY 本地桩即审即过，通过时
- *       currentNode 直接推进到第二节点 PURCHASE_DEPT，保留 P4 节点语义。</li>
+ *       {@code ObjectProvider} 延迟解析避免与业务 Service 的循环依赖）。</li>
  * </ol>
+ *
+ * <p>P4 变更（设计 §2.1）：{@code @Profile("local-approval")} 桩化；原 PURCHASE_APPLY
+ * 两级节点特判<b>删除</b>（语义由真实引擎按 approval_node_def.seq 通用承载）。</p>
  */
 @Service
-@Primary
+@Profile("local-approval")
 public class LocalApprovalGateway implements ApprovalGateway {
 
-    /** 两级审批（采购申请）的节点链：DEPT_HEAD → PURCHASE_DEPT。 */
-    public static final String NODE_DEPT_HEAD = "DEPT_HEAD";
-    public static final String NODE_PURCHASE_DEPT = "PURCHASE_DEPT";
     /** 单级审批的终态节点。 */
     public static final String NODE_END = "end";
 
@@ -60,8 +58,7 @@ public class LocalApprovalGateway implements ApprovalGateway {
         task.setBizId(spec.getBizId());
         task.setFlowKey(spec.getBizType());
         task.setStatus(ApprovalStatus.CREATED);
-        // 两级审批从第一节点起（本地桩后续直接推进）；单级直接 end
-        task.setCurrentNode("PURCHASE_APPLY".equals(spec.getBizType()) ? NODE_DEPT_HEAD : NODE_END);
+        task.setCurrentNode(NODE_END);
         task.setPayloadJson(spec.getPayloadJson());
         task.setRemark(spec.getTitle());
         approvalTaskService.save(task);
@@ -87,10 +84,6 @@ public class LocalApprovalGateway implements ApprovalGateway {
         }
         boolean approved = decision == ApprovalDecision.APPROVED;
         task.setStatus(approved ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED);
-        if ("PURCHASE_APPLY".equals(task.getBizType()) && approved) {
-            // 两级节点语义：本地桩即审即过，直接推进到第二节点
-            task.setCurrentNode(NODE_PURCHASE_DEPT);
-        }
         task.setRemark(comment);
         approvalTaskMapper.updateById(task);
 
