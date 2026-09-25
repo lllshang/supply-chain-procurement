@@ -17,7 +17,7 @@ export function listDoneTasks(params) {
 }
 // 任务详情（节点链时间轴 + 审批记录 + canApprove）
 export function getTaskDetail(taskId) {
-  return request.get(`/api/v1/approvals/tasks/${taskId}`)
+  return request.get(`/api/v1/approvals/tasks/${taskId}/detail`)
 }
 // 同意（comment 可空）
 export function approveTask(taskId, comment) {

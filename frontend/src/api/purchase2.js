@@ -149,7 +149,7 @@ export function listSkuWhitelist(contractId) {
   return request.get(`/api/v1/contracts/${contractId}/sku-whitelist`)
 }
 export function replaceSkuWhitelist(contractId, items) {
-  return request.put(`/api/v1/contracts/${contractId}/sku-whitelist`, { items })
+  return request.put(`/api/v1/contracts/${contractId}/sku-whitelist`, items)
 }
 
 export function listExpiringContracts() {

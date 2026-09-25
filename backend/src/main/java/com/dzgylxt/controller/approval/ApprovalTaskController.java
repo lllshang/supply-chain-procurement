@@ -79,7 +79,7 @@ public class ApprovalTaskController extends BaseController<ApprovalTaskServiceIm
     /** 任务详情（节点链时间轴 + record + 候选人可见性）。 */
     @PreAuthorize("isAuthenticated() and (@authz.hasPerm(authentication,'approval:todo') "
             + "or @authz.hasPerm(authentication,'approval:done'))")
-    @GetMapping("/{taskId}")
+    @GetMapping("/{taskId}/detail")
     public R<ApprovalTaskDetailVO> detail(@PathVariable Long taskId) {
         LoginUser user = UserContext.get();
         if (user == null) {
