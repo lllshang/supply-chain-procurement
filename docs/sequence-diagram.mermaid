@@ -1,0 +1,72 @@
+%%{init: {'theme':'neutral'}}%%
+sequenceDiagram
+    autonumber
+    participant Biz as 业务Service<br/>(PurchaseApply/Contract/Award…)
+    participant GW as WorkflowApprovalGateway<br/>(@Primary 契约不变)
+    participant Cfg as ApprovalFlowConfigService<br/>(Caffeine TTL 60s)
+    participant TS as ApprovalTaskServiceImpl
+    participant AR as ApproverResolver
+    participant DB as MySQL
+    participant H as ApprovalCallbackHandler<br/>(按 bizType 分发)
+    participant N as NoticeService<br/>(afterCommit)
+
+    rect rgb(235, 245, 255)
+    Note over Biz,DB: 发起：create(spec) —— 事务内
+    Biz->>GW: create(ApprovalTaskSpec)
+    GW->>Cfg: getFlow(bizType)
+    Cfg->>DB: SELECT flow_def + node_def（缓存未命中）
+    Cfg-->>GW: 节点链（按 payloadJson.amount 命中区间，seq 排序）
+    GW->>TS: 落 approval_task（IN_PROGRESS, currentNode=N1, applicant/amount/flow_version）
+    GW->>TS: 逐节点写 approval_node 快照（node_code/seq/sign_type, version=0）
+    GW-->>Biz: taskId
+    Note over GW,N: 事务提交后 afterCommit
+    GW->>N: notifyTodo(task, 首节点候选人)
+    N->>DB: INSERT user_notice
+    end
+
+    rect rgb(255, 245, 230)
+    Note over GW,DB: 审批动作：callback(taskId, APPROVED, comment) —— 事务内
+    actor U as 候选审批人
+    U->>GW: callback(taskId, APPROVED, comment)
+    GW->>TS: SELECT task
+    GW->>AR: resolve(当前节点def, task) → 候选集
+    alt 非候选人
+        GW-->>U: 2004 FORBIDDEN（不留痕）
+    else 终态任务（幂等契约）
+        GW-->>U: 静默忽略（终态重复回调）
+    else 或签通过·中间节点
+        GW->>TS: casNode(nodeId, version) 回填 approver/action=DONE
+        GW->>TS: casTask(version+1, currentNode=N2)
+        GW->>DB: INSERT approval_record（approver_name 快照）
+        Note over GW,N: afterCommit
+        GW->>N: notifyTodo(task, N2 候选人)
+    else 或签通过·末节点
+        GW->>TS: casNode + casTask(APPROVED, version+1)
+        GW->>DB: INSERT approval_record
+        GW->>H: onApproved(taskId, bizId, comment) —— 同事务回写业务状态机
+        GW->>TS: writeOperationLog（BR-19 留痕）
+        Note over GW,N: afterCommit
+        GW->>N: notifyFinal(申请人, 已通过, 意见摘要)
+    else 驳回（comment 必填）
+        GW->>TS: casTask(REJECTED, version+1) + 未完成节点置 SKIPPED
+        GW->>H: onRejected(taskId, bizId, comment) —— 同事务
+        GW->>TS: writeOperationLog
+        GW->>N: notifyFinal(申请人, 已驳回, 意见摘要)
+    end
+    end
+
+    rect rgb(245, 235, 245)
+    Note over GW,DB: 并发防重审（规格 §3.4）
+    actor U2 as 审批人B（并发）
+    U2->>GW: callback(同一 taskId, APPROVED)
+    GW->>TS: casTask WHERE id=? AND version=? AND status IN (0,1)
+    TS-->>U2: 影响行数=0 → 3002「单据已被处理」
+    Note over TS,DB: 双保险：version 乐观锁 + 状态机前置校验；业务单据只推进一次
+    end
+
+    rect rgb(235, 255, 240)
+    Note over Biz,N: 驳回重提 = 新任务（契约不变）
+    Biz->>GW: create(spec)（重提）
+    GW->>DB: 新 taskId + 新节点链快照（旧任务/节点/record 全量留痕）
+    GW->>N: notifyTodo(新首节点候选人)
+    end

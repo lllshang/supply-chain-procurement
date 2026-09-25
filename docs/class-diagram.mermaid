@@ -1,0 +1,160 @@
+%%{init: {'theme':'neutral'}}%%
+classDiagram
+    direction LR
+
+    class ApprovalGateway {
+        <<interface 契约不变>>
+        +create(spec ApprovalTaskSpec) Long
+        +callback(taskId Long, decision ApprovalDecision, comment String) void
+    }
+
+    class ApprovalTaskSpec {
+        <<契约不变>>
+        +String bizType
+        +Long bizId
+        +String title
+        +String applicant
+        +String payloadJson
+    }
+
+    class ApprovalDecision {
+        <<enumeration 契约不变>>
+        APPROVED
+        REJECTED
+    }
+
+    class ApprovalCallbackHandler {
+        <<interface 契约不变>>
+        +bizType() String
+        +onApproved(taskId Long, bizId Long, comment String) void
+        +onRejected(taskId Long, bizId Long, comment String) void
+    }
+
+    class LocalApprovalGateway {
+        <<测试桩 @Profile("local-approval")>>
+    }
+
+    class WorkflowApprovalGateway {
+        <<@Primary P4 新增>>
+        -ApprovalFlowConfigService flowConfigService
+        -ApproverResolver approverResolver
+        -ApprovalTaskServiceImpl taskService
+        -ObjectProvider~ApprovalCallbackHandler~ handlers
+        +create(spec) Long
+        +callback(taskId, decision, comment) void
+        -matchNodes(flowKey, amount) List~ApprovalNodeDef~
+        -dispatchHandler(bizType, approved, taskId, bizId, comment) void
+    }
+
+    class ApprovalFlowConfigService {
+        <<P4 新增>>
+        -FlowConfigCache cache
+        +getFlow(bizType) FlowDefWithNodes
+        +saveFlow(flow) void
+        +updateNode(node) void
+        -invalidate(flowKey) void
+    }
+
+    class ApproverResolver {
+        <<P4 新增>>
+        +resolve(nodeDef ApprovalNodeDef, task ApprovalTask) Set~Long~
+        -resolveRole(roleCode String) Set~Long~
+        -resolveDeptHead(applicantId Long) Set~Long~
+    }
+
+    class ApprovalTaskServiceImpl {
+        <<扩展>>
+        +pageTodo(userId, bizType, page) IPage~ApprovalTask~
+        +pageDone(userId, page) IPage~ApprovalRecord~
+        +casTask(taskId, version, expectStatus, toStatus, currentNode) int
+        +casNode(nodeId, version, patch) int
+        +writeOperationLog(task, action) void
+    }
+
+    class NoticeService {
+        <<P4 新增>>
+        +send(notice UserNotice) void
+        +notifyTodo(task, candidateIds) void
+        +notifyFinal(task, approved, comment) void
+        +unreadCount(userId) long
+    }
+
+    class ApprovalTask {
+        approval_task（+applicant/applicant_id/amount/flow_version/version）
+        +String bizType
+        +Long bizId
+        +ApprovalStatus status
+        +String currentNode
+        +String applicant
+        +Long applicantId
+        +BigDecimal amount
+        +Integer flowVersion
+        +Integer version
+    }
+
+    class ApprovalNode {
+        approval_node（节点快照 +version）
+        +Long taskId
+        +String nodeCode
+        +Integer seq
+        +String signType
+        +Long approver
+        +String action
+        +String comment
+        +Integer status
+        +Integer version
+    }
+
+    class ApprovalRecord {
+        approval_record（+approver_name 快照）
+        +Long taskId
+        +Long nodeId
+        +Long approver
+        +String approverName
+        +String action
+        +String comment
+    }
+
+    class ApprovalFlowDef {
+        approval_flow_def 新表
+        +String flowKey
+        +String bizType
+        +Integer flowVersion
+        +Boolean enabled
+    }
+
+    class ApprovalNodeDef {
+        approval_node_def 新表
+        +String flowKey
+        +String nodeCode
+        +Integer seq
+        +String approverType
+        +String approverValue
+        +BigDecimal amountMin
+        +BigDecimal amountMax
+        +String signType
+        +Integer timeoutHours
+        +Integer freeReview
+    }
+
+    class UserNotice {
+        user_notice 新表
+        +Long userId
+        +String title
+        +String content
+        +String channel
+        +Integer readFlag
+    }
+
+    ApprovalGateway <|.. WorkflowApprovalGateway : P4 真实实现
+    ApprovalGateway <|.. LocalApprovalGateway : 测试桩
+    WorkflowApprovalGateway --> ApprovalFlowConfigService : 配置读取/缓存
+    WorkflowApprovalGateway --> ApproverResolver : 候选人解析
+    WorkflowApprovalGateway --> ApprovalTaskServiceImpl : 条件更新/查询
+    WorkflowApprovalGateway ..> ApprovalCallbackHandler : ObjectProvider 延迟分发(6 既有+2 新增 handler)
+    ApprovalFlowConfigService --> ApprovalFlowDef : 读
+    ApprovalFlowConfigService --> ApprovalNodeDef : 读
+    ApprovalTaskServiceImpl --> ApprovalTask : CRUD
+    ApprovalTaskServiceImpl --> ApprovalNode : 快照/流转
+    ApprovalTaskServiceImpl --> ApprovalRecord : 审计落行
+    NoticeService --> UserNotice : 写
