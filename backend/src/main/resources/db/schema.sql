@@ -366,6 +366,8 @@ CREATE TABLE IF NOT EXISTS purchase_order (
     authorized_name  VARCHAR(50)   NULL COMMENT '授权人姓名/账号（冗余便于审计）',
     authorized_time  DATETIME      NULL COMMENT '授权时间（=订单生成时间）',
     auth_over_limit  TINYINT       NULL DEFAULT 0 COMMENT '是否超单笔授权额度升级(0否 1是)',
+    -- D17 高频补货自动授权（主流程 docx：可按配置自动通过授权校验；与 auth_over_limit 正交）
+    auto_authorized  TINYINT       NULL DEFAULT 0 COMMENT '是否系统自动授权通过(0否 1是；D17开启且日常采购时跳过DAILY_AUTH人工升级，仍保留授权留痕)',
     -- D16 无申请来源订单「需求来源」留痕（主流程 docx：必须保留需求来源）
     source_type      VARCHAR(20)   NULL COMMENT '需求来源类型：APPLY=采购申请来源/OFFLINE=无申请来源(日常采购/框架合同直发)',
     source_reason    VARCHAR(500)  NULL COMMENT '需求来源说明(applyId==null 必填)',

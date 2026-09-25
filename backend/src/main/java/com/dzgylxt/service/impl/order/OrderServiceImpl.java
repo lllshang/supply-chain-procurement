@@ -166,6 +166,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     /** D14：单笔授权额度阈值（元），超过则升级至部门负责人/采购负责人确认（占位值，待业务拍板）。 */
     @org.springframework.beans.factory.annotation.Value("${app.order.daily-auth-limit:500000}")
     private java.math.BigDecimal dailyAuthLimit = new java.math.BigDecimal("500000");
+    // D17 高频补货自动通过授权开关（默认关；开启后日常采购跳过 DAILY_AUTH 人工升级，仍保留授权留痕）
+    @org.springframework.beans.factory.annotation.Value("${app.order.daily-auto-auth-enabled:false}")
+    private boolean dailyAutoAuthEnabled = false;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -377,6 +380,7 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             String authName = null;
             LocalDateTime authTime = null;
             boolean authOverLimit = false;
+            boolean autoAuthorized = false;
             if (req.getApplyId() == null) {
                 LoginUser d14User = UserContext.get();
                 // 授权确认（硬控制，仅在生产安全上下文下强制）：创建人须为已授权的内部用户（非匿名/非供应商 H5）
@@ -391,8 +395,12 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                     authName = d14User.getUsername();
                 }
                 authTime = LocalDateTime.now();
+                // D17：高频补货自动授权开关开启时，本日常订单视为系统自动授权通过（仍保留授权留痕），
+                // 不触发人工升级；与 authOverLimit 正交（二者不会同时为 1）。
+                autoAuthorized = dailyAutoAuthEnabled;
                 // 超单笔授权额度 → 升级至部门负责人/采购负责人确认（DAILY_AUTH 审批任务，P4 落地后转真实审批）
-                if (dailyAuthEnabled && totalAmount.compareTo(dailyAuthLimit) > 0) {
+                // D17 开启时改系统自动通过，不生成升级任务（仅简化内部审批，合同/预算/授权留痕不跳过）
+                if (dailyAuthEnabled && totalAmount.compareTo(dailyAuthLimit) > 0 && !dailyAutoAuthEnabled) {
                     authOverLimit = true;
                 }
             }
@@ -422,7 +430,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                     continue;
                 }
                 orderIds.add(insertOrder(req, contract, supplierId, type, group,
-                        authBy, authName, authTime, authOverLimit, orderSourceType, orderSourceReason));
+                        authBy, authName, authTime, authOverLimit, autoAuthorized,
+                        orderSourceType, orderSourceReason));
             }
             contractMapper.updateById(contract);
 
@@ -983,6 +992,7 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     private Long insertOrder(OrderCreateReqVO req, Contract contract, Long supplierId,
                              ItemType type, List<OrderLine> group,
                              Long authBy, String authName, LocalDateTime authTime, boolean authOverLimit,
+                             boolean autoAuthorized,
                              String sourceType, String sourceReason) {
         PurchaseOrder order = new PurchaseOrder();
         order.setContractId(contract.getId());
@@ -1003,6 +1013,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         order.setAuthorizedName(authName);
         order.setAuthorizedTime(authTime);
         order.setAuthOverLimit(authOverLimit ? 1 : 0);
+        // D17：系统自动授权通过标记（与 authOverLimit 正交；仅当日常采购且开关开启时置 1）
+        order.setAutoAuthorized(autoAuthorized ? 1 : 0);
         // D16：需求来源留痕（applyId==null 由调用方传入 OFFLINE+说明；applyId!=null 为 APPLY）
         order.setSourceType(sourceType);
         order.setSourceReason(sourceReason);

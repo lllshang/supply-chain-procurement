@@ -42,6 +42,8 @@ public class PurchaseOrder extends BaseEntity implements Serializable {
     private java.time.LocalDateTime authorizedTime;
     /** 是否超单笔授权额度升级（0 否 / 1 是；超阈值→部门负责人/采购负责人确认，DAILY_AUTH 审批任务） */
     private Integer authOverLimit;
+    /** D17：是否由系统自动授权通过（0 否 / 1 是；高频补货自动授权开关开启且日常采购时置 1，区别于 authOverLimit 的人工确认） */
+    private Integer autoAuthorized;
 
     // ===== D16 无申请来源订单「需求来源」留痕（主流程 docx：必须保留需求来源） =====
     /** 需求来源类型：APPLY=采购申请来源 / OFFLINE=无申请来源（日常采购/框架合同直发）；由 applyId 推导，不接收客户端输入 */
