@@ -361,6 +361,11 @@ CREATE TABLE IF NOT EXISTS purchase_order (
     status           TINYINT       NOT NULL DEFAULT 0,
     budget_occupied DECIMAL(18,2)  NULL,
     remark           VARCHAR(255)  NULL,
+    -- D14 日常采购「授权」控制（主流程 docx：合同+预算+授权三项控制不能省略）
+    authorized_by    BIGINT        NULL COMMENT '授权人用户ID（日常采购=订单创建人）',
+    authorized_name  VARCHAR(50)   NULL COMMENT '授权人姓名/账号（冗余便于审计）',
+    authorized_time  DATETIME      NULL COMMENT '授权时间（=订单生成时间）',
+    auth_over_limit  TINYINT       NULL DEFAULT 0 COMMENT '是否超单笔授权额度升级(0否 1是)',
     created_by       BIGINT        NULL,
     created_at       DATETIME      DEFAULT CURRENT_TIMESTAMP,
     updated_by       BIGINT        NULL,

@@ -97,6 +97,12 @@ app:
     access-key: minioadmin
     secret-key: minioadmin
     bucket: supply-chain
+  order:
+    # D14 日常采购「授权」控制开关（默认开启）
+    daily-auth-enabled: true
+    # D14 单笔授权额度阈值（元）。超过则升级至部门负责人/采购负责人确认。
+    # ⚠️ 占位值，待业务拍板（对应主流程 docx 控制规则表"单笔授权额度"，docx 未给具体数值）
+    daily-auth-limit: 500000
   redis:
     # 登录用户缓存前缀
     user-token-prefix: "USER:TOKEN:"

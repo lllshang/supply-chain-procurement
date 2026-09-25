@@ -33,6 +33,16 @@ public class PurchaseOrder extends BaseEntity implements Serializable {
     private String phasePlan;
     private String remark;
 
+    // ===== D14 日常采购「授权」控制（主流程 docx：合同+预算+授权三项控制不能省略） =====
+    /** 授权人用户 ID（日常采购=订单创建人；与 BaseEntity.created_by 区分，预留委托/代理授权） */
+    private Long authorizedBy;
+    /** 授权人姓名/账号（冗余便于审计，不等登录态失效后丢失） */
+    private String authorizedName;
+    /** 授权时间（= 订单生成时间） */
+    private java.time.LocalDateTime authorizedTime;
+    /** 是否超单笔授权额度升级（0 否 / 1 是；超阈值→部门负责人/采购负责人确认，DAILY_AUTH 审批任务） */
+    private Integer authOverLimit;
+
     /** R5：派生展示字段——结清进度 = Σ有效结算金额 / 应结总额（0~1）；不参与订单状态机。 */
     @TableField(exist = false)
     private BigDecimal settleProgress;

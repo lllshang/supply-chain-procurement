@@ -42,6 +42,7 @@ import com.dzgylxt.mapper.purchase.AwardMapper;
 import com.dzgylxt.mapper.purchase.InquiryMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyItemMapper;
 import com.dzgylxt.mapper.purchase.PurchaseApplyMapper;
+import com.dzgylxt.security.LoginUser;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.IBudgetOccupyService;
 import com.dzgylxt.service.IPriceHistoryService;
@@ -153,6 +154,14 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     /** #47：预算升级任务放行标记消费查询。 */
     @Autowired(required = false)
     private com.dzgylxt.mapper.approval.ApprovalTaskMapper approvalTaskMapper;
+
+    /** D14：日常采购授权控制开关（默认开启；单测未注入 Spring 时取此兜底值）。 */
+    @org.springframework.beans.factory.annotation.Value("${app.order.daily-auth-enabled:true}")
+    private boolean dailyAuthEnabled = true;
+
+    /** D14：单笔授权额度阈值（元），超过则升级至部门负责人/采购负责人确认（占位值，待业务拍板）。 */
+    @org.springframework.beans.factory.annotation.Value("${app.order.daily-auth-limit:500000}")
+    private java.math.BigDecimal dailyAuthLimit = new java.math.BigDecimal("500000");
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -322,6 +331,32 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
             }
             contract.setAvailableAmount(availableAmountOf(contract).subtract(totalAmount));
 
+            // ===== D14 日常采购「授权」控制（主流程 docx：合同+预算+授权三项控制不能省略）=====
+            // 仅日常采购（无申请来源 applyId==null）需授权留痕与超额度升级；标准/项目链路走审批流已覆盖授权。
+            Long authBy = null;
+            String authName = null;
+            LocalDateTime authTime = null;
+            boolean authOverLimit = false;
+            if (req.getApplyId() == null) {
+                LoginUser d14User = UserContext.get();
+                // 授权确认（硬控制，仅在生产安全上下文下强制）：创建人须为已授权的内部用户（非匿名/非供应商 H5）
+                if (dailyAuthEnabled && d14User != null
+                        && (d14User.getPerms() == null || d14User.getPerms().isEmpty())) {
+                    throw new BizException(ResultCode.FORBIDDEN,
+                            "无日常采购授权：当前用户未持有任何系统权限，无法创建日常采购订单");
+                }
+                // 授权留痕：授权人 = 订单创建人（字段独立于 BaseEntity.created_by，预留委托/代理授权）
+                if (d14User != null) {
+                    authBy = d14User.getId();
+                    authName = d14User.getUsername();
+                }
+                authTime = LocalDateTime.now();
+                // 超单笔授权额度 → 升级至部门负责人/采购负责人确认（DAILY_AUTH 审批任务，P4 落地后转真实审批）
+                if (dailyAuthEnabled && totalAmount.compareTo(dailyAuthLimit) > 0) {
+                    authOverLimit = true;
+                }
+            }
+
             // 落单：物料/服务按 item_type 拆单（设计 §2.6）
             List<Long> orderIds = new ArrayList<>();
             for (ItemType type : new ItemType[]{ItemType.MATERIAL, ItemType.SERVICE}) {
@@ -330,7 +365,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                 if (group.isEmpty()) {
                     continue;
                 }
-                orderIds.add(insertOrder(req, contract, supplierId, type, group));
+                orderIds.add(insertOrder(req, contract, supplierId, type, group,
+                        authBy, authName, authTime, authOverLimit));
             }
             contractMapper.updateById(contract);
 
@@ -779,6 +815,38 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
      *
      * @return true=存在匹配任务并已消费（调用方跳过占用）
      */
+    /**
+     * D14：超单笔授权额度 → 生成「日常采购超授权额度确认」审批任务（部门负责人/采购负责人确认）。
+     * 复用 #47 的 {@code ApprovalGateway} + REQUIRES_NEW 事务模板，与预算升级同机制。
+     * 当前 {@code LocalApprovalGateway} 即审即过，P4 真实审批落地后转拦截式确认。
+     */
+    private void createDailyAuthTask(PurchaseOrder order) {
+        if (approvalGateway == null) {
+            return;
+        }
+        cn.hutool.json.JSONObject payload = new cn.hutool.json.JSONObject();
+        payload.set("orderId", order.getId());
+        payload.set("orderNo", order.getOrderNo());
+        payload.set("authorizedBy", order.getAuthorizedBy());
+        payload.set("limit", dailyAuthLimit);
+        payload.set("deptId", UserContext.getCurrentDeptId());
+        payload.set("bizType", "DAILY_AUTH");
+        com.dzgylxt.approval.ApprovalTaskSpec spec = new com.dzgylxt.approval.ApprovalTaskSpec();
+        spec.setBizType("DAILY_AUTH");
+        spec.setBizId(order.getId());
+        spec.setTitle("日常采购超授权额度确认-" + order.getOrderNo());
+        spec.setApplicant(order.getAuthorizedName());
+        spec.setPayloadJson(payload.toString());
+        if (transactionManager != null) {
+            org.springframework.transaction.support.TransactionTemplate template =
+                    new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            template.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            template.executeWithoutResult(status -> approvalGateway.create(spec));
+        } else {
+            approvalGateway.create(spec);
+        }
+    }
+
     private boolean consumeApprovedBudgetUpgrade(PurchaseOrder order, BigDecimal amountDelta) {
         // P2b-5：无申请来源订单（D9 锚点）同样可走升级放行——bizId=订单 id（QA2-06）已可精确定位，
         // 不再以 applyId 为前置门（原条件导致线下订单升级任务永不消费）
@@ -857,7 +925,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
 
     /** 落单（订单头 + 明细快照 + 来源追溯），返回订单 id。 */
     private Long insertOrder(OrderCreateReqVO req, Contract contract, Long supplierId,
-                             ItemType type, List<OrderLine> group) {
+                             ItemType type, List<OrderLine> group,
+                             Long authBy, String authName, LocalDateTime authTime, boolean authOverLimit) {
         PurchaseOrder order = new PurchaseOrder();
         order.setContractId(contract.getId());
         order.setApplyId(req.getApplyId());
@@ -872,7 +941,16 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                 ? group.stream().map(l -> l.amount).reduce(BigDecimal.ZERO, BigDecimal::add)
                 : BigDecimal.ZERO);
         order.setRemark(req.getRemark());
+        // D14：日常采购授权留痕（仅日常采购分支由调用方传入非空值；标准链路留空）
+        order.setAuthorizedBy(authBy);
+        order.setAuthorizedName(authName);
+        order.setAuthorizedTime(authTime);
+        order.setAuthOverLimit(authOverLimit ? 1 : 0);
         save(order);
+        // D14：超单笔授权额度 → 生成 DAILY_AUTH 升级审批任务（部门负责人/采购负责人确认）
+        if (authOverLimit) {
+            createDailyAuthTask(order);
+        }
 
         for (OrderLine line : group) {
             OrderItem item = new OrderItem();
