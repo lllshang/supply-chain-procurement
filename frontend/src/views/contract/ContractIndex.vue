@@ -73,6 +73,47 @@
         <el-button type="primary" :loading="saving" @click="onRenew">续签</el-button>
       </template>
     </el-dialog>
+
+    <!-- P4 R3a：补充签订 -->
+    <el-dialog v-model="supplementVisible" title="补充签订（关联原合同，独立走审批）" width="520px" destroy-on-close>
+      <el-form :model="supplementForm" label-width="100px">
+        <el-form-item label="协议标题"><el-input v-model="supplementForm.title" placeholder="缺省：原合同名-补充协议" /></el-form-item>
+        <el-form-item label="补充金额" required><el-input-number v-model="supplementForm.amount" :min="0.01" :controls="false" style="width: 180px" /></el-form-item>
+        <el-form-item label="有效期" required>
+          <el-date-picker v-model="supplementForm.validRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="生效日" end-placeholder="到期日" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="supplementForm.remark" type="textarea" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="supplementVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="onSupplement">创建补充协议</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- P4 D15：SKU 白名单（无清单无定标合同的兜底供货范围；空=维持现网额度闸行为） -->
+    <el-dialog v-model="whitelistVisible" title="SKU 白名单" width="640px" destroy-on-close>
+      <el-alert type="info" :closable="false" show-icon
+        title="无价格清单且无定标的合同：下单 SKU 须在白名单内；白名单为空 = 维持现网额度闸兜底行为" />
+      <el-table :data="whitelistRows" size="small" stripe>
+        <el-table-column prop="skuId" label="SKU ID" width="200" />
+        <el-table-column prop="remark" label="维护原因" min-width="180" />
+        <el-table-column label="操作" width="80">
+          <template #default="{ row }">
+            <el-button link type="danger" v-permission="'contract:write'" @click="removeWhitelistRow(row)">移除</el-button>
+          </template>
+        </el-table-column>
+        <template #empty><el-empty description="白名单为空（维持现网行为）" :image-size="60" /></template>
+      </el-table>
+      <div class="whitelist-add">
+        <el-input v-model="whitelistNew.skuId" placeholder="SKU ID" style="width: 200px" />
+        <el-input v-model="whitelistNew.remark" placeholder="维护原因（审计）" style="width: 240px" />
+        <el-button type="primary" v-permission="'contract:write'" @click="addWhitelistRow">添加</el-button>
+      </div>
+      <template #footer>
+        <el-button @click="whitelistVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="saving" v-permission="'contract:write'" @click="saveWhitelist">保存白名单（仅影响后续下单）</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -176,6 +217,84 @@ async function onRenew() {
   }
 }
 
+// ---- P4 R3a：补充签订（关联原合同，独立走审批） ----
+const supplementVisible = ref(false)
+const supplementForm = reactive({ id: null, title: '', amount: 0, validRange: null, remark: '' })
+function openSupplement(row) {
+  Object.assign(supplementForm, { id: row.id, title: '', amount: 0, validRange: null, remark: '' })
+  supplementVisible.value = true
+}
+async function onSupplement() {
+  if (!supplementForm.amount || !supplementForm.validRange) {
+    ElMessage.warning('请填写补充金额与有效期')
+    return
+  }
+  saving.value = true
+  try {
+    await supplementContract(supplementForm.id, {
+      title: supplementForm.title || null,
+      amount: supplementForm.amount,
+      validFrom: supplementForm.validRange[0],
+      validTo: supplementForm.validRange[1],
+      remark: supplementForm.remark || null
+    })
+    ElMessage.success('补充协议已创建，请提交审批')
+    supplementVisible.value = false
+    reload()
+  } finally {
+    saving.value = false
+  }
+}
+
+// ---- P4 D15：SKU 白名单（无清单无定标合同兜底供货范围） ----
+const whitelistVisible = ref(false)
+const whitelistRows = ref([])
+const whitelistNew = reactive({ skuId: '', remark: '' })
+let whitelistContractId = null
+async function openWhitelist(row) {
+  whitelistContractId = row.id
+  whitelistNew.skuId = ''
+  whitelistNew.remark = ''
+  whitelistVisible.value = true
+  try {
+    const res = await listSkuWhitelist(row.id)
+    whitelistRows.value = res.data || []
+  } catch (e) {
+    whitelistRows.value = []
+  }
+}
+function addWhitelistRow() {
+  // #28 教训：ID 全程字符串，不转 Number（后端 Long 反序列化）
+  const skuId = String(whitelistNew.skuId || '').trim()
+  if (!skuId || Number.isNaN(Number(skuId))) {
+    ElMessage.warning('请填写数字 SKU ID')
+    return
+  }
+  if (whitelistRows.value.some((r) => String(r.skuId) === skuId)) {
+    ElMessage.warning('该 SKU 已在白名单中')
+    return
+  }
+  whitelistRows.value.push({ skuId, remark: whitelistNew.remark || null })
+  whitelistNew.skuId = ''
+  whitelistNew.remark = ''
+}
+function removeWhitelistRow(row) {
+  whitelistRows.value = whitelistRows.value.filter((r) => r !== row)
+}
+async function saveWhitelist() {
+  saving.value = true
+  try {
+    await replaceSkuWhitelist(
+      whitelistContractId,
+      whitelistRows.value.map((r) => ({ skuId: r.skuId, remark: r.remark || null }))
+    )
+    ElMessage.success('白名单已保存（仅影响后续下单）')
+    whitelistVisible.value = false
+  } finally {
+    saving.value = false
+  }
+}
+
 // 预算科目（S8：统计冗余，选填）
 const subjects = ref([])
 async function loadSubjects() {
@@ -189,3 +308,12 @@ async function loadSubjects() {
 
 onMounted(() => { loadSubjects(); reload() })
 </script>
+
+<style scoped>
+/* P4 D15：白名单维护行内新增区 */
+.whitelist-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+</style>

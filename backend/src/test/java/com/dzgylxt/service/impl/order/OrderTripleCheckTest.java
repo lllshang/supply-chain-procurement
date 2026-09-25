@@ -100,6 +100,8 @@ class OrderTripleCheckTest {
     @Mock
     private AwardItemMapper awardItemMapper;
     @Mock
+    private com.dzgylxt.mapper.contract.ContractSkuWhitelistMapper contractSkuWhitelistMapper;
+    @Mock
     private OrderItemMapper orderItemMapper;
     @Mock
     private OrderChangeMapper orderChangeMapper;
@@ -128,6 +130,9 @@ class OrderTripleCheckTest {
         // P3c-A1：默认空清单=免价格校验（存量/框架合同语义）；个别用例自行覆盖
         when(contractPriceItemMapper.selectByContract(any(Long.class))).thenReturn(java.util.List.of());
         ReflectionTestUtils.setField(service, "contractPriceItemMapper", contractPriceItemMapper);
+        // P4 D15：默认空白名单=分支③维持现网行为；有定标用例自行覆盖 award_item SKU 集
+        when(contractSkuWhitelistMapper.selectList(any())).thenReturn(java.util.List.of());
+        ReflectionTestUtils.setField(service, "contractSkuWhitelistMapper", contractSkuWhitelistMapper);
         ReflectionTestUtils.setField(service, "applyItemMapper", applyItemMapper);
         ReflectionTestUtils.setField(service, "applyMapper", applyMapper);
         ReflectionTestUtils.setField(service, "inquiryMapper", inquiryMapper);
@@ -676,6 +681,11 @@ class OrderTripleCheckTest {
         when(contractMapper.selectById(CONTRACT_ID)).thenReturn(contract);
         when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
                 .thenReturn(1);
+        // P4 D15：有定标合同供货范围 = award_item SKU 集（本单 SKU 9 在定标内）
+        com.dzgylxt.entity.purchase.AwardItem scopeItem = new com.dzgylxt.entity.purchase.AwardItem();
+        scopeItem.setAwardId(810L);
+        scopeItem.setSkuId(9L);
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(scopeItem));
 
         OrderCreateReqVO req = new OrderCreateReqVO();
         req.setContractId(CONTRACT_ID);

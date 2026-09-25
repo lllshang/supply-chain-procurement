@@ -93,6 +93,10 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     @Autowired
     private ContractPriceItemMapper contractPriceItemMapper;
 
+    /** P4 D15：合同 SKU 白名单（无清单无定标合同兜底供货范围）。 */
+    @Autowired
+    private com.dzgylxt.mapper.contract.ContractSkuWhitelistMapper contractSkuWhitelistMapper;
+
     @Autowired
     private PurchaseApplyItemMapper applyItemMapper;
 
@@ -310,6 +314,42 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                                         + " 合同清单价 " + listPrice + "，本单 " + orderPrice);
                     }
                     line.contractItemId = matched.getId();
+                }
+            } else {
+                // 校验⑤（P4 D15 方案 A 供货范围，设计 §5.4；不改 A1 既有判据与文案）：
+                // ② 无清单但有定标 → 每行 SKU ∈ 该 award 的 award_item SKU 集（docx 控制规则表第 4 行，无旁路）
+                if (contract.getAwardId() != null) {
+                    java.util.Set<Long> awardSkus = awardItemMapper.selectList(
+                                    Wrappers.<com.dzgylxt.entity.purchase.AwardItem>lambdaQuery()
+                                            .eq(com.dzgylxt.entity.purchase.AwardItem::getAwardId, contract.getAwardId()))
+                            .stream().map(com.dzgylxt.entity.purchase.AwardItem::getSkuId)
+                            .filter(java.util.Objects::nonNull)
+                            .collect(java.util.stream.Collectors.toSet());
+                    for (OrderLine line : lines) {
+                        if (!awardSkus.contains(line.req.getSkuId())) {
+                            throw new BizException(ResultCode.PARAM_ERROR,
+                                    "SKU 不在合同供货范围（定标价格清单）内，请重新定标或发起合同审批：SKU "
+                                            + line.req.getSkuId());
+                        }
+                    }
+                } else {
+                    // ③ 皆无 → contract_sku_whitelist 命中校验；白名单为空 = 维持现网行为（额度闸兜底，AC④）
+                    java.util.Set<Long> whitelistSkus = contractSkuWhitelistMapper.selectList(
+                                    Wrappers.<com.dzgylxt.entity.contract.ContractSkuWhitelist>lambdaQuery()
+                                            .eq(com.dzgylxt.entity.contract.ContractSkuWhitelist::getContractId,
+                                                    contract.getId()))
+                            .stream().map(com.dzgylxt.entity.contract.ContractSkuWhitelist::getSkuId)
+                            .filter(java.util.Objects::nonNull)
+                            .collect(java.util.stream.Collectors.toSet());
+                    if (!whitelistSkus.isEmpty()) {
+                        for (OrderLine line : lines) {
+                            if (!whitelistSkus.contains(line.req.getSkuId())) {
+                                throw new BizException(ResultCode.PARAM_ERROR,
+                                        "SKU 不在合同供货范围（SKU 白名单）内，请在合同台账维护白名单或发起合同审批：SKU "
+                                                + line.req.getSkuId());
+                            }
+                        }
+                    }
                 }
             }
 

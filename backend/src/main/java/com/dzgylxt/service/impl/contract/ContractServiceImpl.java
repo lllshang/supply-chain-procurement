@@ -54,6 +54,10 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
     @Autowired
     private ContractPriceItemMapper contractPriceItemMapper;
 
+    /** P4 D15：合同 SKU 白名单（无清单无定标合同兜底供货范围）。 */
+    @Autowired
+    private com.dzgylxt.mapper.contract.ContractSkuWhitelistMapper contractSkuWhitelistMapper;
+
     @Autowired
     private ISupplierService supplierService;
 
@@ -111,6 +115,8 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
         contract.setNo(businessNoGenerator.nextNo("HT"));
         contract.setTitle(req.getTitle());
         contract.setContractType(req.getContractType() == null ? 0 : req.getContractType().getValue());
+        // P4 R3a：合同类型字典引用（typeId 优先于存量 TINYINT）
+        contract.setTypeId(req.getTypeId());
         contract.setAmount(amount);
         contract.setValidFrom(req.getValidFrom());
         contract.setValidTo(req.getValidTo());
@@ -188,6 +194,10 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
         }
         if (req.getContractType() != null) {
             contract.setContractType(req.getContractType().getValue());
+        }
+        // P4 R3a：类型字典引用可编辑
+        if (req.getTypeId() != null) {
+            contract.setTypeId(req.getTypeId());
         }
         if (req.getAmount() != null) {
             contract.setAmount(req.getAmount());
@@ -288,6 +298,80 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
         renew.setRemark(req.getRemark());
         save(renew);
         return renew.getId();
+    }
+
+    /**
+     * 补充签订（P4 R3a）：新合同 source_contract_id = 原 id、relation_type = SUPPLEMENT；
+     * 继承供应商/原 type_id（req.typeId 优先）；金额无定标等式约束（补充协议独立计价），
+     * 提交走既有 submit → CONTRACT 审批（引擎按金额自动决定单/两级）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long supplement(Long id, com.dzgylxt.vo.contract.ContractSupplementReqVO req) {
+        Contract origin = getById(id);
+        if (origin == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "原合同不存在：" + id);
+        }
+        if (req.getAmount() == null || req.getAmount().compareTo(BigDecimal.ZERO) <= 0
+                || req.getValidFrom() == null || req.getValidTo() == null
+                || !req.getValidTo().isAfter(req.getValidFrom())) {
+            throw new BizException(ResultCode.PARAM_ERROR, "补充签订金额/有效期非法");
+        }
+        Contract sup = new Contract();
+        sup.setSupplierId(origin.getSupplierId());
+        sup.setNo(businessNoGenerator.nextNo("HT"));
+        sup.setTitle(req.getTitle() == null || req.getTitle().isBlank()
+                ? origin.getTitle() + "-补充协议" : req.getTitle());
+        sup.setContractType(origin.getContractType());
+        sup.setTypeId(req.getTypeId() != null ? req.getTypeId() : origin.getTypeId());
+        sup.setAmount(req.getAmount().setScale(2, java.math.RoundingMode.HALF_UP));
+        sup.setValidFrom(req.getValidFrom());
+        sup.setValidTo(req.getValidTo());
+        sup.setSourceContractId(origin.getId());
+        sup.setRelationType("SUPPLEMENT");
+        sup.setStatus(ContractStatus.DRAFT);
+        sup.setAvailableAmount(BigDecimal.ZERO);
+        sup.setVersion(0);
+        sup.setRemark(req.getRemark());
+        save(sup);
+        return sup.getId();
+    }
+
+    @Override
+    public java.util.List<com.dzgylxt.entity.contract.ContractSkuWhitelist> listSkuWhitelist(Long contractId) {
+        return contractSkuWhitelistMapper.selectList(
+                Wrappers.<com.dzgylxt.entity.contract.ContractSkuWhitelist>lambdaQuery()
+                        .eq(com.dzgylxt.entity.contract.ContractSkuWhitelist::getContractId, contractId)
+                        .orderByAsc(com.dzgylxt.entity.contract.ContractSkuWhitelist::getSkuId));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean replaceSkuWhitelist(Long contractId,
+                                       java.util.List<com.dzgylxt.vo.contract.SkuWhitelistReqVO> items) {
+        Contract contract = getById(contractId);
+        if (contract == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "合同不存在：" + contractId);
+        }
+        // 覆盖式维护：清空旧白名单后重建（空列表=清空，恢复现网额度闸兜底行为，设计 §5.4）
+        contractSkuWhitelistMapper.delete(Wrappers.<com.dzgylxt.entity.contract.ContractSkuWhitelist>lambdaQuery()
+                .eq(com.dzgylxt.entity.contract.ContractSkuWhitelist::getContractId, contractId));
+        if (items == null) {
+            return true;
+        }
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        for (com.dzgylxt.vo.contract.SkuWhitelistReqVO item : items) {
+            if (item.getSkuId() == null || !seen.add(item.getSkuId())) {
+                throw new BizException(ResultCode.PARAM_ERROR, "白名单 SKU 必填且不可重复");
+            }
+            com.dzgylxt.entity.contract.ContractSkuWhitelist row =
+                    new com.dzgylxt.entity.contract.ContractSkuWhitelist();
+            row.setContractId(contractId);
+            row.setSkuId(item.getSkuId());
+            row.setRemark(item.getRemark());
+            contractSkuWhitelistMapper.insert(row);
+        }
+        return true;
     }
 
     @Override

@@ -72,6 +72,17 @@ class WorkflowApprovalGatewayConcurrencyTest {
 
     private WorkflowApprovalGateway gateway;
 
+    @org.junit.jupiter.api.BeforeAll
+    static void initMpLambdaCache() {
+        // 工作线程内构造 LambdaQueryWrapper 需实体列缓存；纯 Mockito 测试无 Mapper 装配，
+        // 就地初始化（幂等，已注册则跳过），避免受测试执行顺序影响
+        org.apache.ibatis.builder.MapperBuilderAssistant assistant =
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), "");
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(assistant, ApprovalTask.class);
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(assistant, ApprovalNode.class);
+    }
+
     @BeforeEach
     void setUp() {
         @SuppressWarnings("unchecked")

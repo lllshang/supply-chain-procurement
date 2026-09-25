@@ -123,6 +123,8 @@ class P2bBudgetLifecycleTest {
     @Mock
     private OrderChangeMapper orderChangeMapper;
     @Mock
+    private com.dzgylxt.mapper.contract.ContractSkuWhitelistMapper contractSkuWhitelistMapper;
+    @Mock
     private ApprovalTaskMapper approvalTaskMapper;
     @Mock
     private RedisLockUtil redisLockUtil;
@@ -417,6 +419,8 @@ class P2bBudgetLifecycleTest {
         when(contractMapper.updateById(any(Contract.class))).thenReturn(1);
         when(purchaseOrderMapper.insert(any(PurchaseOrder.class))).thenReturn(1);
         when(unitConversionMapper.selectCurrentEffective(anyLong(), anyString(), any())).thenReturn(null);
+        // P4 D15：有定标合同供货范围 = award_item SKU 集（本单 SKU_ID 在锚点定标内）
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(awardItem()));
         when(budgetOccupyService.transfer(any(com.dzgylxt.vo.budget.BudgetTransferCmd.class)))
                 .thenAnswer(inv -> OccupyResultVO.ok(inv.getArgument(0, com.dzgylxt.vo.budget.BudgetTransferCmd.class)
                         .getAmount(), List.of()));

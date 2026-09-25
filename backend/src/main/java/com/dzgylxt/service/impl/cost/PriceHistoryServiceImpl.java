@@ -106,4 +106,101 @@ public class PriceHistoryServiceImpl extends ServiceImpl<PriceHistoryMapper, Pri
         }
         updateById(h);
     }
+
+    // ==================== P4 R3c：最低价同步标准价 ====================
+
+    /** 开关（默认关，Q12）：仅影响后续订单完成，不回刷历史。 */
+    @org.springframework.beans.factory.annotation.Value("${app.price.lowest-price-sync-enabled:false}")
+    private boolean lowestPriceSyncEnabled;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.dzgylxt.mapper.order.OrderItemMapper orderItemMapper;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.dzgylxt.mapper.order.PurchaseOrderMapper purchaseOrderMapper;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.dzgylxt.mapper.catalog.SkuMapper skuMapper;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int syncLowestPriceOnOrderReceived(Long orderId) {
+        if (!lowestPriceSyncEnabled || orderId == null) {
+            return 0; // 关闭时零行为（AC④）
+        }
+        List<com.dzgylxt.entity.order.OrderItem> items = orderItemMapper.selectList(
+                Wrappers.<com.dzgylxt.entity.order.OrderItem>lambdaQuery()
+                        .eq(com.dzgylxt.entity.order.OrderItem::getOrderId, orderId));
+        com.dzgylxt.entity.order.PurchaseOrder order = purchaseOrderMapper.selectById(orderId);
+        int updated = 0;
+        java.util.Set<Long> seenSkus = new java.util.HashSet<>();
+        for (com.dzgylxt.entity.order.OrderItem item : items) {
+            if (item.getSkuId() == null || item.getPrice() == null
+                    || item.getPrice().compareTo(BigDecimal.ZERO) <= 0
+                    || !seenSkus.add(item.getSkuId())) {
+                continue;
+            }
+            String calibre = calibreKey(item.getConvSnapshot());
+            BigDecimal lowest = lowestPositivePrice(item.getSkuId(), calibre);
+            if (lowest == null) {
+                continue;
+            }
+            com.dzgylxt.entity.catalog.Sku sku = skuMapper.selectById(item.getSkuId());
+            if (sku == null || (sku.getStandardPrice() != null
+                    && sku.getStandardPrice().compareTo(lowest) == 0)) {
+                continue;
+            }
+            sku.setStandardPrice(lowest.setScale(2, RoundingMode.HALF_UP));
+            skuMapper.updateById(sku);
+            // 同步动作留痕（price_history 通道；MANUAL 源 + PRICE_SYNC 业务类型）
+            record(item.getSkuId(), order == null ? null : order.getSupplierId(), lowest,
+                    PriceSource.MANUAL, "PRICE_SYNC", orderId,
+                    "最低价同步标准价（口径 " + calibre + "）");
+            updated++;
+        }
+        return updated;
+    }
+
+    /** 同 SKU 同口径已完成订单的最低正数成交价（口径=conv_snapshot 采购单位+换算率，PRD L521 禁止跨口径）。 */
+    private BigDecimal lowestPositivePrice(Long skuId, String calibre) {
+        List<com.dzgylxt.entity.order.OrderItem> candidates = orderItemMapper.selectList(
+                Wrappers.<com.dzgylxt.entity.order.OrderItem>lambdaQuery()
+                        .eq(com.dzgylxt.entity.order.OrderItem::getSkuId, skuId)
+                        .gt(com.dzgylxt.entity.order.OrderItem::getPrice, BigDecimal.ZERO));
+        BigDecimal min = null;
+        for (com.dzgylxt.entity.order.OrderItem candidate : candidates) {
+            // 防御性过滤非正价格（SQL 侧 gt(0) 已过滤，Java 侧再兜底一层）
+            if (candidate.getPrice() == null || candidate.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (!calibre.equals(calibreKey(candidate.getConvSnapshot()))) {
+                continue;
+            }
+            com.dzgylxt.entity.order.PurchaseOrder po =
+                    purchaseOrderMapper.selectById(candidate.getOrderId());
+            // 有效订单=已完成（RECEIVED）及之后（不含取消）；历史 SETTLED/PAID 兼容计入
+            if (po == null || po.getStatus() == null
+                    || po.getStatus() == com.dzgylxt.enums.OrderStatus.CREATED
+                    || po.getStatus() == com.dzgylxt.enums.OrderStatus.CANCELLED) {
+                continue;
+            }
+            if (min == null || candidate.getPrice().compareTo(min) < 0) {
+                min = candidate.getPrice();
+            }
+        }
+        return min;
+    }
+
+    /** 口径键：conv_snapshot（purchaseUnit + rate）；空快照回退 "default"。 */
+    private String calibreKey(String convSnapshot) {
+        if (convSnapshot == null || convSnapshot.isBlank()) {
+            return "default";
+        }
+        try {
+            cn.hutool.json.JSONObject json = cn.hutool.json.JSONUtil.parseObj(convSnapshot);
+            return json.getStr("purchaseUnit", "default") + "@" + json.getStr("rate", "1");
+        } catch (Exception e) {
+            return "default";
+        }
+    }
 }

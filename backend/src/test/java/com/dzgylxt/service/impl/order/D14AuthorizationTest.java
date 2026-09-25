@@ -74,6 +74,8 @@ class D14AuthorizationTest {
     @Mock
     private ContractPriceItemMapper contractPriceItemMapper;
     @Mock
+    private com.dzgylxt.mapper.contract.ContractSkuWhitelistMapper contractSkuWhitelistMapper;
+    @Mock
     private PurchaseApplyItemMapper applyItemMapper;
     @Mock
     private PurchaseApplyMapper applyMapper;
@@ -108,6 +110,9 @@ class D14AuthorizationTest {
         ReflectionTestUtils.setField(service, "contractMapper", contractMapper);
         when(contractPriceItemMapper.selectByContract(any(Long.class))).thenReturn(List.of());
         ReflectionTestUtils.setField(service, "contractPriceItemMapper", contractPriceItemMapper);
+        // P4 D15：默认空白名单 = 分支③维持现网行为（合同无定标）
+        when(contractSkuWhitelistMapper.selectList(any())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "contractSkuWhitelistMapper", contractSkuWhitelistMapper);
         ReflectionTestUtils.setField(service, "applyItemMapper", applyItemMapper);
         ReflectionTestUtils.setField(service, "applyMapper", applyMapper);
         ReflectionTestUtils.setField(service, "inquiryMapper", inquiryMapper);

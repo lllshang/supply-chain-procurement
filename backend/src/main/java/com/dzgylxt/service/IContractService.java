@@ -27,6 +27,18 @@ public interface IContractService extends IService<Contract>, ApprovalCallbackHa
     /** 续签：新合同 renewed_from_id = 原 id，独立走审批。 */
     Long renew(Long id, ContractRenewReqVO req);
 
+    /**
+     * 补充签订（P4 R3a）：新合同 source_contract_id = 原 id、relation_type = SUPPLEMENT，
+     * 继承供应商/type_id，独立走 CONTRACT 审批（无新 bizType，PRD L1063）。
+     */
+    Long supplement(Long id, com.dzgylxt.vo.contract.ContractSupplementReqVO req);
+
+    /** SKU 白名单查看（P4 D15）。 */
+    java.util.List<com.dzgylxt.entity.contract.ContractSkuWhitelist> listSkuWhitelist(Long contractId);
+
+    /** SKU 白名单覆盖式维护（P4 D15：空列表=清空白名单，恢复现网额度闸兜底行为）。 */
+    boolean replaceSkuWhitelist(Long contractId, java.util.List<com.dzgylxt.vo.contract.SkuWhitelistReqVO> items);
+
     /** 到期预警派生（valid_to − 提前天数配置，默认 30）。 */
     List<ContractWarnVO> expiringList();
 }

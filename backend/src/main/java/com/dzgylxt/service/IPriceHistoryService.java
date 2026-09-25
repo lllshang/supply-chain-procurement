@@ -32,4 +32,16 @@ public interface IPriceHistoryService {
 
     /** 审核待审价（通过/驳回；仅 PENDING 可流转）。 */
     void audit(Long id, boolean approved, String remark);
+
+    /**
+     * P4 R3c：订单完成（入库落账点）触发最低价同步标准价。
+     *
+     * <p>开关 {@code app.price.lowest-price-sync-enabled}（默认关，Q12）：开启时对订单内
+     * 每个 SKU，取同 <b>SKU + 采购单位 + 换算口径</b>（conv_snapshot 口径键，禁止跨口径比较
+     * PRD L521）的已完成（RECEIVED）订单中最低正数成交价 → 写 {@code sku.standard_price}，
+     * 同步动作经 {@link #record} 走 price_history 留痕。关闭时零行为；切换只影响后续订单不回刷历史。</p>
+     *
+     * @return 实际更新标准价的 SKU 数（0=开关关/无更新）
+     */
+    int syncLowestPriceOnOrderReceived(Long orderId);
 }

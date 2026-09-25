@@ -115,6 +115,11 @@ ALTER TABLE `contract`
   ADD COLUMN `relation_type`      VARCHAR(20) NULL COMMENT '关联类型：SUPPLEMENT=补充签订' AFTER `source_contract_id`,
   ADD COLUMN `type_id`            BIGINT      NULL COMMENT '合同类型字典引用（type_id 优先于存量 TINYINT contract_type）' AFTER `relation_type`;
 
+-- R3b 计重：arrival_item 双输入（P4 §5.2；列已存在报 1060 可忽略）
+ALTER TABLE `arrival_item`
+  ADD COLUMN `actual_weight`  DECIMAL(18,3) NULL COMMENT '实到重量（基本单位口径，计重 SKU 录入）' AFTER `handle_status`,
+  ADD COLUMN `qualified_qty`  DECIMAL(18,3) NULL COMMENT '合格量（硬校验：合格量 ≤ 实到重量）' AFTER `actual_weight`;
+
 -- ---------------- 3) 角色 / 流定义 / 节点定义 / 菜单 / 合同类型种子（幂等） ----------------
 INSERT IGNORE INTO sys_role (id, role_code, role_name, remark, status, created_at, updated_at, deleted) VALUES
 (2, 'DEPT_HEAD',       '部门负责人', '采购申请第 1 节点/日常超授权确认（拍板清单第 3 题）', 0, NOW(), NOW(), 0),
@@ -175,6 +180,16 @@ INSERT IGNORE INTO contract_type (id, type_code, type_name, enabled, remark, cre
 UPDATE contract SET type_id = 1 WHERE contract_type = 0 AND type_id IS NULL AND deleted = 0;
 UPDATE contract SET type_id = 2 WHERE contract_type = 1 AND type_id IS NULL AND deleted = 0;
 UPDATE contract SET type_id = 3 WHERE contract_type = 2 AND type_id IS NULL AND deleted = 0;
+
+-- ---------------- 5) P4 R3a 合同类型配置菜单（parent_id=6；与 data.sql 种子一致；幂等） ----------------
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
+(603, 6, '合同类型配置', 2, '/contract/types', 'contract/ContractTypeConfig.vue', 'document', 'contract:type:read,contract:type:write', 3, 0, NOW(), NOW(), 0);
+INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, deleted) VALUES
+(52, 1, 603, NOW(), NOW(), 0);
+
+-- ---------------- 6) P4 R3b 超收授权权限键（挂到既有"到货验收"菜单 802；幂等 UPDATE） ----------------
+UPDATE sys_menu SET perms='arrival:read,arrival:write,arrival:confirm,receipt:over-receive'
+  WHERE id=802 AND deleted=0 AND perms NOT LIKE '%receipt:over-receive%';
 
 -- ---------------- 5) 人工核对段 ----------------
 -- SELECT flow_key, flow_version, enabled FROM approval_flow_def WHERE deleted = 0;            -- 应 8 条

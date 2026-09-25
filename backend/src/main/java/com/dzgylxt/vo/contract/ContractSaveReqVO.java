@@ -18,6 +18,8 @@ public class ContractSaveReqVO implements Serializable {
     private String title;
     /** 合同类型（#33 枚举 name 契约：收 name/数值、吐 name；落库 getValue()） */
     private ItemType contractType;
+    /** 合同类型字典引用（P4 R3a；与存量 contractType TINYINT 并存，typeId 优先） */
+    private Long typeId;
     /** 合同金额（有来源定标时必须 = Σ 定标明细） */
     private BigDecimal amount;
     /** 预算科目（S8：统计冗余，P2b 选填） */

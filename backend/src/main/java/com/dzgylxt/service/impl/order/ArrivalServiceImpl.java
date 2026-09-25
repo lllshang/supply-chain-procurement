@@ -50,6 +50,9 @@ import java.util.stream.Collectors;
 @Service
 public class ArrivalServiceImpl extends ServiceImpl<ArrivalMapper, Arrival> implements IArrivalService {
 
+    /** P4 R3b：超收授权权限键（超收分支要求，operation 留痕见 approval/审批留痕惯例）。 */
+    public static final String PERM_OVER_RECEIVE = "receipt:over-receive";
+
     @Autowired
     private ArrivalItemMapper arrivalItemMapper;
 
@@ -61,6 +64,18 @@ public class ArrivalServiceImpl extends ServiceImpl<ArrivalMapper, Arrival> impl
 
     @Autowired
     private BusinessNoGenerator businessNoGenerator;
+
+    /** P4 R3b 计重：SKU 计价方式取数。 */
+    @Autowired
+    private com.dzgylxt.mapper.catalog.SkuMapper skuMapper;
+
+    /** P4 R3c：最低价同步标准价（默认关，订单完成入库落账点触发）。 */
+    @Autowired
+    private com.dzgylxt.service.IPriceHistoryService priceHistoryService;
+
+    /** P4 R3b：超收授权比例（%，默认 0=禁止超收，Q11 最保守口径 PRD L793）。 */
+    @org.springframework.beans.factory.annotation.Value("${app.receipt.over-receive-percent:0}")
+    private java.math.BigDecimal overReceivePercent;
 
     @Autowired
     @Lazy
@@ -109,10 +124,20 @@ public class ArrivalServiceImpl extends ServiceImpl<ArrivalMapper, Arrival> impl
             ArrivalCreateReqVO.ItemActual actual = actualMap.get(orderItem.getId());
             BigDecimal qtyActual = actual == null || actual.getQtyActual() == null
                     ? expected : actual.getQtyActual();
-            if (qtyActual.compareTo(BigDecimal.ZERO) < 0 || qtyActual.compareTo(expected) > 0) {
+            boolean overReceived = false;
+            if (qtyActual.compareTo(BigDecimal.ZERO) < 0) {
                 throw new BizException(ResultCode.PARAM_ERROR,
-                        "实收数量非法（0 ≤ 实收 ≤ 应收 " + expected + "）：order_item " + orderItem.getId());
+                        "实收数量非法（实收 ≥ 0）：order_item " + orderItem.getId());
             }
+            if (qtyActual.compareTo(expected) > 0) {
+                // P4 R3b 超收校验链（设计 §5.2）：阈值 0 拒绝；>0 须原因 + receipt:over-receive 权限放行；
+                // 超收量不计入订单剩余可收（remaining 仍按 qty_base 口径，不放大后续收货缺口）
+                checkOverReceive(expected, qtyActual, actual);
+                overReceived = true;
+            }
+            // P4 R3b 计重校验（设计 §5.2）：valuation_type=1 双输入录入，硬校验 合格量 ≤ 实到重量（PRD L811）
+            BigDecimal[] weightFields = checkWeightedSku(orderItem, actual, qtyActual);
+
             ArrivalItem item = new ArrivalItem();
             item.setArrivalId(arrival.getId());
             item.setOrderItemId(orderItem.getId());
@@ -120,12 +145,18 @@ public class ArrivalServiceImpl extends ServiceImpl<ArrivalMapper, Arrival> impl
             item.setQtyExpected(expected);
             item.setQtyActual(qtyActual);
             item.setQtyDiff(expected.subtract(qtyActual));
-            item.setDiffType(item.getQtyDiff().compareTo(BigDecimal.ZERO) > 0
-                    ? DiffType.SHORTAGE : DiffType.NONE);
+            item.setDiffType(overReceived ? DiffType.OVER
+                    : (item.getQtyDiff().compareTo(BigDecimal.ZERO) > 0
+                    ? DiffType.SHORTAGE : DiffType.NONE));
             item.setHandleType(HandleType.ACCEPT);
             item.setQtyStored(BigDecimal.ZERO);
             item.setHandleStatus(HandleStatus.PENDING);
             item.setRemark(actual == null ? null : actual.getRemark());
+            // P4 R3b 计重双输入落库（非计重 SKU 为 null）
+            if (weightFields != null) {
+                item.setActualWeight(weightFields[0]);
+                item.setQualifiedQty(weightFields[1]);
+            }
             arrivalItemMapper.insert(item);
 
             totalActual = totalActual.add(qtyActual);
@@ -333,6 +364,74 @@ public class ArrivalServiceImpl extends ServiceImpl<ArrivalMapper, Arrival> impl
         if (allStored) {
             order.setStatus(OrderStatus.RECEIVED);
             orderMapper.updateById(order);
+            // P4 R3c：订单完成（入库落账点）→ 最低价同步标准价（开关默认关，关闭时零行为）
+            try {
+                priceHistoryService.syncLowestPriceOnOrderReceived(orderId);
+            } catch (Exception e) {
+                // 同步失败不阻断到货主流程（与埋点静默语义一致）
+                org.slf4j.LoggerFactory.getLogger(ArrivalServiceImpl.class)
+                        .warn("[P4-PriceSync] 最低价同步失败 orderId={}", orderId, e);
+            }
         }
+    }
+
+    /**
+     * P4 R3b 超收校验链（设计 §5.2）：到货数量 > 订单剩余可收时——
+     * ①阈值 0 直接拒绝（Q11 最保守口径）；②阈值 >0 且超收比例 ≤ 阈值 → 必填原因 +
+     * 持 {@code receipt:over-receive} 权限放行（operation_log 留痕=到货行 remark + diff_type=OVER）。
+     */
+    private void checkOverReceive(BigDecimal expected, BigDecimal qtyActual,
+                                  ArrivalCreateReqVO.ItemActual actual) {
+        BigDecimal threshold = overReceivePercent == null ? BigDecimal.ZERO : overReceivePercent;
+        if (threshold.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(ResultCode.PARAM_ERROR,
+                    "实收超过应收 " + expected + "，当前超收阈值为 0（禁止超收）");
+        }
+        if (expected.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "应收为 0 不允许超收");
+        }
+        BigDecimal overRatio = qtyActual.subtract(expected)
+                .divide(expected, 4, java.math.RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"));
+        if (overRatio.compareTo(threshold) > 0) {
+            throw new BizException(ResultCode.PARAM_ERROR,
+                    "超收比例 " + overRatio + "% 超过授权阈值 " + threshold + "%");
+        }
+        if (actual == null || actual.getRemark() == null || actual.getRemark().isBlank()) {
+            throw new BizException(ResultCode.PARAM_ERROR, "超收必须填写原因");
+        }
+        if (!com.dzgylxt.security.UserContext.hasPerm(PERM_OVER_RECEIVE)) {
+            throw new BizException(ResultCode.FORBIDDEN,
+                    "无超收授权权限（" + PERM_OVER_RECEIVE + "）");
+        }
+    }
+
+    /**
+     * P4 R3b 计重校验（设计 §5.2）：SKU {@code valuation_type=1}（计重）到货行按实称重量录入；
+     * 硬校验 合格量 ≤ 实到重量（PRD L811）。净重/毛重/允许误差参数（PRD L1480）等业务拍板，
+     * 就地 {@code <!-- D5 -->} 标注预留（未拍板仅做单约束）。
+     *
+     * @return [实到重量, 合格量]（非计重 SKU 返回 null）
+     */
+    private BigDecimal[] checkWeightedSku(OrderItem orderItem,
+                                          ArrivalCreateReqVO.ItemActual actual,
+                                          BigDecimal qtyActual) {
+        if (orderItem.getSkuId() == null) {
+            return null;
+        }
+        com.dzgylxt.entity.catalog.Sku sku = skuMapper.selectById(orderItem.getSkuId());
+        if (sku == null || sku.getValuationType() != com.dzgylxt.enums.ValuationType.BY_WEIGHT) {
+            return null;
+        }
+        BigDecimal weight = actual != null && actual.getActualWeight() != null
+                ? actual.getActualWeight() : qtyActual;
+        BigDecimal qualified = actual == null || actual.getQualifiedQty() == null
+                ? qtyActual : actual.getQualifiedQty();
+        if (qualified.compareTo(weight) > 0) {
+            throw new BizException(ResultCode.PARAM_ERROR,
+                    "计重 SKU 合格量不得超过实到重量（PRD L811）：SKU " + orderItem.getSkuId()
+                            + " 实到重量 " + weight + "，合格量 " + qualified);
+        }
+        return new BigDecimal[]{weight, qualified};
     }
 }

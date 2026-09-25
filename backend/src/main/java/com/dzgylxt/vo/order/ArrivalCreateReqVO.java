@@ -21,8 +21,12 @@ public class ArrivalCreateReqVO implements Serializable {
     @Data
     public static class ItemActual implements Serializable {
         private Long orderItemId;
-        /** 实收数量（基本单位） */
+        /** 实收数量（基本单位；计重 SKU=实到重量） */
         private BigDecimal qtyActual;
         private String remark;
+        /** P4 R3b 计重：实到重量（基本单位口径，valuation_type=1 时录入） */
+        private BigDecimal actualWeight;
+        /** P4 R3b 计重：合格量（硬校验：合格量 ≤ 实到重量，PRD L811） */
+        private BigDecimal qualifiedQty;
     }
 }

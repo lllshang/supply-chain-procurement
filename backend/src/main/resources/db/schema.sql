@@ -1189,4 +1189,9 @@ ALTER TABLE `contract`
   ADD COLUMN `relation_type`      VARCHAR(20) NULL COMMENT '关联类型：SUPPLEMENT=补充签订（续签=renewed_from_id 表达，不占本列）' AFTER `source_contract_id`,
   ADD COLUMN `type_id`            BIGINT      NULL COMMENT '合同类型字典引用（contract_type.id；与存量 contract_type TINYINT 并存，type_id 优先）' AFTER `relation_type`;
 
+-- R3b 计重（P4 §5.2）：arrival_item 双输入落库（净重/毛重/允许误差参数等拍板，D5 预留）
+ALTER TABLE `arrival_item`
+  ADD COLUMN `actual_weight`  DECIMAL(18,3) NULL COMMENT '实到重量（基本单位口径，valuation_type=1 计重 SKU 录入）' AFTER `handle_status`,
+  ADD COLUMN `qualified_qty`  DECIMAL(18,3) NULL COMMENT '合格量（硬校验：合格量 ≤ 实到重量，PRD L811）' AFTER `actual_weight`;
+
 SET FOREIGN_KEY_CHECKS = 1;

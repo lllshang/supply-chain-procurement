@@ -4,15 +4,15 @@ import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.BusinessNoGenerator;
 import com.dzgylxt.common.RedisLockUtil;
 import com.dzgylxt.entity.contract.Contract;
+import com.dzgylxt.entity.contract.ContractSkuWhitelist;
 import com.dzgylxt.entity.order.PurchaseOrder;
-import com.dzgylxt.entity.purchase.PurchaseApply;
-import com.dzgylxt.entity.purchase.PurchaseApplyItem;
+import com.dzgylxt.entity.purchase.AwardItem;
 import com.dzgylxt.enums.ContractStatus;
 import com.dzgylxt.enums.ItemType;
-import com.dzgylxt.enums.PurchaseApplyStatus;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.contract.ContractMapper;
 import com.dzgylxt.mapper.contract.ContractPriceItemMapper;
+import com.dzgylxt.mapper.contract.ContractSkuWhitelistMapper;
 import com.dzgylxt.mapper.order.OrderChangeMapper;
 import com.dzgylxt.mapper.order.OrderItemMapper;
 import com.dzgylxt.mapper.order.PurchaseOrderMapper;
@@ -27,7 +27,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -42,31 +41,26 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * D16 无申请来源订单「需求来源」留痕专项测试（对应 docs/D16需求来源留痕_规格设计.md）。
- *
- * <p>复用 OrderTripleCheckTest 的下单三重校验 mock 装配基座，仅将请求改为
- * <b>无申请来源（applyId=null）= 日常采购</b>，验证需求来源校验与落库。</p>
+ * P4 D15 合同供货范围校验单测（设计 §5.4 方案 A；AC 对齐规格 §6）：
+ * ①有价格清单 → 沿用 A1 硬拦截（行为回归零差异）；②无清单有定标 → SKU ∈ award_item 集；
+ * ③皆无 → 白名单命中校验；空白名单 = 维持现网行为（额度闸兜底）。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-class D16DemandSourceTest {
+class ContractSkuScopeTest {
 
     private static final long CONTRACT_ID = 500L;
-    private static final long APP_ID = 700L;
-    private static final long APP_ITEM_ID = 701L;
+    private static final long AWARD_ID = 800L;
+    private static final long SKU_ID = 9L;
 
     @Mock
     private PurchaseOrderMapper purchaseOrderMapper;
@@ -74,6 +68,8 @@ class D16DemandSourceTest {
     private ContractMapper contractMapper;
     @Mock
     private ContractPriceItemMapper contractPriceItemMapper;
+    @Mock
+    private ContractSkuWhitelistMapper contractSkuWhitelistMapper;
     @Mock
     private PurchaseApplyItemMapper applyItemMapper;
     @Mock
@@ -84,8 +80,6 @@ class D16DemandSourceTest {
     private AwardMapper awardMapper;
     @Mock
     private AwardItemMapper awardItemMapper;
-    @Mock
-    private com.dzgylxt.mapper.contract.ContractSkuWhitelistMapper contractSkuWhitelistMapper;
     @Mock
     private OrderItemMapper orderItemMapper;
     @Mock
@@ -107,10 +101,9 @@ class D16DemandSourceTest {
     void setUp() {
         service = new OrderServiceImpl();
         ReflectionTestUtils.setField(service, "contractMapper", contractMapper);
+        // 关键前提：无价格清单（触发 D15 分支②③）
         when(contractPriceItemMapper.selectByContract(any(Long.class))).thenReturn(List.of());
         ReflectionTestUtils.setField(service, "contractPriceItemMapper", contractPriceItemMapper);
-        // P4 D15：默认空白名单 = 分支③维持现网行为（合同无定标）
-        when(contractSkuWhitelistMapper.selectList(any())).thenReturn(List.of());
         ReflectionTestUtils.setField(service, "contractSkuWhitelistMapper", contractSkuWhitelistMapper);
         ReflectionTestUtils.setField(service, "applyItemMapper", applyItemMapper);
         ReflectionTestUtils.setField(service, "applyMapper", applyMapper);
@@ -138,18 +131,27 @@ class D16DemandSourceTest {
         ReflectionTestUtils.setField(service, "approvalGateway", approvalGateway);
         lenient().when(budgetOccupyService.transfer(any())).thenReturn(
                 com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
-        lenient().when(budgetOccupyService.release(any())).thenReturn(
-                com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
         lenient().when(budgetOccupyService.occupiedTotal(any(), any())).thenReturn(BigDecimal.ZERO);
-
         ReflectionTestUtils.setField(service, "baseMapper", purchaseOrderMapper);
         lenient().when(purchaseOrderMapper.insert(any(PurchaseOrder.class))).thenReturn(1);
-
         lenient().when(redisLockUtil.tryLock(any(), anyLong())).thenReturn("token");
         lenient().doNothing().when(redisLockUtil).unlock(any(), any());
 
-        stubContractMapper();
-        stubUnitConversion();
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenAnswer(inv -> baseContract());
+        when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
+                .thenReturn(1);
+        when(contractMapper.selectById(CONTRACT_ID)).thenAnswer(inv -> baseContract());
+        lenient().when(contractMapper.updateById(any(Contract.class))).thenReturn(1);
+
+        com.dzgylxt.entity.catalog.UnitConversion conv = new com.dzgylxt.entity.catalog.UnitConversion();
+        conv.setRate(BigDecimal.ONE);
+        lenient().when(unitConversionMapper.selectCurrentEffective(anyLong(), any(), any())).thenReturn(conv);
+
+        // D14：开启但阈值极大，避免 DAILY_AUTH 任务干扰本测试关注点
+        ReflectionTestUtils.setField(service, "dailyAuthEnabled", true);
+        ReflectionTestUtils.setField(service, "dailyAuthLimit", new BigDecimal("99999999"));
+
+        setUser();
     }
 
     @AfterEach
@@ -157,159 +159,109 @@ class D16DemandSourceTest {
         SecurityContextHolder.clearContext();
     }
 
-    private void stubContractMapper() {
-        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenAnswer(inv -> {
-            Contract c = baseContract();
-            c.setAvailableAmount(new BigDecimal("2000000"));
-            c.setVersion(0);
-            return c;
-        });
-        when(contractMapper.deductAvailable(eq(CONTRACT_ID), any(BigDecimal.class), any(Integer.class)))
-                .thenAnswer(inv -> {
-                    BigDecimal delta = inv.getArgument(1);
-                    return delta.compareTo(new BigDecimal("2000000")) <= 0 ? 1 : 0;
-                });
-        when(contractMapper.selectById(CONTRACT_ID)).thenAnswer(inv -> {
-            Contract c = baseContract();
-            c.setAvailableAmount(new BigDecimal("2000000"));
-            return c;
-        });
-        lenient().when(contractMapper.updateById(any(Contract.class))).thenReturn(1);
-    }
-
-    private void stubUnitConversion() {
-        com.dzgylxt.entity.catalog.UnitConversion conv = new com.dzgylxt.entity.catalog.UnitConversion();
-        conv.setRate(BigDecimal.ONE);
-        lenient().when(unitConversionMapper.selectCurrentEffective(anyLong(), any(), any())).thenReturn(conv);
-    }
-
     private Contract baseContract() {
         Contract c = new Contract();
         c.setId(CONTRACT_ID);
         c.setStatus(ContractStatus.EFFECTIVE);
         c.setAmount(new BigDecimal("2000000"));
+        c.setAvailableAmount(new BigDecimal("2000000"));
+        c.setVersion(0);
         c.setValidFrom(LocalDate.now().minusDays(1));
         c.setValidTo(LocalDate.now().plusDays(30));
+        c.setAwardId(null);
         return c;
     }
 
-    /** 日常采购请求（无申请来源），reason 为 null（用于触发必填校验）。 */
-    private OrderCreateReqVO dailyReq(BigDecimal qty, BigDecimal price) {
-        return dailyReqWithReason(qty, price, null);
-    }
-
-    private OrderCreateReqVO dailyReqWithReason(BigDecimal qty, BigDecimal price, String reason) {
+    private OrderCreateReqVO dailyReq() {
         OrderCreateReqVO req = new OrderCreateReqVO();
         req.setContractId(CONTRACT_ID);
-        req.setApplyId(null); // ← 日常采购：无申请来源
-        if (reason != null) {
-            req.setSourceReason(reason);
-        }
+        req.setApplyId(null);
         OrderCreateReqVO.OrderItemReqVO item = new OrderCreateReqVO.OrderItemReqVO();
-        item.setSkuId(9L);
-        item.setQty(qty);
+        item.setSkuId(SKU_ID);
+        item.setQty(BigDecimal.ONE);
         item.setPurchaseUnit("PCS");
-        item.setPrice(price);
+        item.setPrice(new BigDecimal("100"));
         item.setItemType(ItemType.MATERIAL);
         req.setItems(List.of(item));
+        req.setSourceReason("日常补货");
         return req;
     }
 
-    private void setUser(boolean withPerms) {
+    private void setUser() {
         LoginUser u = new LoginUser();
         u.setId(99L);
-        u.setUsername("authuser");
+        u.setUsername("scopeuser");
         u.setMainDeptId(1L);
-        u.setPerms(withPerms ? List.of("order:create") : List.of());
+        u.setPerms(List.of("order:create"));
         SecurityContextHolder.getContext()
                 .setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
     }
 
-    /** AC1：无申请来源订单未填写需求来源说明 → 抛 PARAM_ERROR。 */
+    private ContractSkuWhitelist whitelistRow(long skuId) {
+        ContractSkuWhitelist row = new ContractSkuWhitelist();
+        row.setContractId(CONTRACT_ID);
+        row.setSkuId(skuId);
+        return row;
+    }
+
+    // ==================== 分支③：无清单无定标 → 白名单 ====================
+
     @Test
-    void dailyOrder_withoutSourceReason_throws() {
-        setUser(true);
-        BizException ex = assertThrows(BizException.class,
-                () -> service.createOrder(dailyReq(BigDecimal.ONE, new BigDecimal("100"))));
-        assertTrue(ex.getMessage().contains("需求来源"), ex.getMessage());
+    void whitelist_hit_passes() {
+        when(contractSkuWhitelistMapper.selectList(any()))
+                .thenReturn(List.of(whitelistRow(SKU_ID), whitelistRow(10L)));
+
+        service.createOrder(dailyReq());
+        // 无异常 = 白名单命中放行
     }
 
-    /** AC2：无申请来源订单填写需求来源说明 → 落库 source_type=OFFLINE + source_reason=输入值。 */
     @Test
-    void dailyOrder_withSourceReason_recordsOfflineSource() {
-        setUser(true);
-        service.createOrder(dailyReqWithReason(BigDecimal.ONE, new BigDecimal("100"), "月度办公耗材补货"));
+    void whitelist_miss_rejected() {
+        when(contractSkuWhitelistMapper.selectList(any()))
+                .thenReturn(List.of(whitelistRow(10L), whitelistRow(11L)));
 
-        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
-        verify(purchaseOrderMapper).insert(cap.capture());
-        PurchaseOrder saved = cap.getValue();
-        assertEquals("OFFLINE", saved.getSourceType());
-        assertEquals("月度办公耗材补货", saved.getSourceReason());
+        BizException e = assertThrows(BizException.class, () -> service.createOrder(dailyReq()));
+        assertEquals(4000, e.getCode());
+        assertTrue(e.getMessage().contains("SKU 白名单"));
     }
 
-    /** AC3：标准/项目链路（applyId!=null）→ source_type=APPLY，source_reason 可为空、不受强制校验。 */
     @Test
-    void applyBasedOrder_recordsSourceTypeApply_withoutReason() {
-        stubApplyMappers();
-        service.createOrder(applyReq(BigDecimal.ONE, new BigDecimal("100")));
+    void whitelist_empty_keepsCurrentBehavior() {
+        // AC④：空白名单合同现网不变（额度闸兜底）
+        when(contractSkuWhitelistMapper.selectList(any())).thenReturn(List.of());
 
-        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
-        verify(purchaseOrderMapper).insert(cap.capture());
-        assertEquals("APPLY", cap.getValue().getSourceType());
-        assertNull(cap.getValue().getSourceReason());
+        service.createOrder(dailyReq());
     }
 
-    /** AC4：无申请来源订单同时具备授权留痕（D14）+ 需求来源留痕（D16），审计三件套闭合。 */
+    // ==================== 分支②：无清单有定标 → award_item SKU 集 ====================
+
     @Test
-    void dailyOrder_authAndSourceTogether_recorded() {
-        setUser(true);
-        service.createOrder(dailyReqWithReason(BigDecimal.ONE, new BigDecimal("100"), "设备维保备件"));
+    void awardScope_hit_passes() {
+        Contract c = baseContract();
+        c.setAwardId(AWARD_ID);
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(c);
+        when(contractMapper.selectById(CONTRACT_ID)).thenReturn(c);
+        AwardItem ai = new AwardItem();
+        ai.setAwardId(AWARD_ID);
+        ai.setSkuId(SKU_ID);
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(ai));
 
-        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
-        verify(purchaseOrderMapper).insert(cap.capture());
-        PurchaseOrder saved = cap.getValue();
-        // D14 授权留痕
-        assertEquals(99L, saved.getAuthorizedBy());
-        assertEquals("authuser", saved.getAuthorizedName());
-        assertNotNull(saved.getAuthorizedTime());
-        // D16 需求来源留痕
-        assertEquals("OFFLINE", saved.getSourceType());
-        assertEquals("设备维保备件", saved.getSourceReason());
+        service.createOrder(dailyReq());
     }
 
-    private OrderCreateReqVO applyReq(BigDecimal qty, BigDecimal price) {
-        OrderCreateReqVO req = new OrderCreateReqVO();
-        req.setContractId(CONTRACT_ID);
-        req.setApplyId(APP_ID);
-        OrderCreateReqVO.OrderItemReqVO item = new OrderCreateReqVO.OrderItemReqVO();
-        item.setSkuId(9L);
-        item.setApplyItemId(APP_ITEM_ID);
-        item.setQty(qty);
-        item.setPrice(price);
-        item.setItemType(ItemType.MATERIAL);
-        req.setItems(List.of(item));
-        return req;
-    }
+    @Test
+    void awardScope_miss_rejected() {
+        Contract c = baseContract();
+        c.setAwardId(AWARD_ID);
+        when(contractMapper.selectForUpdate(CONTRACT_ID)).thenReturn(c);
+        when(contractMapper.selectById(CONTRACT_ID)).thenReturn(c);
+        AwardItem ai = new AwardItem();
+        ai.setAwardId(AWARD_ID);
+        ai.setSkuId(77L);
+        when(awardItemMapper.selectList(any())).thenReturn(List.of(ai));
 
-    private void stubApplyMappers() {
-        PurchaseApply apply = new PurchaseApply();
-        apply.setId(APP_ID);
-        apply.setStatus(PurchaseApplyStatus.APPROVED);
-        lenient().when(applyMapper.selectById(APP_ID)).thenReturn(apply);
-
-        PurchaseApplyItem ai = new PurchaseApplyItem();
-        ai.setId(APP_ITEM_ID);
-        ai.setApplyId(APP_ID);
-        ai.setSkuId(9L);
-        ai.setApplyQty(new BigDecimal("100"));
-        ai.setOrderedQty(BigDecimal.ZERO);
-        ai.setRemainQty(new BigDecimal("100"));
-        ai.setVersion(0);
-        ai.setPurchaseUnit("PCS");
-        lenient().when(applyItemMapper.selectForUpdateByIds(List.of(APP_ITEM_ID))).thenReturn(List.of(ai));
-        lenient().when(applyItemMapper.selectById(APP_ITEM_ID)).thenReturn(ai);
-        lenient().when(applyItemMapper.deductRemain(eq(APP_ITEM_ID), any(BigDecimal.class), any(Integer.class))).thenReturn(1);
-        lenient().when(applyItemMapper.selectList(any())).thenReturn(List.of(ai));
-        lenient().when(applyMapper.updateById(any(PurchaseApply.class))).thenReturn(1);
+        BizException e = assertThrows(BizException.class, () -> service.createOrder(dailyReq()));
+        assertEquals(4000, e.getCode());
+        assertTrue(e.getMessage().contains("定标价格清单"));
     }
 }

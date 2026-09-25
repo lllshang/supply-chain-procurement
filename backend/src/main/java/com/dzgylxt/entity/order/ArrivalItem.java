@@ -40,4 +40,8 @@ public class ArrivalItem extends BaseEntity implements Serializable {
     /** 0=待处理 1=已完成 */
     private HandleStatus handleStatus;
     private String remark;
+    /** P4 R3b 计重：实到重量（基本单位口径，valuation_type=1 时录入；<!-- D5 --> 净重/毛重/允许误差参数等拍板预留） */
+    private BigDecimal actualWeight;
+    /** P4 R3b 计重：合格量（硬校验：合格量 ≤ 实到重量，PRD L811） */
+    private BigDecimal qualifiedQty;
 }

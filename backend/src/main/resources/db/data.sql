@@ -63,7 +63,7 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (602, 6, '到期预警', 2, '/contract/warn', 'contract/warn/index', 'audit',    'contract:read',                                                   2, 0, NOW(), NOW(), 0),
 -- 订单与验收（parent_id = 8）
 (801, 8, '采购订单', 2, '/order/list',   'order/list/index',   'list',  'order:read,order:write,order:change',                            1, 0, NOW(), NOW(), 0),
-(802, 8, '到货验收', 2, '/order/arrival', 'order/arrival/index','box',   'arrival:read,arrival:write,arrival:confirm',                     2, 0, NOW(), NOW(), 0),
+(802, 8, '到货验收', 2, '/order/arrival', 'order/arrival/index','box',   'arrival:read,arrival:write,arrival:confirm,receipt:over-receive', 2, 0, NOW(), NOW(), 0),
 (803, 8, '入库台账', 2, '/order/ledger',  'order/ledger/index', 'money', 'arrival:read',                                                   3, 0, NOW(), NOW(), 0),
 (804, 8, '履约调整', 2, '/order/adjust',  'order/adjust/index', 'tools', 'adjust:read,adjust:write',                                       4, 0, NOW(), NOW(), 0),
 (805, 8, '服务考核', 2, '/order/assess',  'order/assess/index', 'audit', 'order:assess:read,order:assess:write',                           5, 0, NOW(), NOW(), 0),
@@ -233,5 +233,11 @@ INSERT IGNORE INTO contract_type (id, type_code, type_name, enabled, remark, cre
 (1, 'MATERIAL', '物料', 1, '存量 contract_type=0 映射', NOW(), NOW(), 0),
 (2, 'SERVICE',  '服务', 1, '存量 contract_type=1 映射', NOW(), NOW(), 0),
 (3, 'MIXED',    '综合', 1, '存量 contract_type=2 映射', NOW(), NOW(), 0);
+
+-- ---------------- P4 R3a 合同类型配置菜单（parent_id=6；新键 contract:type:read/write；幂等） ----------------
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
+(603, 6, '合同类型配置', 2, '/contract/types', 'contract/ContractTypeConfig.vue', 'document', 'contract:type:read,contract:type:write', 3, 0, NOW(), NOW(), 0);
+INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, deleted) VALUES
+(52, 1, 603, NOW(), NOW(), 0);
 
 SET FOREIGN_KEY_CHECKS = 1;

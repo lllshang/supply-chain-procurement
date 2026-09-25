@@ -86,6 +86,29 @@ public class ContractController {
         return R.ok(contractService.renew(id, req));
     }
 
+    /** 补充签订（P4 R3a：新合同 source_contract_id=原合同、relation_type=SUPPLEMENT，走 CONTRACT 审批）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasPerm(authentication,'contract:write')")
+    @PostMapping("/{id}/supplement")
+    public R<Long> supplement(@PathVariable Long id,
+                              @RequestBody com.dzgylxt.vo.contract.ContractSupplementReqVO req) {
+        return R.ok(contractService.supplement(id, req));
+    }
+
+    /** SKU 白名单（P4 D15：维护，设计 §6.4）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasPerm(authentication,'contract:write')")
+    @org.springframework.web.bind.annotation.PutMapping("/{id}/sku-whitelist")
+    public R<Boolean> replaceSkuWhitelist(@PathVariable Long id,
+                                          @RequestBody java.util.List<com.dzgylxt.vo.contract.SkuWhitelistReqVO> items) {
+        return R.ok(contractService.replaceSkuWhitelist(id, items));
+    }
+
+    /** SKU 白名单查看（P4 D15）。 */
+    @PreAuthorize("isAuthenticated() and @authz.hasPerm(authentication,'contract:read')")
+    @org.springframework.web.bind.annotation.GetMapping("/{id}/sku-whitelist")
+    public R<java.util.List<com.dzgylxt.entity.contract.ContractSkuWhitelist>> skuWhitelist(@PathVariable Long id) {
+        return R.ok(contractService.listSkuWhitelist(id));
+    }
+
     /** 到期预警（valid_to − 提前天数配置）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
     @GetMapping("/expiring-warn")

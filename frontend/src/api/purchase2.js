@@ -127,6 +127,31 @@ export function terminateContract(id, reason) {
 export function renewContract(id, data) {
   return request.post(`/api/v1/contracts/${id}/renew`, data)
 }
+// P4 R3a：补充签订（关联原合同，独立走 CONTRACT 审批）
+export function supplementContract(id, data) {
+  return request.post(`/api/v1/contracts/${id}/supplement`, data)
+}
+// P4 R3a：合同类型字典（contract:type:read/write）
+export function listContractTypes() {
+  return request.get('/api/v1/contract-types')
+}
+export function createContractType(data) {
+  return request.post('/api/v1/contract-types', data)
+}
+export function updateContractType(id, data) {
+  return request.put(`/api/v1/contract-types/${id}`, data)
+}
+export function deleteContractType(id) {
+  return request.delete(`/api/v1/contract-types/${id}`)
+}
+// P4 D15：合同 SKU 白名单（覆盖式维护；空列表=清空，恢复现网额度闸兜底行为）
+export function listSkuWhitelist(contractId) {
+  return request.get(`/api/v1/contracts/${contractId}/sku-whitelist`)
+}
+export function replaceSkuWhitelist(contractId, items) {
+  return request.put(`/api/v1/contracts/${contractId}/sku-whitelist`, { items })
+}
+
 export function listExpiringContracts() {
   return request.get('/api/v1/contracts/expiring-warn')
 }
@@ -196,16 +221,9 @@ export function submitAdjust(id) {
   return request.post(`/api/v1/fulfillment-adjusts/${id}/submit`)
 }
 
-// ---- 审批中心（/api/v1/approvals/tasks） ----
-export function searchApprovalTasks(params) {
-  return request.get('/api/v1/approvals/tasks/search', { params })
-}
-export function approveTask(taskId, comment) {
-  return request.post(`/api/v1/approvals/tasks/${taskId}/approve`, { comment })
-}
-export function rejectTask(taskId, comment) {
-  return request.post(`/api/v1/approvals/tasks/${taskId}/reject`, { comment })
-}
+// ---- 审批中心（/api/v1/approvals/tasks）----
+// P4 迁移至 @/api/approval（保留旧导出兼容）
+export { searchApprovalTasks, approveTask, rejectTask } from '@/api/approval'
 
 // ---- 通用下载：Blob 保存为文件 ----
 export function saveBlob(blob, filename) {
