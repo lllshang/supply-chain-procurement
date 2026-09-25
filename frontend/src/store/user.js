@@ -20,7 +20,8 @@ export const fallbackMenus = [
       { id: 203, parentId: 2, menuName: '规格配置', icon: 'operation', path: '/catalog/spec', menuType: 2, perms: 'catalog:spec:read,catalog:spec:write' },
       { id: 204, parentId: 2, menuName: '价格规则', icon: 'price-tag', path: '/catalog/price-rule', menuType: 2, perms: 'catalog:price:read,catalog:price:write' },
       { id: 205, parentId: 2, menuName: '产品库', icon: 'goods', path: '/catalog/product', menuType: 2, perms: 'catalog:spu:read,catalog:spu:write' },
-      { id: 206, parentId: 2, menuName: '产品导入', icon: 'upload', path: '/catalog/import', menuType: 2, perms: 'catalog:import' }
+      { id: 206, parentId: 2, menuName: '产品导入', icon: 'upload', path: '/catalog/import', menuType: 2, perms: 'catalog:import' },
+      { id: 207, parentId: 2, menuName: '价格库审核', icon: 'price-tag', path: '/catalog/price-audit', menuType: 2, perms: 'catalog:price:read,catalog:price:audit' }
     ]
   },
   {

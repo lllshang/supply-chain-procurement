@@ -235,6 +235,20 @@ export const STRING_ENUMS = {
     { value: 'UNPAID', label: '未付款', type: 'warning' },
     { value: 'PARTIAL', label: '部分付款', type: 'warning' },
     { value: 'PAID', label: '已付清', type: 'success' }
+  ],
+  // ---- P3 价格库（PriceAuditStatus / PriceSource，#33 name 契约以枚举名序列化） ----
+  // 价格审核状态
+  priceAuditStatus: [
+    { value: 'PENDING', label: '待审', type: 'warning' },
+    { value: 'APPROVED', label: '通过', type: 'success' },
+    { value: 'REJECTED', label: '驳回', type: 'danger' }
+  ],
+  // 价格来源
+  priceSource: [
+    { value: 'QUOTATION', label: '报价' },
+    { value: 'AWARD', label: '定标' },
+    { value: 'ORDER', label: '订单' },
+    { value: 'MANUAL', label: '手工' }
   ]
 }
 

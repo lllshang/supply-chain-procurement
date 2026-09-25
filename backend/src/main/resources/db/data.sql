@@ -76,6 +76,10 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (902, 9, '付款登记', 2, '/settlement/payment', 'settlement/payment/index', 'credit-card', 'payment:read,payment:write,payment:confirm',          2, 0, NOW(), NOW(), 0),
 (903, 9, '对账单',   2, '/settlement/statement','settlement/statement/index','document',   'payment:read',                                        3, 0, NOW(), NOW(), 0);
 
+-- ---------------- P3 价格库审核菜单（商品库管理下，紧邻价格规则；幂等） ----------------
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
+(207, 2, '价格库审核', 2, '/catalog/price-audit', 'cost/price-audit/index', 'price-tag', 'catalog:price:read,catalog:price:audit', 7, 0, NOW(), NOW(), 0);
+
 -- ---------------- 管理员用户（密码 admin123，BCrypt $2a$10$） ----------------
 INSERT IGNORE INTO sys_user (id, username, password_hash, nickname, main_dept_id, status, created_at, updated_at, deleted)
 VALUES (1, 'admin', '$2a$10$pxjuW3BEyUH2EunQavbwWOTURXWJ/fLDpzVNrkKgjhsisXNhR8iwK', '管理员', 1, 0, NOW(), NOW(), 0);
@@ -136,6 +140,7 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 (46, 1, 901, NOW(), NOW(), 0),
 (47, 1, 902, NOW(), NOW(), 0),
 (48, 1, 903, NOW(), NOW(), 0),
+(49, 1, 207, NOW(), NOW(), 0),
 (38, 1, 1001, NOW(), NOW(), 0);
 
 -- ---------------- P1 计量单位字典（基础种子，幂等） ----------------
