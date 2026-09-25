@@ -7,6 +7,7 @@ import com.dzgylxt.entity.catalog.PriceRule;
 import com.dzgylxt.entity.catalog.Spu;
 import com.dzgylxt.enums.PriceRefType;
 import com.dzgylxt.enums.PriceRuleType;
+import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.mapper.catalog.PriceRuleMapper;
 import com.dzgylxt.mapper.catalog.SpuMapper;
 import com.dzgylxt.service.IPriceRuleService;
@@ -22,9 +23,6 @@ import java.util.List;
 @Service
 public class PriceRuleServiceImpl extends ServiceImpl<PriceRuleMapper, PriceRule> implements IPriceRuleService {
 
-    private static final int STATUS_VALID = 0;
-    private static final int STATUS_INVALID = 1;
-
     private final SpuMapper spuMapper;
 
     public PriceRuleServiceImpl(SpuMapper spuMapper) {
@@ -36,7 +34,7 @@ public class PriceRuleServiceImpl extends ServiceImpl<PriceRuleMapper, PriceRule
     public Long createRule(PriceRuleSaveReqVO req) {
         PriceRule entity = new PriceRule();
         applyAndValidate(entity, req);
-        entity.setStatus(req.getStatus() == null ? STATUS_VALID : req.getStatus());
+        entity.setStatus(req.getStatus() == null ? CatalogStatus.VALID : req.getStatus());
         save(entity);
         return entity.getId();
     }
@@ -83,7 +81,7 @@ public class PriceRuleServiceImpl extends ServiceImpl<PriceRuleMapper, PriceRule
         if (entity == null) {
             throw new BizException(ResultCode.DATA_NOT_FOUND, "价格规则不存在：" + id);
         }
-        entity.setStatus(STATUS_INVALID);
+        entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
     }
 

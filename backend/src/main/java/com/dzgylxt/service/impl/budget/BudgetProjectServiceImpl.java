@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.budget.BudgetProject;
+import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.mapper.budget.BudgetLineMapper;
 import com.dzgylxt.mapper.budget.BudgetProjectMapper;
 import com.dzgylxt.service.IBudgetProjectService;
@@ -19,9 +20,6 @@ import java.util.List;
 @Service
 public class BudgetProjectServiceImpl extends ServiceImpl<BudgetProjectMapper, BudgetProject>
         implements IBudgetProjectService {
-
-    private static final int STATUS_VALID = 0;
-    private static final int STATUS_INVALID = 1;
 
     private final BudgetLineMapper budgetLineMapper;
 
@@ -45,7 +43,7 @@ public class BudgetProjectServiceImpl extends ServiceImpl<BudgetProjectMapper, B
         entity.setCode(req.getCode());
         entity.setName(req.getName());
         entity.setYear(req.getYear());
-        entity.setStatus(req.getStatus() == null ? STATUS_VALID : req.getStatus());
+        entity.setStatus(req.getStatus() == null ? CatalogStatus.VALID : req.getStatus());
         save(entity);
         return entity.getId();
     }
@@ -86,7 +84,7 @@ public class BudgetProjectServiceImpl extends ServiceImpl<BudgetProjectMapper, B
         if (budgetLineMapper.existsByProject(id)) {
             throw new BizException(ResultCode.BIZ_ERROR, "项目被预算明细引用，不可置无效");
         }
-        entity.setStatus(STATUS_INVALID);
+        entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
     }
 

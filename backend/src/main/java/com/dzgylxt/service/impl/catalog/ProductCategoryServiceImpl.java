@@ -11,6 +11,7 @@ import com.dzgylxt.mapper.catalog.ProductCategoryMapper;
 import com.dzgylxt.mapper.catalog.SpuMapper;
 import com.dzgylxt.service.IProductCategoryService;
 import com.dzgylxt.vo.catalog.ProductCategorySaveReqVO;
+import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.vo.common.CategoryTreeNodeVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,10 +25,6 @@ import java.util.List;
 public class ProductCategoryServiceImpl extends ServiceImpl<ProductCategoryMapper, ProductCategory>
         implements IProductCategoryService {
 
-    /** 有效状态。 */
-    private static final int STATUS_VALID = 0;
-    /** 无效状态。 */
-    private static final int STATUS_INVALID = 1;
     private static final int MAX_LEVEL = 3;
 
     private final SpuMapper spuMapper;
@@ -64,7 +61,7 @@ public class ProductCategoryServiceImpl extends ServiceImpl<ProductCategoryMappe
         entity.setLevel(level);
         entity.setCode(req.getCode());
         entity.setName(req.getName());
-        entity.setStatus(req.getStatus() == null ? STATUS_VALID : req.getStatus());
+        entity.setStatus(req.getStatus() == null ? CatalogStatus.VALID : req.getStatus());
         entity.setTreePath("");
         save(entity);
         // 维护 tree_path（依赖雪花 id）
@@ -128,7 +125,7 @@ public class ProductCategoryServiceImpl extends ServiceImpl<ProductCategoryMappe
         if (entity == null) {
             throw new BizException(ResultCode.DATA_NOT_FOUND, "品类不存在：" + id);
         }
-        entity.setStatus(STATUS_INVALID);
+        entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
     }
 

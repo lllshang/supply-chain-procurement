@@ -1,6 +1,7 @@
 package com.dzgylxt.entity.identity;
 
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.IdentityStatus;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -20,5 +21,5 @@ public class SysRole extends BaseEntity implements Serializable {
     private String roleName;
     private String remark;
     /** 0=正常，1=停用 */
-    private Integer status;
+    private IdentityStatus status;
 }

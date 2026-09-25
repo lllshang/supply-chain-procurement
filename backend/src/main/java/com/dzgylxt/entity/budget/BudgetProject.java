@@ -2,6 +2,7 @@ package com.dzgylxt.entity.budget;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.CatalogStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -24,5 +25,5 @@ public class BudgetProject extends BaseEntity implements Serializable {
     /** 所属年份，如 2026 */
     private Integer year;
     /** 0=有效，1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }

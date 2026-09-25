@@ -7,6 +7,7 @@ import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.common.TreeUtils;
 import com.dzgylxt.entity.budget.BudgetSubject;
 import com.dzgylxt.enums.SubjectType;
+import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.mapper.budget.BudgetLineMapper;
 import com.dzgylxt.mapper.budget.BudgetSubjectMapper;
 import com.dzgylxt.service.IBudgetSubjectService;
@@ -23,9 +24,6 @@ import java.util.List;
 @Service
 public class BudgetSubjectServiceImpl extends ServiceImpl<BudgetSubjectMapper, BudgetSubject>
         implements IBudgetSubjectService {
-
-    private static final int STATUS_VALID = 0;
-    private static final int STATUS_INVALID = 1;
 
     private final BudgetLineMapper budgetLineMapper;
 
@@ -47,7 +45,7 @@ public class BudgetSubjectServiceImpl extends ServiceImpl<BudgetSubjectMapper, B
         entity.setName(req.getName());
         entity.setParentId(req.getParentId() == null ? 0L : req.getParentId());
         entity.setSubjectType(toSubjectType(req.getSubjectType()));
-        entity.setStatus(req.getStatus() == null ? STATUS_VALID : req.getStatus());
+        entity.setStatus(req.getStatus() == null ? CatalogStatus.VALID : req.getStatus());
         save(entity);
         return entity.getId();
     }
@@ -107,7 +105,7 @@ public class BudgetSubjectServiceImpl extends ServiceImpl<BudgetSubjectMapper, B
         if (budgetLineMapper.existsBySubject(id)) {
             throw new BizException(ResultCode.BIZ_ERROR, "科目被预算明细引用，不可置无效");
         }
-        entity.setStatus(STATUS_INVALID);
+        entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
     }
 

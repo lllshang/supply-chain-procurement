@@ -22,6 +22,7 @@ public enum QualStatus implements IEnum<Integer> {
     }
 
     @Override
+    @com.fasterxml.jackson.annotation.JsonValue
     public Integer getValue() {
         return code;
     }

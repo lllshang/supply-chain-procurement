@@ -163,7 +163,7 @@ public class SupplierQualServiceImpl extends ServiceImpl<SupplierQualMapper, Sup
             vo.setQualName(qual.getQualName());
             vo.setFileKey(qual.getFileKey());
             vo.setExpireAt(qual.getExpireAt());
-            vo.setStatus(qual.getStatus() == null ? null : qual.getStatus().getValue());
+            vo.setStatus(qual.getStatus());
             vo.setValidity(QualValidityCalculator.compute(qual.getExpireAt(), qualWarnDays).name());
             vo.setRejectReason(qual.getRejectReason());
             vo.setReviewedBy(qual.getReviewedBy());

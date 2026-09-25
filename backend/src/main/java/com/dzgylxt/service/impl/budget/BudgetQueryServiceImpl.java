@@ -61,7 +61,7 @@ public class BudgetQueryServiceImpl implements IBudgetQueryService {
             vo.setYear(header.getYear());
             vo.setDeptId(header.getDeptId());
             vo.setTotalAmount(header.getTotalAmount());
-            vo.setStatus(header.getStatus() == null ? null : header.getStatus().getValue());
+            vo.setStatus(header.getStatus());
             vo.setRemark(header.getRemark());
             vo.setUpdatedAt(header.getUpdatedAt());
             records.add(vo);

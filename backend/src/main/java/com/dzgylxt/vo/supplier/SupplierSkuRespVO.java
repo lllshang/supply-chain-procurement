@@ -1,6 +1,7 @@
 package com.dzgylxt.vo.supplier;
 
 import com.dzgylxt.enums.BindScope;
+import com.dzgylxt.enums.SupplierSkuStatus;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -22,5 +23,5 @@ public class SupplierSkuRespVO implements Serializable {
     /** 绑定范围：0=不限定 1=限定报价接单 */
     private BindScope bindScope;
     /** 0=正常 1=停用 */
-    private Integer status;
+    private SupplierSkuStatus status;
 }

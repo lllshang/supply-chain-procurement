@@ -11,6 +11,7 @@ import com.dzgylxt.entity.approval.ApprovalRecord;
 import com.dzgylxt.entity.approval.ApprovalTask;
 import com.dzgylxt.approval.ApprovalFlowConfigService.CachedFlow;
 import com.dzgylxt.enums.ApprovalStatus;
+import com.dzgylxt.enums.ApprovalNodeStatus;
 import com.dzgylxt.mapper.approval.ApprovalNodeMapper;
 import com.dzgylxt.mapper.approval.ApprovalRecordMapper;
 import com.dzgylxt.mapper.approval.ApprovalTaskMapper;
@@ -64,11 +65,11 @@ import java.util.Set;
 public class WorkflowApprovalGateway implements ApprovalGateway {
 
     /** approval_node.status：待审。 */
-    public static final int NODE_PENDING = 0;
+    public static final ApprovalNodeStatus NODE_PENDING = ApprovalNodeStatus.PENDING;
     /** approval_node.status：已审结（通过时回填 approver/action）。 */
-    public static final int NODE_DONE = 1;
+    public static final ApprovalNodeStatus NODE_DONE = ApprovalNodeStatus.DONE;
     /** approval_node.status：任务驳回后被跳过（未走到）。 */
-    public static final int NODE_SKIPPED = 2;
+    public static final ApprovalNodeStatus NODE_SKIPPED = ApprovalNodeStatus.SKIPPED;
 
     /** approval_node.sign_type：或签（默认）。 */
     public static final String SIGN_ANY = "ANY";

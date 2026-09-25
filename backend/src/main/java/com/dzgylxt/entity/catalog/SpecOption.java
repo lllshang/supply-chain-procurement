@@ -2,6 +2,7 @@ package com.dzgylxt.entity.catalog;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.CatalogStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -23,5 +24,5 @@ public class SpecOption extends BaseEntity implements Serializable {
     /** 规格值，如 红/S */
     private String specValue;
     /** 0=有效，1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }

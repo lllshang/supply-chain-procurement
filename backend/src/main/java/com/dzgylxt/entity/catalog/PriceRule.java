@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.common.BaseEntity;
 import com.dzgylxt.enums.PriceRefType;
 import com.dzgylxt.enums.PriceRuleType;
+import com.dzgylxt.enums.CatalogStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -33,5 +34,5 @@ public class PriceRule extends BaseEntity implements Serializable {
     /** 公式表达式（ruleType=4 时使用） */
     private String expression;
     /** 0=有效，1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }

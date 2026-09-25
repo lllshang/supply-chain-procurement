@@ -8,6 +8,7 @@ import com.dzgylxt.entity.catalog.Sku;
 import com.dzgylxt.entity.catalog.SupplierSku;
 import com.dzgylxt.entity.catalog.Unit;
 import com.dzgylxt.entity.catalog.UnitConversion;
+import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.mapper.catalog.SkuMapper;
 import com.dzgylxt.mapper.catalog.SupplierSkuMapper;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
@@ -21,9 +22,6 @@ import org.springframework.util.StringUtils;
 /** 计量单位字典服务实现。 */
 @Service
 public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements IUnitService {
-
-    private static final int STATUS_VALID = 0;
-    private static final int STATUS_INVALID = 1;
 
     private final SkuMapper skuMapper;
     private final SupplierSkuMapper supplierSkuMapper;
@@ -49,7 +47,7 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements IU
         Unit entity = new Unit();
         entity.setCode(req.getCode());
         entity.setName(req.getName());
-        entity.setStatus(req.getStatus() == null ? STATUS_VALID : req.getStatus());
+        entity.setStatus(req.getStatus() == null ? CatalogStatus.VALID : req.getStatus());
         save(entity);
         return entity.getId();
     }
@@ -87,7 +85,7 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements IU
         if (isReferenced(entity.getCode())) {
             throw new BizException(ResultCode.BIZ_ERROR, "单位被 SKU/换算/绑定引用，不可置无效");
         }
-        entity.setStatus(STATUS_INVALID);
+        entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
     }
 

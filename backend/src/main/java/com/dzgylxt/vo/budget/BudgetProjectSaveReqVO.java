@@ -2,6 +2,8 @@ package com.dzgylxt.vo.budget;
 
 import lombok.Data;
 
+import com.dzgylxt.enums.CatalogStatus;
+
 import java.io.Serializable;
 
 /**
@@ -14,5 +16,5 @@ public class BudgetProjectSaveReqVO implements Serializable {
     private String name;
     private Integer year;
     /** 0=有效 1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }

@@ -1,6 +1,7 @@
 package com.dzgylxt.integration;
 
 import com.dzgylxt.entity.integration.OutboxEvent;
+import com.dzgylxt.enums.OutboxStatus;
 import com.dzgylxt.mapper.integration.OutboxEventMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +33,7 @@ class IntegrationWorkerTest {
     void poll_marksSentWhenAdapterSucceeds() {
         OutboxEvent event = new OutboxEvent();
         event.setId(1L);
-        event.setStatus(0);
+        event.setStatus(OutboxStatus.PENDING);
         when(outboxEventMapper.selectList(any())).thenReturn(List.of(event));
         when(adapter.deliver(event)).thenReturn(true);
 
@@ -41,14 +42,14 @@ class IntegrationWorkerTest {
         verify(adapter).deliver(event);
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxEventMapper).updateById(captor.capture());
-        assertEquals(1, captor.getValue().getStatus());
+        assertEquals(OutboxStatus.SENT, captor.getValue().getStatus());
     }
 
     @Test
     void poll_marksRetryWhenAdapterFails() {
         OutboxEvent event = new OutboxEvent();
         event.setId(2L);
-        event.setStatus(0);
+        event.setStatus(OutboxStatus.PENDING);
         when(outboxEventMapper.selectList(any())).thenReturn(List.of(event));
         when(adapter.deliver(event)).thenReturn(false);
 
@@ -56,6 +57,6 @@ class IntegrationWorkerTest {
 
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxEventMapper).updateById(captor.capture());
-        assertEquals(2, captor.getValue().getStatus());
+        assertEquals(OutboxStatus.RETRY, captor.getValue().getStatus());
     }
 }

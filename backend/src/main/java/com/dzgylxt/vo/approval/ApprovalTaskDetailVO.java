@@ -2,6 +2,8 @@ package com.dzgylxt.vo.approval;
 
 import lombok.Data;
 
+import com.dzgylxt.enums.ApprovalNodeStatus;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -41,7 +43,7 @@ public class ApprovalTaskDetailVO implements Serializable {
         private Integer seq;
         private String signType;
         /** 节点状态：0=待审 1=已审结 2=已跳过（int 直传，前端 map 中文） */
-        private Integer status;
+        private ApprovalNodeStatus status;
         private Long approver;
         private String action;
         private String comment;

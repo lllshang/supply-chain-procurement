@@ -1,6 +1,7 @@
 package com.dzgylxt.entity.integration;
 
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.SyncStatus;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -18,6 +19,6 @@ public class SyncReconcile extends BaseEntity implements Serializable {
 
     private String eventId;
     private String target;
-    private Integer status;
+    private SyncStatus status;
     private String lastResp;
 }

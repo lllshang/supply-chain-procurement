@@ -3,6 +3,7 @@ package com.dzgylxt.entity.budget;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.common.BaseEntity;
 import com.dzgylxt.enums.SubjectType;
+import com.dzgylxt.enums.CatalogStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -27,5 +28,5 @@ public class BudgetSubject extends BaseEntity implements Serializable {
     /** 科目类型：1=支出 2=收入 */
     private SubjectType subjectType;
     /** 0=有效，1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }

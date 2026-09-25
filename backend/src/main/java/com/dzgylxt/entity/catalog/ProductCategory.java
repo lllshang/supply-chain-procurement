@@ -2,6 +2,7 @@ package com.dzgylxt.entity.catalog;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.CatalogStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -29,5 +30,5 @@ public class ProductCategory extends BaseEntity implements Serializable {
     /** 祖先路径，如 /1/3/7 */
     private String treePath;
     /** 0=有效，1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }

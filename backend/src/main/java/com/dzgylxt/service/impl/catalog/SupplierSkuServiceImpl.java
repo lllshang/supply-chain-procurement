@@ -8,6 +8,7 @@ import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.catalog.Sku;
 import com.dzgylxt.entity.catalog.SupplierSku;
 import com.dzgylxt.enums.BindScope;
+import com.dzgylxt.enums.SupplierSkuStatus;
 import com.dzgylxt.mapper.catalog.SkuMapper;
 import com.dzgylxt.mapper.catalog.SupplierMapper;
 import com.dzgylxt.mapper.catalog.SupplierSkuMapper;
@@ -36,8 +37,6 @@ import java.util.stream.Collectors;
 @Service
 public class SupplierSkuServiceImpl extends ServiceImpl<SupplierSkuMapper, SupplierSku>
         implements ISupplierSkuService {
-
-    private static final int STATUS_NORMAL = 0;
 
     private final SupplierMapper supplierMapper;
     private final SkuMapper skuMapper;
@@ -160,7 +159,7 @@ public class SupplierSkuServiceImpl extends ServiceImpl<SupplierSkuMapper, Suppl
         entity.setSupplyPrice(req.getSupplyPrice());
         entity.setPackageUnit(req.getPackageUnit());
         entity.setBindScope(toBindScope(req.getBindScope()));
-        entity.setStatus(STATUS_NORMAL);
+        entity.setStatus(SupplierSkuStatus.NORMAL);
         try {
             save(entity);
         } catch (DuplicateKeyException e) {

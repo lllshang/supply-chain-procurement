@@ -4,6 +4,7 @@ import com.dzgylxt.common.BaseEntity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.enums.DataScope;
+import com.dzgylxt.enums.IdentityStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -25,5 +26,5 @@ public class SysDept extends BaseEntity implements Serializable {
     private String leader;
     private String phone;
     /** 0=正常，1=停用 */
-    private Integer status;
+    private IdentityStatus status;
 }

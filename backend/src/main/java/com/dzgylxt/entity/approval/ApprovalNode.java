@@ -1,6 +1,7 @@
 package com.dzgylxt.entity.approval;
 
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.ApprovalNodeStatus;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -21,7 +22,7 @@ public class ApprovalNode extends BaseEntity implements Serializable {
     private Long approver;
     private String action;
     private String comment;
-    private Integer status;
+    private ApprovalNodeStatus status;
     /** 节点编码快照（P4 §2.9：=approval_node_def.node_code，节点链结构冻结） */
     private String nodeCode;
     /** 节点序快照 */

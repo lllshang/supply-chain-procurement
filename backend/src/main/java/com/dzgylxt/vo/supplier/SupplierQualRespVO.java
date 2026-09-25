@@ -2,6 +2,8 @@ package com.dzgylxt.vo.supplier;
 
 import lombok.Data;
 
+import com.dzgylxt.enums.QualStatus;
+
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
@@ -18,7 +20,7 @@ public class SupplierQualRespVO implements Serializable {
     private String fileKey;
     private LocalDateTime expireAt;
     /** 0=待审 1=通过 2=驳回 */
-    private Integer status;
+    private QualStatus status;
     /** 派生有效期：VALID / EXPIRING / EXPIRED */
     private String validity;
     private String rejectReason;

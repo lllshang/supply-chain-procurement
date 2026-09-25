@@ -4,6 +4,7 @@ import com.dzgylxt.common.BaseEntity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.enums.MenuType;
+import com.dzgylxt.enums.MenuStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -29,5 +30,5 @@ public class SysMenu extends BaseEntity implements Serializable {
     private String perms;
     private Integer sort;
     /** 0=显示，1=隐藏 */
-    private Integer status;
+    private MenuStatus status;
 }

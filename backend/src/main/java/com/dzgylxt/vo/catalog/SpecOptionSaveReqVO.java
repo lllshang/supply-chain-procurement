@@ -2,6 +2,8 @@ package com.dzgylxt.vo.catalog;
 
 import lombok.Data;
 
+import com.dzgylxt.enums.CatalogStatus;
+
 import java.io.Serializable;
 
 /**
@@ -13,5 +15,5 @@ public class SpecOptionSaveReqVO implements Serializable {
     private String specName;
     private String specValue;
     /** 0=有效 1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }

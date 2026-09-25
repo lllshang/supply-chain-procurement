@@ -1,6 +1,7 @@
 package com.dzgylxt.entity.integration;
 
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.OutboxStatus;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -21,6 +22,6 @@ public class OutboxEvent extends BaseEntity implements Serializable {
     private String type;
     private String payloadJson;
     /** 0=PENDING，1=SENT，2=RETRY，3=FAILED */
-    private Integer status;
+    private OutboxStatus status;
     private Integer retry;
 }

@@ -4,6 +4,7 @@ import com.dzgylxt.common.BaseEntity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.enums.BindScope;
+import com.dzgylxt.enums.SupplierSkuStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -34,5 +35,5 @@ public class SupplierSku extends BaseEntity implements Serializable {
     /** 绑定范围：0=不限定 1=限定报价接单 */
     private BindScope bindScope;
     /** 0=正常，1=停用 */
-    private Integer status;
+    private SupplierSkuStatus status;
 }

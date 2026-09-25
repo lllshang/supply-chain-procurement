@@ -2,6 +2,7 @@ package com.dzgylxt.integration;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.dzgylxt.entity.integration.OutboxEvent;
+import com.dzgylxt.enums.OutboxStatus;
 import com.dzgylxt.mapper.integration.OutboxEventMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,10 +20,6 @@ import java.util.List;
 public class IntegrationWorker {
 
     /** Outbox 状态：0=PENDING 1=SENT 2=RETRY 3=FAILED */
-    private static final int STATUS_PENDING = 0;
-    private static final int STATUS_SENT = 1;
-    private static final int STATUS_RETRY = 2;
-    private static final int STATUS_FAILED = 3;
     private static final int MAX_RETRY = 5;
 
     private final OutboxEventMapper outboxEventMapper;
@@ -38,20 +35,20 @@ public class IntegrationWorker {
     public void poll() {
         List<OutboxEvent> pending = outboxEventMapper.selectList(
                 Wrappers.<OutboxEvent>lambdaQuery()
-                        .eq(OutboxEvent::getStatus, STATUS_PENDING));
+                        .eq(OutboxEvent::getStatus, OutboxStatus.PENDING));
         for (OutboxEvent event : pending) {
             try {
                 boolean ok = adapter.deliver(event);
                 if (ok) {
-                    event.setStatus(STATUS_SENT);
+                    event.setStatus(OutboxStatus.SENT);
                 } else {
-                    event.setStatus(STATUS_RETRY);
+                    event.setStatus(OutboxStatus.RETRY);
                     event.setRetry(nextRetry(event));
                 }
                 outboxEventMapper.updateById(event);
             } catch (Exception e) {
                 log.warn("outbox deliver failed eventId={}", event.getId(), e);
-                event.setStatus(STATUS_RETRY);
+                event.setStatus(OutboxStatus.RETRY);
                 event.setRetry(nextRetry(event));
                 outboxEventMapper.updateById(event);
             }
@@ -61,7 +58,7 @@ public class IntegrationWorker {
     private int nextRetry(OutboxEvent event) {
         int next = (event.getRetry() == null ? 0 : event.getRetry()) + 1;
         if (next > MAX_RETRY) {
-            event.setStatus(STATUS_FAILED);
+            event.setStatus(OutboxStatus.FAILED);
         }
         return next;
     }

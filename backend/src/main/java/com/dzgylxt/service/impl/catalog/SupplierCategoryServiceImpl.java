@@ -7,6 +7,7 @@ import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.common.TreeUtils;
 import com.dzgylxt.entity.catalog.Supplier;
 import com.dzgylxt.entity.catalog.SupplierCategory;
+import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.mapper.catalog.SupplierCategoryMapper;
 import com.dzgylxt.mapper.catalog.SupplierMapper;
 import com.dzgylxt.service.ISupplierCategoryService;
@@ -24,8 +25,6 @@ import java.util.List;
 public class SupplierCategoryServiceImpl extends ServiceImpl<SupplierCategoryMapper, SupplierCategory>
         implements ISupplierCategoryService {
 
-    private static final int STATUS_VALID = 0;
-    private static final int STATUS_INVALID = 1;
     private static final int MAX_LEVEL = 3;
 
     private final SupplierMapper supplierMapper;
@@ -62,7 +61,7 @@ public class SupplierCategoryServiceImpl extends ServiceImpl<SupplierCategoryMap
         entity.setLevel(level);
         entity.setCode(req.getCode());
         entity.setName(req.getName());
-        entity.setStatus(req.getStatus() == null ? STATUS_VALID : req.getStatus());
+        entity.setStatus(req.getStatus() == null ? CatalogStatus.VALID : req.getStatus());
         entity.setTreePath("");
         save(entity);
         entity.setTreePath(parentPath + "/" + entity.getId());
@@ -124,7 +123,7 @@ public class SupplierCategoryServiceImpl extends ServiceImpl<SupplierCategoryMap
         if (refCount != null && refCount > 0) {
             throw new BizException(ResultCode.BIZ_ERROR, "分类被供应商引用，不可置无效");
         }
-        entity.setStatus(STATUS_INVALID);
+        entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
     }
 }

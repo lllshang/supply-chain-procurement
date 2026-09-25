@@ -6,6 +6,7 @@ import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.catalog.Sku;
 import com.dzgylxt.entity.catalog.SpecOption;
+import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.mapper.catalog.SkuMapper;
 import com.dzgylxt.mapper.catalog.SpecOptionMapper;
 import com.dzgylxt.service.ISpecOptionService;
@@ -23,9 +24,6 @@ import java.util.Map;
 @Service
 public class SpecOptionServiceImpl extends ServiceImpl<SpecOptionMapper, SpecOption>
         implements ISpecOptionService {
-
-    private static final int STATUS_VALID = 0;
-    private static final int STATUS_INVALID = 1;
 
     private final SkuMapper skuMapper;
 
@@ -45,7 +43,7 @@ public class SpecOptionServiceImpl extends ServiceImpl<SpecOptionMapper, SpecOpt
         SpecOption entity = new SpecOption();
         entity.setSpecName(req.getSpecName());
         entity.setSpecValue(req.getSpecValue());
-        entity.setStatus(req.getStatus() == null ? STATUS_VALID : req.getStatus());
+        entity.setStatus(req.getStatus() == null ? CatalogStatus.VALID : req.getStatus());
         save(entity);
         return entity.getId();
     }
@@ -73,7 +71,7 @@ public class SpecOptionServiceImpl extends ServiceImpl<SpecOptionMapper, SpecOpt
     @Override
     public Map<String, List<String>> groupedOptions() {
         List<SpecOption> all = list(new LambdaQueryWrapper<SpecOption>()
-                .eq(SpecOption::getStatus, STATUS_VALID)
+                .eq(SpecOption::getStatus, CatalogStatus.VALID)
                 .orderByAsc(SpecOption::getSpecName)
                 .orderByAsc(SpecOption::getId));
         Map<String, List<String>> grouped = new LinkedHashMap<>();
@@ -92,7 +90,7 @@ public class SpecOptionServiceImpl extends ServiceImpl<SpecOptionMapper, SpecOpt
         if (isReferenced(entity.getSpecValue())) {
             throw new BizException(ResultCode.BIZ_ERROR, "规格值被 SKU 引用，不可置无效");
         }
-        entity.setStatus(STATUS_INVALID);
+        entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
     }
 

@@ -2,6 +2,7 @@ package com.dzgylxt.entity.catalog;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dzgylxt.common.BaseEntity;
+import com.dzgylxt.enums.CatalogStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -24,5 +25,5 @@ public class Unit extends BaseEntity implements Serializable {
     /** 单位名称，如 个/箱/千克 */
     private String name;
     /** 0=有效，1=无效 */
-    private Integer status;
+    private CatalogStatus status;
 }
