@@ -73,7 +73,8 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 -- ---------------- P3 二级菜单（结算与付款，对齐 P3 设计 §5 路由；幂等） ----------------
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
 (901, 9, '结算管理', 2, '/settlement/list',    'settlement/list/index',    'money',       'settlement:read,settlement:write,settlement:submit', 1, 0, NOW(), NOW(), 0),
-(902, 9, '付款登记', 2, '/settlement/payment', 'settlement/payment/index', 'credit-card', 'payment:read,payment:write,payment:confirm',          2, 0, NOW(), NOW(), 0);
+(902, 9, '付款登记', 2, '/settlement/payment', 'settlement/payment/index', 'credit-card', 'payment:read,payment:write,payment:confirm',          2, 0, NOW(), NOW(), 0),
+(903, 9, '对账单',   2, '/settlement/statement','settlement/statement/index','document',   'payment:read',                                        3, 0, NOW(), NOW(), 0);
 
 -- ---------------- 管理员用户（密码 admin123，BCrypt $2a$10$） ----------------
 INSERT IGNORE INTO sys_user (id, username, password_hash, nickname, main_dept_id, status, created_at, updated_at, deleted)
@@ -134,6 +135,7 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 -- P3 二级菜单授权（超级管理员）
 (46, 1, 901, NOW(), NOW(), 0),
 (47, 1, 902, NOW(), NOW(), 0),
+(48, 1, 903, NOW(), NOW(), 0),
 (38, 1, 1001, NOW(), NOW(), 0);
 
 -- ---------------- P1 计量单位字典（基础种子，幂等） ----------------

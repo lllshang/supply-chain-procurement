@@ -92,7 +92,8 @@ export const fallbackMenus = [
     menuType: 1,
     children: [
       { id: 901, parentId: 9, menuName: '结算管理', icon: 'money', path: '/settlement/list', menuType: 2, perms: 'settlement:read,settlement:write,settlement:submit' },
-      { id: 902, parentId: 9, menuName: '付款登记', icon: 'credit-card', path: '/settlement/payment', menuType: 2, perms: 'payment:read,payment:write,payment:confirm' }
+      { id: 902, parentId: 9, menuName: '付款登记', icon: 'credit-card', path: '/settlement/payment', menuType: 2, perms: 'payment:read,payment:write,payment:confirm' },
+      { id: 903, parentId: 9, menuName: '对账单', icon: 'document', path: '/settlement/statement', menuType: 2, perms: 'payment:read' }
     ]
   },
   { id: 10, parentId: 0, menuName: '审批中心', icon: 'audit', path: '/approval', menuType: 1 },
