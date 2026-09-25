@@ -686,6 +686,7 @@ class OrderTripleCheckTest {
         item.setPrice(BigDecimal.TEN);
         item.setPurchaseUnit("BOX");
         req.setItems(List.of(item));
+        req.setSourceReason("无申请来源补录：框架合同直发");
 
         service.createOrder(req);
 
@@ -714,6 +715,7 @@ class OrderTripleCheckTest {
         item.setPrice(BigDecimal.TEN);
         item.setPurchaseUnit("BOX");
         req.setItems(List.of(item));
+        req.setSourceReason("无锚订单：无申请且合同未关联定标");
 
         service.createOrder(req);
 

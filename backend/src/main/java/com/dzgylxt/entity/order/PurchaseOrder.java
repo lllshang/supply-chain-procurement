@@ -43,6 +43,12 @@ public class PurchaseOrder extends BaseEntity implements Serializable {
     /** 是否超单笔授权额度升级（0 否 / 1 是；超阈值→部门负责人/采购负责人确认，DAILY_AUTH 审批任务） */
     private Integer authOverLimit;
 
+    // ===== D16 无申请来源订单「需求来源」留痕（主流程 docx：必须保留需求来源） =====
+    /** 需求来源类型：APPLY=采购申请来源 / OFFLINE=无申请来源（日常采购/框架合同直发）；由 applyId 推导，不接收客户端输入 */
+    private String sourceType;
+    /** 需求来源说明（applyId==null 时必填，记录为何发起本次采购，供报表/审计追溯） */
+    private String sourceReason;
+
     /** R5：派生展示字段——结清进度 = Σ有效结算金额 / 应结总额（0~1）；不参与订单状态机。 */
     @TableField(exist = false)
     private BigDecimal settleProgress;

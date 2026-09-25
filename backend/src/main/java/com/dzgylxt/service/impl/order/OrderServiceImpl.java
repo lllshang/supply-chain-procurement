@@ -357,6 +357,22 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                 }
             }
 
+            // ===== D16 无申请来源订单「需求来源」留痕（主流程 docx：必须保留需求来源、预算归属和授权记录）=====
+            // 与 D14 授权留痕、预算占用并列，补齐 applyId==null 订单的审计三件套。
+            String orderSourceType;
+            String orderSourceReason;
+            if (req.getApplyId() == null) {
+                // 无申请来源订单必须填写需求来源说明（为何发起本次采购，供报表/审计追溯）
+                if (req.getSourceReason() == null || req.getSourceReason().isBlank()) {
+                    throw new BizException(ResultCode.PARAM_ERROR, "无申请来源订单必须填写需求来源说明");
+                }
+                orderSourceType = "OFFLINE";
+                orderSourceReason = req.getSourceReason().trim();
+            } else {
+                orderSourceType = "APPLY";
+                orderSourceReason = req.getSourceReason(); // 可选：标准/项目链路需求来源即采购申请，可附说明
+            }
+
             // 落单：物料/服务按 item_type 拆单（设计 §2.6）
             List<Long> orderIds = new ArrayList<>();
             for (ItemType type : new ItemType[]{ItemType.MATERIAL, ItemType.SERVICE}) {
@@ -366,7 +382,7 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
                     continue;
                 }
                 orderIds.add(insertOrder(req, contract, supplierId, type, group,
-                        authBy, authName, authTime, authOverLimit));
+                        authBy, authName, authTime, authOverLimit, orderSourceType, orderSourceReason));
             }
             contractMapper.updateById(contract);
 
@@ -926,7 +942,8 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
     /** 落单（订单头 + 明细快照 + 来源追溯），返回订单 id。 */
     private Long insertOrder(OrderCreateReqVO req, Contract contract, Long supplierId,
                              ItemType type, List<OrderLine> group,
-                             Long authBy, String authName, LocalDateTime authTime, boolean authOverLimit) {
+                             Long authBy, String authName, LocalDateTime authTime, boolean authOverLimit,
+                             String sourceType, String sourceReason) {
         PurchaseOrder order = new PurchaseOrder();
         order.setContractId(contract.getId());
         order.setApplyId(req.getApplyId());
@@ -946,6 +963,9 @@ public class OrderServiceImpl extends ServiceImpl<PurchaseOrderMapper, PurchaseO
         order.setAuthorizedName(authName);
         order.setAuthorizedTime(authTime);
         order.setAuthOverLimit(authOverLimit ? 1 : 0);
+        // D16：需求来源留痕（applyId==null 由调用方传入 OFFLINE+说明；applyId!=null 为 APPLY）
+        order.setSourceType(sourceType);
+        order.setSourceReason(sourceReason);
         save(order);
         // D14：超单笔授权额度 → 生成 DAILY_AUTH 升级审批任务（部门负责人/采购负责人确认）
         if (authOverLimit) {

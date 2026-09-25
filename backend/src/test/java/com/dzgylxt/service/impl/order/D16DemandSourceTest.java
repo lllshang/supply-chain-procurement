@@ -9,6 +9,7 @@ import com.dzgylxt.entity.purchase.PurchaseApply;
 import com.dzgylxt.entity.purchase.PurchaseApplyItem;
 import com.dzgylxt.enums.ContractStatus;
 import com.dzgylxt.enums.ItemType;
+import com.dzgylxt.enums.PurchaseApplyStatus;
 import com.dzgylxt.mapper.catalog.UnitConversionMapper;
 import com.dzgylxt.mapper.contract.ContractMapper;
 import com.dzgylxt.mapper.contract.ContractPriceItemMapper;
@@ -48,24 +49,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * D14 日常采购「授权」控制专项测试（对应 docs/D14日常采购授权控制_规格设计.md）。
+ * D16 无申请来源订单「需求来源」留痕专项测试（对应 docs/D16需求来源留痕_规格设计.md）。
  *
  * <p>复用 OrderTripleCheckTest 的下单三重校验 mock 装配基座，仅将请求改为
- * <b>无申请来源（applyId=null）= 日常采购</b>，并注入 SecurityContext 验证授权留痕与超额度升级。</p>
+ * <b>无申请来源（applyId=null）= 日常采购</b>，验证需求来源校验与落库。</p>
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-class D14AuthorizationTest {
+class D16DemandSourceTest {
 
     private static final long CONTRACT_ID = 500L;
-    private static final long APPLY_ITEM_ID = 601L;
+    private static final long APP_ID = 700L;
+    private static final long APP_ITEM_ID = 701L;
 
     @Mock
     private PurchaseOrderMapper purchaseOrderMapper;
@@ -98,8 +99,6 @@ class D14AuthorizationTest {
     @Mock
     private com.dzgylxt.approval.ApprovalGateway approvalGateway;
 
-    private final BigDecimal AUTH_LIMIT = new BigDecimal("500000");
-
     private OrderServiceImpl service;
 
     @BeforeEach
@@ -131,7 +130,6 @@ class D14AuthorizationTest {
             }
         });
         ReflectionTestUtils.setField(service, "budgetOccupyService", budgetOccupyService);
-        // D14：审批网关 mock 注入（createDailyAuthTask 在 approvalGateway==null 时直接 return）
         ReflectionTestUtils.setField(service, "approvalGateway", approvalGateway);
         lenient().when(budgetOccupyService.transfer(any())).thenReturn(
                 com.dzgylxt.vo.budget.OccupyResultVO.ok(BigDecimal.ZERO, List.of()));
@@ -142,16 +140,11 @@ class D14AuthorizationTest {
         ReflectionTestUtils.setField(service, "baseMapper", purchaseOrderMapper);
         lenient().when(purchaseOrderMapper.insert(any(PurchaseOrder.class))).thenReturn(1);
 
-        // 合同可用额度放大到 200 万，使「超授权额度(50万)」测试不被合同闸拦截
         lenient().when(redisLockUtil.tryLock(any(), anyLong())).thenReturn("token");
         lenient().doNothing().when(redisLockUtil).unlock(any(), any());
 
         stubContractMapper();
         stubUnitConversion();
-
-        // D14：默认开启 + 50 万阈值（与 @Value 默认值一致；单测未注入 Spring 取字段初始化值）
-        ReflectionTestUtils.setField(service, "dailyAuthEnabled", true);
-        ReflectionTestUtils.setField(service, "dailyAuthLimit", AUTH_LIMIT);
     }
 
     @AfterEach
@@ -195,11 +188,18 @@ class D14AuthorizationTest {
         return c;
     }
 
-    /** 日常采购请求：无 applyId，金额 = qty × price。 */
+    /** 日常采购请求（无申请来源），reason 为 null（用于触发必填校验）。 */
     private OrderCreateReqVO dailyReq(BigDecimal qty, BigDecimal price) {
+        return dailyReqWithReason(qty, price, null);
+    }
+
+    private OrderCreateReqVO dailyReqWithReason(BigDecimal qty, BigDecimal price, String reason) {
         OrderCreateReqVO req = new OrderCreateReqVO();
         req.setContractId(CONTRACT_ID);
         req.setApplyId(null); // ← 日常采购：无申请来源
+        if (reason != null) {
+            req.setSourceReason(reason);
+        }
         OrderCreateReqVO.OrderItemReqVO item = new OrderCreateReqVO.OrderItemReqVO();
         item.setSkuId(9L);
         item.setQty(qty);
@@ -207,7 +207,6 @@ class D14AuthorizationTest {
         item.setPrice(price);
         item.setItemType(ItemType.MATERIAL);
         req.setItems(List.of(item));
-        req.setSourceReason("日常补货"); // D16：无申请来源订单必须填写需求来源说明
         return req;
     }
 
@@ -218,69 +217,94 @@ class D14AuthorizationTest {
         u.setMainDeptId(1L);
         u.setPerms(withPerms ? List.of("order:create") : List.of());
         SecurityContextHolder.getContext()
-                .setAuthentication(new UsernamePasswordAuthenticationToken(u, null, java.util.List.of()));
+                .setAuthentication(new UsernamePasswordAuthenticationToken(u, null, List.of()));
     }
 
+    /** AC1：无申请来源订单未填写需求来源说明 → 抛 PARAM_ERROR。 */
     @Test
-    void dailyOrder_recordsAuthorizer_whenUserHasPerms() {
+    void dailyOrder_withoutSourceReason_throws() {
         setUser(true);
-        service.createOrder(dailyReq(BigDecimal.ONE, new BigDecimal("100")));
+        BizException ex = assertThrows(BizException.class,
+                () -> service.createOrder(dailyReq(BigDecimal.ONE, new BigDecimal("100"))));
+        assertTrue(ex.getMessage().contains("需求来源"), ex.getMessage());
+    }
+
+    /** AC2：无申请来源订单填写需求来源说明 → 落库 source_type=OFFLINE + source_reason=输入值。 */
+    @Test
+    void dailyOrder_withSourceReason_recordsOfflineSource() {
+        setUser(true);
+        service.createOrder(dailyReqWithReason(BigDecimal.ONE, new BigDecimal("100"), "月度办公耗材补货"));
 
         ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
         verify(purchaseOrderMapper).insert(cap.capture());
         PurchaseOrder saved = cap.getValue();
+        assertEquals("OFFLINE", saved.getSourceType());
+        assertEquals("月度办公耗材补货", saved.getSourceReason());
+    }
+
+    /** AC3：标准/项目链路（applyId!=null）→ source_type=APPLY，source_reason 可为空、不受强制校验。 */
+    @Test
+    void applyBasedOrder_recordsSourceTypeApply_withoutReason() {
+        stubApplyMappers();
+        service.createOrder(applyReq(BigDecimal.ONE, new BigDecimal("100")));
+
+        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(purchaseOrderMapper).insert(cap.capture());
+        assertEquals("APPLY", cap.getValue().getSourceType());
+        assertNull(cap.getValue().getSourceReason());
+    }
+
+    /** AC4：无申请来源订单同时具备授权留痕（D14）+ 需求来源留痕（D16），审计三件套闭合。 */
+    @Test
+    void dailyOrder_authAndSourceTogether_recorded() {
+        setUser(true);
+        service.createOrder(dailyReqWithReason(BigDecimal.ONE, new BigDecimal("100"), "设备维保备件"));
+
+        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(purchaseOrderMapper).insert(cap.capture());
+        PurchaseOrder saved = cap.getValue();
+        // D14 授权留痕
         assertEquals(99L, saved.getAuthorizedBy());
         assertEquals("authuser", saved.getAuthorizedName());
         assertNotNull(saved.getAuthorizedTime());
-        assertEquals(0, saved.getAuthOverLimit());
+        // D16 需求来源留痕
+        assertEquals("OFFLINE", saved.getSourceType());
+        assertEquals("设备维保备件", saved.getSourceReason());
     }
 
-    @Test
-    void dailyOrder_throwsWhenUserHasNoPerms() {
-        setUser(false);
-        BizException ex = assertThrows(BizException.class,
-                () -> service.createOrder(dailyReq(BigDecimal.ONE, new BigDecimal("100"))));
-        assertTrue(ex.getMessage().contains("无日常采购授权"), ex.getMessage());
+    private OrderCreateReqVO applyReq(BigDecimal qty, BigDecimal price) {
+        OrderCreateReqVO req = new OrderCreateReqVO();
+        req.setContractId(CONTRACT_ID);
+        req.setApplyId(APP_ID);
+        OrderCreateReqVO.OrderItemReqVO item = new OrderCreateReqVO.OrderItemReqVO();
+        item.setSkuId(9L);
+        item.setApplyItemId(APP_ITEM_ID);
+        item.setQty(qty);
+        item.setPrice(price);
+        item.setItemType(ItemType.MATERIAL);
+        req.setItems(List.of(item));
+        return req;
     }
 
-    @Test
-    void dailyOrder_underLimit_noEscalation() {
-        setUser(true);
-        // 金额 10 < 50 万阈值
-        service.createOrder(dailyReq(BigDecimal.ONE, new BigDecimal("10")));
+    private void stubApplyMappers() {
+        PurchaseApply apply = new PurchaseApply();
+        apply.setId(APP_ID);
+        apply.setStatus(PurchaseApplyStatus.APPROVED);
+        lenient().when(applyMapper.selectById(APP_ID)).thenReturn(apply);
 
-        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
-        verify(purchaseOrderMapper).insert(cap.capture());
-        assertEquals(0, cap.getValue().getAuthOverLimit());
-        verify(approvalGateway, org.mockito.Mockito.never()).create(any());
-    }
-
-    @Test
-    void dailyOrder_overLimit_createsDailyAuthTask_andMarksOverLimit() {
-        setUser(true);
-        // 金额 60 万 > 50 万阈值（合同可用 200 万，通过合同闸）
-        service.createOrder(dailyReq(BigDecimal.ONE, new BigDecimal("600000")));
-
-        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
-        verify(purchaseOrderMapper).insert(cap.capture());
-        assertEquals(1, cap.getValue().getAuthOverLimit());
-
-        verify(approvalGateway, org.mockito.Mockito.times(1)).create(argThat(
-                spec -> "DAILY_AUTH".equals(spec.getBizType())
-                        && spec.getTitle() != null
-                        && spec.getTitle().contains("超授权额度")));
-    }
-
-    @Test
-    void dailyOrder_noSecurityContext_doesNotThrow_andAuthorizerNull() {
-        // 无安全上下文（兼容既有单测基线 / 内部调用）：放行但不记授权人
-        SecurityContextHolder.clearContext();
-        service.createOrder(dailyReq(BigDecimal.ONE, new BigDecimal("10")));
-
-        ArgumentCaptor<PurchaseOrder> cap = ArgumentCaptor.forClass(PurchaseOrder.class);
-        verify(purchaseOrderMapper).insert(cap.capture());
-        assertNull(cap.getValue().getAuthorizedBy());
-        assertNull(cap.getValue().getAuthorizedName());
-        assertNotNull(cap.getValue().getAuthorizedTime());
+        PurchaseApplyItem ai = new PurchaseApplyItem();
+        ai.setId(APP_ITEM_ID);
+        ai.setApplyId(APP_ID);
+        ai.setSkuId(9L);
+        ai.setApplyQty(new BigDecimal("100"));
+        ai.setOrderedQty(BigDecimal.ZERO);
+        ai.setRemainQty(new BigDecimal("100"));
+        ai.setVersion(0);
+        ai.setPurchaseUnit("PCS");
+        lenient().when(applyItemMapper.selectForUpdateByIds(List.of(APP_ITEM_ID))).thenReturn(List.of(ai));
+        lenient().when(applyItemMapper.selectById(APP_ITEM_ID)).thenReturn(ai);
+        lenient().when(applyItemMapper.deductRemain(eq(APP_ITEM_ID), any(BigDecimal.class), any(Integer.class))).thenReturn(1);
+        lenient().when(applyItemMapper.selectList(any())).thenReturn(List.of(ai));
+        lenient().when(applyMapper.updateById(any(PurchaseApply.class))).thenReturn(1);
     }
 }

@@ -20,6 +20,8 @@ public class OrderCreateReqVO implements Serializable {
     /** 供应商（缺省取合同供应商） */
     private Long supplierId;
     private String remark;
+    /** 需求来源说明（D16：applyId==null 无申请来源订单必填；applyId!=null 可选） */
+    private String sourceReason;
     private List<OrderItemReqVO> items = new ArrayList<>();
 
     @Data

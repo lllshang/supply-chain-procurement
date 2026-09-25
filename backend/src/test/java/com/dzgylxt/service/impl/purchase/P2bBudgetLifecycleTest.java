@@ -425,6 +425,7 @@ class P2bBudgetLifecycleTest {
         req.setApplyId(null);
         req.setContractId(CONTRACT_ID);
         req.setRemark("D9 下单");
+        req.setSourceReason("D9 下单：无申请来源补录");
         com.dzgylxt.vo.order.OrderCreateReqVO.OrderItemReqVO itemReq = new com.dzgylxt.vo.order.OrderCreateReqVO.OrderItemReqVO();
         itemReq.setSkuId(SKU_ID);
         itemReq.setQty(new BigDecimal("20"));
