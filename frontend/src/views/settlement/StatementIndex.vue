@@ -2,7 +2,7 @@
   <div>
     <el-card>
       <PageHead title="供应商对账单">
-        <el-button :icon="Download" :disabled="!statement" @click="onExport">导出Excel</el-button>
+        <el-button v-permission="'payment:read'" :icon="Download" :disabled="!statement" @click="onExport">导出Excel</el-button>
       </PageHead>
       <div class="toolbar">
         <el-input

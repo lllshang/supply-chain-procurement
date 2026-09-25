@@ -97,6 +97,9 @@ app:
     access-key: minioadmin
     secret-key: minioadmin
     bucket: supply-chain
+  price:
+    # 价格库异常价判定阈值：与近期通过价均价偏离百分比（P3 设计 §1.4 = 20%）
+    abnormal-percent: 20
   order:
     # D14 日常采购「授权」控制开关（默认开启）
     daily-auth-enabled: true

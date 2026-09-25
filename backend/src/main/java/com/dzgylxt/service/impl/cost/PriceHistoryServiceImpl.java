@@ -23,14 +23,15 @@ import java.util.List;
  * 价格库实现（P3 设计 §1.4 / T07）。
  *
  * <p>异常价判定：与该 SKU 近期通过价的均价偏离超过
- * {@code app.price.abnormal-percent}（默认 30%）→ {@code PENDING} 待审；
+ * {@code app.price.abnormal-percent}（默认 20%，对齐 P3 设计 §1.4）→ {@code PENDING} 待审；
  * 无历史价时首条直接 {@code APPROVED}（首价无基准，规格口径）。</p>
  */
 @Service
 public class PriceHistoryServiceImpl extends ServiceImpl<PriceHistoryMapper, PriceHistory>
         implements IPriceHistoryService {
 
-    @Value("${app.price.abnormal-percent:30}")
+    /** 异常价偏离阈值（百分比，默认 20 = 对齐 P3 设计 §1.4；可由 application.yml 覆盖）。 */
+    @Value("${app.price.abnormal-percent:20}")
     private Integer abnormalPercent;
 
     @Override

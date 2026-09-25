@@ -40,7 +40,7 @@ class PriceHistoryServiceTest {
     void setUp() {
         service = new PriceHistoryServiceImpl();
         ReflectionTestUtils.setField(service, "baseMapper", priceHistoryMapper);
-        ReflectionTestUtils.setField(service, "abnormalPercent", 30);
+        ReflectionTestUtils.setField(service, "abnormalPercent", 20);
     }
 
     /** 首价无基准 → 直接 APPROVED。 */
@@ -55,7 +55,7 @@ class PriceHistoryServiceTest {
         assertEquals(PriceAuditStatus.APPROVED, cap.getValue().getAuditStatus());
     }
 
-    /** 偏离近期均价超 30% → PENDING 待审（异常价入待审，规格口径）。 */
+    /** 偏离近期均价超 20%（设计 §1.4 阈值）→ PENDING 待审（异常价入待审）。 */
     @Test
     void record_abnormalPrice_pending() {
         PriceHistory base = new PriceHistory();
@@ -71,7 +71,7 @@ class PriceHistoryServiceTest {
                 org.mockito.ArgumentCaptor.forClass(PriceHistory.class);
         verify(priceHistoryMapper).insert(cap.capture());
         assertEquals(PriceAuditStatus.PENDING, cap.getValue().getAuditStatus(),
-                "偏离 100% > 30% 阈值应入待审");
+                "偏离 100% > 20% 阈值应入待审");
     }
 
     /** 价格非法（≤0/null）静默忽略——埋点不阻断业务主流程。 */

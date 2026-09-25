@@ -29,14 +29,14 @@ public class PriceHistoryController {
     private IPriceHistoryService priceHistoryService;
 
     /** 待审价列表（异常价人工复核队列）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize("isAuthenticated() and @authz.hasPerm(authentication, 'catalog:price:read')")
     @GetMapping("/pending")
     public R<List<PriceHistory>> pending() {
         return R.ok(priceHistoryService.pendingList());
     }
 
     /** 某 SKU 近期通过价（比价历史取数口径复现，供前端展示）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize("isAuthenticated() and @authz.hasPerm(authentication, 'catalog:price:read')")
     @GetMapping("/recent")
     public R<List<PriceHistory>> recent(@RequestParam Long skuId,
                                         @RequestParam(defaultValue = "5") int limit) {
@@ -44,7 +44,7 @@ public class PriceHistoryController {
     }
 
     /** 审核待审价（通过/驳回；仅 PENDING 可流转）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize("isAuthenticated() and @authz.hasPerm(authentication, 'catalog:price:audit')")
     @PostMapping("/{id}/audit")
     public R<Boolean> audit(@PathVariable Long id, @RequestBody AuditReq req) {
         priceHistoryService.audit(id, req.isApproved(), req.getRemark());

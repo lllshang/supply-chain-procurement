@@ -26,4 +26,21 @@ public class AuthzService {
         }
         return user.getPerms() != null && !user.getPerms().isEmpty();
     }
+
+    /**
+     * 当前登录用户是否拥有指定权限（菜单 perms 粒度的端点门禁）。
+     *
+     * @param authentication Spring Security 认证主体（principal 须为 {@link LoginUser}）
+     * @param perm           权限键，如 {@code catalog:price:read}
+     */
+    public boolean hasPerm(Authentication authentication, String perm) {
+        if (authentication == null || perm == null || perm.isBlank()) {
+            return false;
+        }
+        Object principal = authentication.getPrincipal();
+        if (!(principal instanceof LoginUser user)) {
+            return false;
+        }
+        return user.getPerms() != null && user.getPerms().contains(perm);
+    }
 }

@@ -29,8 +29,8 @@
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <template v-if="row.auditStatus === 'PENDING'">
-              <el-button link type="success" @click="onApprove(row)">通过</el-button>
-              <el-button link type="danger" @click="openReject(row)">驳回</el-button>
+              <el-button v-permission="'catalog:price:audit'" link type="success" @click="onApprove(row)">通过</el-button>
+              <el-button v-permission="'catalog:price:audit'" link type="danger" @click="openReject(row)">驳回</el-button>
             </template>
           </template>
         </el-table-column>
@@ -157,9 +157,11 @@ const recentLimit = ref(5)
 const recentLoading = ref(false)
 const recentRows = ref([])
 
+// SKU ID 为 19 位雪花 ID（后端 Long→String 序列化，#28），全程保持字符串；
+// 查询前仅做纯数字格式校验，严禁 Number()/parseInt() 转换（精度丢失教训）。
 async function loadRecent() {
-  const skuId = Number(recentSkuId.value)
-  if (!recentSkuId.value || !Number.isFinite(skuId)) {
+  const skuId = recentSkuId.value.trim()
+  if (!/^\d+$/.test(skuId)) {
     ElMessage.warning('请输入有效的SKU ID')
     return
   }
