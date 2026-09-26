@@ -40,4 +40,10 @@ public class Payment extends BaseEntity implements Serializable {
     private LocalDateTime confirmedAt;
     private PaymentStatus status;
     private String remark;
+    /** G4：作废/冲销原因 */
+    private String voidedReason;
+    /** G4：作废/冲销操作人 */
+    private Long voidedBy;
+    /** G4：作废/冲销时间 */
+    private LocalDateTime voidedAt;
 }

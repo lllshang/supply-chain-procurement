@@ -65,6 +65,10 @@ export function updatePayment(id, data) {
 export function confirmPayment(id, data) {
   return request.post(`/api/v1/payments/${id}/confirm`, data)
 }
+// G4：作废/冲销付款单（复刻 B9 Settlement VOIDED 范式）
+export function voidPayment(id, data) {
+  return request.post(`/api/v1/payments/${id}/void`, data)
+}
 // 供应商对账单（应付/已付/差额 + 明细）
 export function getStatement(params) {
   return request.get('/api/v1/payments/statement', { params })

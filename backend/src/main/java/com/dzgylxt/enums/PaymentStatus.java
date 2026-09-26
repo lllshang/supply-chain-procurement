@@ -14,7 +14,9 @@ import com.baomidou.mybatisplus.annotation.IEnum;
  */
 public enum PaymentStatus implements IEnum<Integer> {
     UNPAID(0, "未付款"),
-    PAID(1, "已付款");
+    PAID(1, "已付款"),
+    /** G4：作废/冲销（复刻 B9 Settlement VOIDED 范式；status=3 自动从付款承诺/已付累计口径排除）。 */
+    VOIDED(3, "已作废");
 
     private final int code;
     private final String desc;

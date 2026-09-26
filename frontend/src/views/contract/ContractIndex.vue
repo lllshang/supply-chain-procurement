@@ -15,6 +15,8 @@
         </el-table-column>
         <el-table-column prop="validFrom" label="生效日" width="110" />
         <el-table-column prop="validTo" label="到期日" width="110" />
+        <el-table-column prop="owner" label="经办人" width="100" />
+        <el-table-column prop="signDate" label="签订日期" width="110" />
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button v-if="['DRAFT', 'REJECTED'].includes(row.status)" link type="warning" v-permission="'contract:submit'" @click="onSubmit(row)">提交</el-button>
@@ -53,6 +55,12 @@
         <el-form-item label="有效期">
           <el-date-picker v-model="form.validRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="生效日" end-placeholder="到期日" style="width: 100%" />
         </el-form-item>
+        <el-form-item label="经办部门"><el-input v-model="form.ownerDept" placeholder="经办部门" /></el-form-item>
+        <el-form-item label="经办人"><el-input v-model="form.owner" placeholder="经办人" /></el-form-item>
+        <el-form-item label="签订日期">
+          <el-date-picker v-model="form.signDate" type="date" value-format="YYYY-MM-DD" placeholder="签订日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="关联项目(选填)"><el-input v-model="form.projectId" placeholder="选填，关联项目ID" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="formVisible = false">取消</el-button>
@@ -146,9 +154,9 @@ function handlePage(p) {
 // ---- 登记 ----
 const formVisible = ref(false)
 const saving = ref(false)
-const form = reactive({ supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, subjectId: null, validRange: null })
+const form = reactive({ supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, subjectId: null, validRange: null, ownerDept: '', owner: '', signDate: null, projectId: '' })
 function openCreate() {
-  Object.assign(form, { supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, subjectId: null, validRange: null })
+  Object.assign(form, { supplierId: '', awardId: '', title: '', contractType: 0, amount: 0, subjectId: null, validRange: null, ownerDept: '', owner: '', signDate: null, projectId: '' })
   formVisible.value = true
 }
 async function onSave() {
@@ -166,7 +174,11 @@ async function onSave() {
       subjectId: form.subjectId || null,
       amount: form.amount,
       validFrom: form.validRange[0],
-      validTo: form.validRange[1]
+      validTo: form.validRange[1],
+      ownerDept: form.ownerDept || null,
+      owner: form.owner || null,
+      signDate: form.signDate || null,
+      projectId: form.projectId ? Number(form.projectId) : null
     })
     ElMessage.success('合同已登记')
     formVisible.value = false

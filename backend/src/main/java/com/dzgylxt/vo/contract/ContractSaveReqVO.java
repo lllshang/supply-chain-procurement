@@ -28,6 +28,14 @@ public class ContractSaveReqVO implements Serializable {
     private LocalDate validTo;
     /** 附件 JSON 数组（file_meta.file_key，多附件） */
     private List<String> fileKeys;
+    /** G2：经办部门 */
+    private String ownerDept;
+    /** G2：经办人 */
+    private String owner;
+    /** G2：签订日期 */
+    private LocalDate signDate;
+    /** G2：关联项目（可选） */
+    private Long projectId;
     private String remark;
 
     /**

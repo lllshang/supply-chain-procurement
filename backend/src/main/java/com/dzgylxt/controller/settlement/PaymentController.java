@@ -83,6 +83,14 @@ public class PaymentController {
         return R.ok(true);
     }
 
+    /** G4：作废/冲销付款单（复刻 B9 Settlement VOIDED 范式）。 */
+    @PreAuthorize(SecurityConstants.GUARD)
+    @PostMapping("/{id}/void")
+    public R<Boolean> voidPayment(@PathVariable Long id, @RequestBody VoidReq req) {
+        paymentService.voidPayment(id, req.getReason());
+        return R.ok(true);
+    }
+
     /** 供应商对账单（应付/已付/差额 + 明细）。 */
     @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/statement")
@@ -144,6 +152,19 @@ public class PaymentController {
 
         public void setPayDate(LocalDate payDate) {
             this.payDate = payDate;
+        }
+    }
+
+    /** 作废/冲销请求体。 */
+    public static class VoidReq {
+        private String reason;
+
+        public String getReason() {
+            return reason;
+        }
+
+        public void setReason(String reason) {
+            this.reason = reason;
         }
     }
 }

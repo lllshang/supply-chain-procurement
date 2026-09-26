@@ -120,7 +120,7 @@ import { useQueryLocate } from '@/composables/useQueryLocate'
 import { saveBlob } from '@/api/purchase2'
 import {
   pagePayments, getPayment, createPayment, updatePayment, confirmPayment,
-  getStatement, exportStatement
+  getStatement, exportStatement, voidPayment
 } from '@/api/settlement'
 
 const querySettlementId = ref('')
@@ -211,6 +211,22 @@ async function onConfirm() {
     reload()
   } finally {
     confirming.value = false
+  }
+}
+
+// ---- G4：作废/冲销（复刻 B9 Settlement VOIDED 范式） ----
+async function onVoid(row) {
+  try {
+    const { value } = await ElMessageBox.prompt('请填写作废/冲销原因', '作废/冲销付款单')
+    if (!value || !value.trim()) {
+      ElMessage.warning('原因必填')
+      return
+    }
+    await voidPayment(row.id, { reason: value.trim() })
+    ElMessage.success('已作废/冲销付款单')
+    reload()
+  } catch (e) {
+    // 用户取消 prompt 不提示
   }
 }
 

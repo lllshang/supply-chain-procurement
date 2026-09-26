@@ -126,6 +126,11 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
         contract.setAvailableAmount(BigDecimal.ZERO);
         contract.setVersion(0);
         contract.setRemark(req.getRemark());
+        // G2 合同经办信息（建档即记录经办部门/经办人/签订日期/关联项目）
+        contract.setOwnerDept(req.getOwnerDept());
+        contract.setOwner(req.getOwner());
+        contract.setSignDate(req.getSignDate());
+        contract.setProjectId(req.getProjectId());
         save(contract);
         // P3c-A1：生成合同价格清单（有定标→继承 award_item；无定标→手工明细）
         generatePriceItems(contract.getId(), req.getAwardId(), req.getPriceItems());
@@ -212,6 +217,18 @@ public class ContractServiceImpl extends ServiceImpl<ContractMapper, Contract> i
             contract.setFileKeys(JSONUtil.toJsonStr(req.getFileKeys()));
         }
         contract.setRemark(req.getRemark());
+        if (req.getOwnerDept() != null) {
+            contract.setOwnerDept(req.getOwnerDept());
+        }
+        if (req.getOwner() != null) {
+            contract.setOwner(req.getOwner());
+        }
+        if (req.getSignDate() != null) {
+            contract.setSignDate(req.getSignDate());
+        }
+        if (req.getProjectId() != null) {
+            contract.setProjectId(req.getProjectId());
+        }
         updateById(contract);
     }
 

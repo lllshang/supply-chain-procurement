@@ -41,6 +41,14 @@ public class Contract extends BaseEntity implements Serializable {
     private Long typeId;
     /** 预算科目（S8：统计冗余，预算锚点仍=申请/award，P2b） */
     private Long subjectId;
+    /** G2：经办部门 */
+    private String ownerDept;
+    /** G2：经办人 */
+    private String owner;
+    /** G2：签订日期 */
+    private LocalDate signDate;
+    /** G2：关联项目（可选） */
+    private Long projectId;
     /** 终止原因（P2 新增） */
     private String terminateReason;
     private ContractStatus status;

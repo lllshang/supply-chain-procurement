@@ -1196,4 +1196,21 @@ ALTER TABLE `arrival_item`
   ADD COLUMN `actual_weight`  DECIMAL(18,3) NULL COMMENT '实到重量（基本单位口径，valuation_type=1 计重 SKU 录入）' AFTER `handle_status`,
   ADD COLUMN `qualified_qty`  DECIMAL(18,3) NULL COMMENT '合格量（硬校验：合格量 ≤ 实到重量，PRD L811）' AFTER `actual_weight`;
 
+-- ============================================================
+-- G4 付款冲销（复刻 B9 Settlement VOIDED 范式）：payment 增加作废/冲销留痕列
+-- 幂等：本文件 payment 基础 CREATE 不含这些列，统一由下方 ALTER 补齐；存量库同样由此补齐，
+-- 重复执行因"列已存在"(1060) 由 spring.sql.init.continue-on-error=true 忽略。独立迁移脚本见 scripts/sql/g4_payment_void.sql。
+ALTER TABLE `payment`
+  ADD COLUMN `voided_reason` VARCHAR(512) NULL COMMENT '作废/冲销原因' AFTER `remark`,
+  ADD COLUMN `voided_by`     BIGINT       NULL COMMENT '作废/冲销操作人' AFTER `voided_reason`,
+  ADD COLUMN `voided_at`     DATETIME     NULL COMMENT '作废/冲销时间' AFTER `voided_by`;
+
+-- G2 合同经办信息（PRD 合同登记）：经办部门/经办人/签订日期/关联项目
+-- 幂等同上方说明；独立迁移脚本见 scripts/sql/g2_contract_owner.sql。
+ALTER TABLE `contract`
+  ADD COLUMN `owner_dept` VARCHAR(200) NULL COMMENT '经办部门' AFTER `remark`,
+  ADD COLUMN `owner`      VARCHAR(100) NULL COMMENT '经办人' AFTER `owner_dept`,
+  ADD COLUMN `sign_date`  DATE         NULL COMMENT '签订日期' AFTER `owner`,
+  ADD COLUMN `project_id` BIGINT       NULL COMMENT '关联项目（可选）' AFTER `sign_date`;
+
 SET FOREIGN_KEY_CHECKS = 1;

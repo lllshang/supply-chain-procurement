@@ -753,9 +753,9 @@
 基于 PRD 原文可明确佐证、且在本 Batch 3 范围内（所列业务表）的缺口：
 
 1. **`supplier_qual` 缺「有效状态」与「变更类型」维度**：PRD §6.3.2 明确「审核状态」与「有效状态（正常/即将到期/已过期/已失效）」分开管理，并单独列出「变更类型（首次提交/审核中修改/驳回重提/过期更新/失效更新）」与「修改来源」；当前 `supplier_qual.status` 仅覆盖审核状态（待审/通过/驳回），无独立有效状态列（「即将到期/已过期」自动判定无落库列），无 `change_type`，亦无 §10.1 所列独立资质历史表 `supplier_qualification_history`。（核对报告 S5 已记录）
-2. **`contract` 缺 PRD §6.9.1 L839 所列字段**：PRD 明示合同应维护「**经办部门、经办人、签订日期**、（标的、项目）」；当前 `contract` 表仅有 `valid_from/valid_to`，无 `owner_dept`/`owner`/`sign_date`，亦无 `项目`（project_id，PRD §6.4.1 注明项目仅统计归属）。经办部门/经办人为明确名词缺口。
+2. **`contract` 缺 PRD §6.9.1 L839 所列字段**：PRD 明示合同应维护「**经办部门、经办人、签订日期**、（标的、项目）」；当前 `contract` 表仅有 `valid_from/valid_to`，无 `owner_dept`/`owner`/`sign_date`，亦无 `项目`（project_id，PRD §6.4.1 注明项目仅统计归属）。经办部门/经办人为明确名词缺口。**（2026-09-22 已整改：G2 —— `owner_dept/owner/sign_date/project_id` 已加列并落库，见台账 G 区）**
 3. **`spu` 缺 PRD §6.2.1 要求的 SPU 级「采购项类型」**：PRD §6.2.1「SPU 共享…**采购项类型**…」期望 SPU 层即带物料/服务标识；当前 `spu` 表无 `item_type` 列（仅 `purchase_apply_item.item_type` 存在），若需在 SPU 层区分物料/服务则存在缺口。
-4. **`payment` 缺「作废/冲销」能力字段**：PRD §6.11.1「生产版本需补齐实付登记、**作废或冲销**能力」及 `PAY-08` 提及冲销；当前表无冲销/作废状态或反向流水列。（核对报告 R6 亦指出付款需补冲销/重放）
+4. **`payment` 缺「作废/冲销」能力字段**：PRD §6.11.1「生产版本需补齐实付登记、**作废或冲销**能力」及 `PAY-08` 提及冲销；当前表无冲销/作废状态或反向流水列。（核对报告 R6 亦指出付款需补冲销/重放）**（2026-09-22 已整改：G4 —— `PaymentStatus.VOIDED(3)` + `payment.voided_*` 留痕列 + `voidPayment` 端点/前端按钮，复刻 B9 Settlement VOIDED 范式；见台账 G 区）**
 
 其余 PRD 列名差异（如 PRD §10 数据模型使用 `product_spu`/`purchase_request`/`rfq`/`supplier_quote`/`receipt` 等表名与字段名，与 schema 实际命名 `spu`/`purchase_apply`/`inquiry`/`quotation`/`arrival` 不同）属**命名映射差异**，字段语义已在上文逐表对齐，不列为 Schema 缺口；PRD §10.1 所列 `supplier_qualification_history`、`integration_inbox`、`product_mapping`、`receipt_sync_record` 等独立表不在本 Batch 3 业务表范围内，其缺失另行评估。
 

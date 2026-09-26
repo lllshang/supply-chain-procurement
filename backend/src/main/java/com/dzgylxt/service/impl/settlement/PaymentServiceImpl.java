@@ -129,6 +129,23 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void voidPayment(Long id, String reason) {
+        Payment p = requirePayment(id);
+        if (p.getStatus() == PaymentStatus.VOIDED) {
+            throw new BizException(ResultCode.STATUS_INVALID, "付款单已作废，请勿重复操作");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new BizException(ResultCode.PARAM_ERROR, "作废/冲销原因必填");
+        }
+        p.setStatus(PaymentStatus.VOIDED);
+        p.setVoidedReason(reason);
+        p.setVoidedBy(UserContext.getCurrentUserId());
+        p.setVoidedAt(java.time.LocalDateTime.now());
+        updateById(p);
+    }
+
+    @Override
     public StatementVO statement(Long supplierId, LocalDate from, LocalDate to) {
         StatementVO vo = new StatementVO();
         vo.setSupplierId(supplierId);

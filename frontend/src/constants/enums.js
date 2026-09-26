@@ -230,7 +230,8 @@ export const STRING_ENUMS = {
   // 付款状态（R6 收敛：付款登记免审批，仅 UNPAID/PAID 两态——REJECTED 已删）
   paymentStatus: [
     { value: 'UNPAID', label: '未付款', type: 'warning' },
-    { value: 'PAID', label: '已付款', type: 'success' }
+    { value: 'PAID', label: '已付款', type: 'success' },
+    { value: 'VOIDED', label: '已作废', type: 'info' }
   ],
   // 结算单派生付款状态（PB-01：后端结算单派生字段 payStatus，供列表/详情展示）
   settlementPayStatus: [

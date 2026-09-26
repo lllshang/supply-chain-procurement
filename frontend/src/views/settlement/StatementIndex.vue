@@ -54,7 +54,8 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, onMounted, useRouter } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Download } from '@element-plus/icons-vue'
 import PageHead from '@/components/PageHead.vue'

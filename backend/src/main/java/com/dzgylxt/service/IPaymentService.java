@@ -27,4 +27,7 @@ public interface IPaymentService extends IService<Payment> {
 
     /** 供应商对账单（应付=Σ结算、已付=Σ付款、差额+明细清单）。 */
     StatementVO statement(Long supplierId, LocalDate from, LocalDate to);
+
+    /** G4：作废/冲销付款单（UNPAID/PAID → VOIDED，自动从承诺/已付累计排除；无预算动作——核销已在结算完成）。 */
+    void voidPayment(Long id, String reason);
 }
