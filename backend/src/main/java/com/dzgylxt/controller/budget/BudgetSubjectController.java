@@ -5,6 +5,7 @@ import com.dzgylxt.entity.budget.BudgetSubject;
 import com.dzgylxt.service.IBudgetSubjectService;
 import com.dzgylxt.vo.budget.BudgetSubjectSaveReqVO;
 import com.dzgylxt.vo.common.CategoryTreeNodeVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +22,6 @@ import java.util.List;
 @RequestMapping("/api/v1/budgets/subjects")
 public class BudgetSubjectController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final IBudgetSubjectService budgetSubjectService;
 
@@ -29,38 +29,38 @@ public class BudgetSubjectController {
         this.budgetSubjectService = budgetSubjectService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/tree")
     public R<List<CategoryTreeNodeVO>> tree() {
         return R.ok(budgetSubjectService.tree());
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/list")
     public R<List<BudgetSubject>> list() {
         return R.ok(budgetSubjectService.list());
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<BudgetSubject> getById(@PathVariable Long id) {
         return R.ok(budgetSubjectService.getById(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody BudgetSubjectSaveReqVO req) {
         return R.ok(budgetSubjectService.createSubject(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody BudgetSubjectSaveReqVO req) {
         budgetSubjectService.updateSubject(id, req);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/invalidate")
     public R<Boolean> invalidate(@PathVariable Long id) {
         budgetSubjectService.invalidate(id);

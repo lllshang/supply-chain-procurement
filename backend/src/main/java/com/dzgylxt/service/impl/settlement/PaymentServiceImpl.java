@@ -146,8 +146,10 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
                         && (to == null || !s.getCreatedAt().toLocalDate().isAfter(to));
                 if (s.getStatus() == SettlementStatus.SETTLED && inRange) {
                     payable = payable.add(nvl(s.getAmount()));
-                    vo.getRows().add(row(s.getCreatedAt().toLocalDate(), s.getSettleNo(),
-                            "SETTLEMENT", s.getAmount(), s.getRemark()));
+                    StatementVO.Row r = row(s.getCreatedAt().toLocalDate(), s.getSettleNo(),
+                            "SETTLEMENT", s.getAmount(), s.getRemark());
+                    r.setRefId(s.getId());
+                    vo.getRows().add(r);
                 }
                 if (s.getStatus() == SettlementStatus.SETTLED || s.getStatus() == SettlementStatus.PENDING) {
                     for (Payment p : baseMapper.selectBySettlement(s.getId())) {
@@ -160,8 +162,10 @@ public class PaymentServiceImpl extends ServiceImpl<PaymentMapper, Payment>
                                 && (to == null || !d.isAfter(to));
                         if (pInRange) {
                             paid = paid.add(nvl(p.getPayAmount()));
-                            vo.getRows().add(row(d, p.getPayNo(), "PAYMENT",
-                                    p.getPayAmount(), p.getRemark()));
+                            StatementVO.Row r = row(d, p.getPayNo(), "PAYMENT",
+                                    p.getPayAmount(), p.getRemark());
+                            r.setRefId(p.getId());
+                            vo.getRows().add(r);
                         }
                     }
                 }

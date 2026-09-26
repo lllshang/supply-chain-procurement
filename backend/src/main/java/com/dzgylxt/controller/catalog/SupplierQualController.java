@@ -4,6 +4,7 @@ import com.dzgylxt.common.R;
 import com.dzgylxt.service.ISupplierQualService;
 import com.dzgylxt.vo.supplier.SupplierQualRespVO;
 import com.dzgylxt.vo.supplier.SupplierQualSaveReqVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +22,6 @@ import java.util.List;
 @RequestMapping("/api/v1/suppliers/{supplierId}/quals")
 public class SupplierQualController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final ISupplierQualService supplierQualService;
 
@@ -29,20 +29,20 @@ public class SupplierQualController {
         this.supplierQualService = supplierQualService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping
     public R<List<SupplierQualRespVO>> list(@PathVariable Long supplierId) {
         return R.ok(supplierQualService.listBySupplier(supplierId));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@PathVariable Long supplierId, @RequestBody SupplierQualSaveReqVO req) {
         req.setSupplierId(supplierId);
         return R.ok(supplierQualService.createQual(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long supplierId, @PathVariable Long id,
                              @RequestBody SupplierQualSaveReqVO req) {
@@ -51,13 +51,13 @@ public class SupplierQualController {
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/review")
     public R<Long> review(@PathVariable Long supplierId, @PathVariable Long id) {
         return R.ok(supplierQualService.submitForApproval(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/resubmit")
     public R<Boolean> resubmit(@PathVariable Long supplierId, @PathVariable Long id,
                                @RequestBody SupplierQualSaveReqVO req) {
@@ -66,7 +66,7 @@ public class SupplierQualController {
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/callback")
     public R<Boolean> callback(@PathVariable Long supplierId,
                                @RequestParam Long taskId,

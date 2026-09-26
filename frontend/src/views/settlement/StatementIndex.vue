@@ -5,13 +5,19 @@
         <el-button v-permission="'payment:read'" :icon="Download" :disabled="!statement" @click="onExport">导出Excel</el-button>
       </PageHead>
       <div class="toolbar">
-        <el-input
+        <el-select
           v-model="query.supplierId"
-          placeholder="供应商ID（必填）"
+          filterable
+          remote
+          reserve-keyword
           clearable
-          style="width: 180px"
-          @keyup.enter="loadStatement"
-        />
+          placeholder="供应商（必填）"
+          :remote-method="searchSuppliers"
+          :loading="supplierLoading"
+          style="width: 200px"
+        >
+          <el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" />
+        </el-select>
         <el-date-picker v-model="query.from" type="date" value-format="YYYY-MM-DD" placeholder="起始日期" style="width: 150px" />
         <el-date-picker v-model="query.to" type="date" value-format="YYYY-MM-DD" placeholder="截止日期" style="width: 150px" />
         <el-button type="primary" :icon="Search" :loading="loading" @click="loadStatement">查询</el-button>
@@ -31,7 +37,12 @@
       -->
       <el-table :data="rows" v-loading="loading" stripe>
         <el-table-column prop="date" label="日期" width="120" />
-        <el-table-column prop="docNo" label="来源单据号" min-width="180" />
+        <el-table-column label="来源单据号" min-width="180">
+          <template #default="{ row }">
+            <el-link v-if="row.refId" type="primary" :underline="false" @click="drillToSource(row)">{{ row.docNo }}</el-link>
+            <span v-else>{{ row.docNo }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="来源类型" width="120">
           <template #default="{ row }">{{ directionLabel(row.direction) }}</template>
         </el-table-column>
@@ -43,11 +54,12 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, onMounted, useRouter } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Download } from '@element-plus/icons-vue'
 import PageHead from '@/components/PageHead.vue'
 import { getStatement, exportStatement } from '@/api/settlement'
+import { pageSuppliers } from '@/api/supplier'
 import { saveBlob } from '@/api/purchase2'
 
 // 明细行 direction → 可读来源类型（后端 StatementVO.Row.direction：SETTLEMENT / PAYMENT）
@@ -62,6 +74,33 @@ const statement = ref(null)
 const query = reactive({ supplierId: '', from: null, to: null })
 
 const rows = computed(() => (statement.value ? statement.value.rows || [] : []))
+
+// 来源单据下钻（R-PAY-02 AC③）：点击来源单据号按 direction 跳转到对应列表并定位高亮
+const router = useRouter()
+function drillToSource(row) {
+  if (!row.refId) return
+  if (row.direction === 'SETTLEMENT') {
+    router.push({ path: '/settlement/list', query: { bizId: row.refId } })
+  } else if (row.direction === 'PAYMENT') {
+    router.push({ path: '/settlement/payment', query: { bizId: row.refId } })
+  }
+}
+
+// 供应商远程联想（O3：对账单供应商筛选，选中值仍为供应商 id，回传参数名不变）
+const supplierOptions = ref([])
+const supplierLoading = ref(false)
+async function searchSuppliers(keyword) {
+  supplierLoading.value = true
+  try {
+    const res = await pageSuppliers({ current: 1, size: 50, name: keyword || undefined })
+    supplierOptions.value = res?.data?.records || []
+  } catch (e) {
+    supplierOptions.value = []
+  } finally {
+    supplierLoading.value = false
+  }
+}
+onMounted(searchSuppliers)
 
 function buildParams() {
   return {

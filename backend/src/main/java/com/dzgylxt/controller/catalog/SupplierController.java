@@ -10,6 +10,7 @@ import com.dzgylxt.vo.supplier.SupplierAdmissionVO;
 import com.dzgylxt.vo.supplier.SupplierPageReqVO;
 import com.dzgylxt.vo.supplier.SupplierPageRespVO;
 import com.dzgylxt.vo.supplier.SupplierSaveReqVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,7 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/suppliers")
 public class SupplierController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final ISupplierService supplierService;
 
@@ -33,33 +33,33 @@ public class SupplierController {
         this.supplierService = supplierService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<SupplierPageRespVO>> page(SupplierPageReqVO req) {
         IPage<SupplierPageRespVO> result = supplierService.pageSupplier(req);
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), result.getCurrent(), result.getSize()));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Supplier> getById(@PathVariable Long id) {
         return R.ok(supplierService.getById(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody SupplierSaveReqVO req) {
         return R.ok(supplierService.createSupplier(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody SupplierSaveReqVO req) {
         supplierService.updateSupplier(id, req);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/coop-status")
     public R<Boolean> updateCoopStatus(@PathVariable Long id,
                                        @RequestParam CoopStatus status) {
@@ -68,14 +68,14 @@ public class SupplierController {
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/blacklist")
     public R<Boolean> markBlacklist(@PathVariable Long id, @RequestParam boolean blacklist) {
         supplierService.markBlacklist(id, blacklist);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/admission")
     public R<SupplierAdmissionVO> admission(@PathVariable Long id) {
         return R.ok(supplierService.getAdmission(id));

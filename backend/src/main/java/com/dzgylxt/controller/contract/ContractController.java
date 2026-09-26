@@ -11,6 +11,7 @@ import com.dzgylxt.vo.contract.ContractRenewReqVO;
 import com.dzgylxt.vo.contract.ContractSaveReqVO;
 import com.dzgylxt.vo.contract.ContractWarnVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,7 +33,7 @@ public class ContractController {
     private IContractService contractService;
 
     /** 分页（id 倒序）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<Contract>> page(@RequestParam(defaultValue = "1") long current,
                                         @RequestParam(defaultValue = "10") long size) {
@@ -43,21 +44,21 @@ public class ContractController {
     }
 
     /** 单据详情。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Contract> getById(@PathVariable Long id) {
         return R.ok(contractService.getById(id));
     }
 
     /** 合同登记（准入校验 + 定标金额核对）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody ContractSaveReqVO req) {
         return R.ok(contractService.createContract(req));
     }
 
     /** 编辑（仅 DRAFT）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody ContractSaveReqVO req) {
         contractService.updateContract(id, req);
@@ -65,14 +66,14 @@ public class ContractController {
     }
 
     /** 提交审批（金额超阈值升两级）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/submit")
     public R<Long> submit(@PathVariable Long id) {
         return R.ok(contractService.submit(id));
     }
 
     /** 终止（仅 EFFECTIVE；额度冻结）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/terminate")
     public R<Boolean> terminate(@PathVariable Long id, @RequestBody TerminateReq req) {
         contractService.terminate(id, req.getReason());
@@ -80,7 +81,7 @@ public class ContractController {
     }
 
     /** 续签（新合同独立走审批）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/renew")
     public R<Long> renew(@PathVariable Long id, @RequestBody ContractRenewReqVO req) {
         return R.ok(contractService.renew(id, req));
@@ -110,7 +111,7 @@ public class ContractController {
     }
 
     /** 到期预警（valid_to − 提前天数配置）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/expiring-warn")
     public R<List<ContractWarnVO>> expiringWarn() {
         return R.ok(contractService.expiringList());

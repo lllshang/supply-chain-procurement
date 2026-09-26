@@ -26,6 +26,7 @@ export const BIZ_TYPE_ROUTES = {
   FULFILLMENT_ADJUST: { path: '/order/adjust', queryKey: 'bizId' },
   BUDGET: { path: '/budget/ledger', queryKey: 'bizId' },
   SETTLEMENT: { path: '/settlement/list', queryKey: 'bizId' },
+  PAYMENT: { path: '/settlement/payment', queryKey: 'bizId' },
   SUPPLIER_QUAL: { path: '/supplier/qual', queryKey: 'bizId' },
   DAILY_AUTH: { path: '/order/list', queryKey: 'bizId' }
 }

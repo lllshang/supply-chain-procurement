@@ -4,6 +4,7 @@ import com.dzgylxt.common.R;
 import com.dzgylxt.entity.budget.BudgetProject;
 import com.dzgylxt.service.IBudgetProjectService;
 import com.dzgylxt.vo.budget.BudgetProjectSaveReqVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +22,6 @@ import java.util.List;
 @RequestMapping("/api/v1/budgets/projects")
 public class BudgetProjectController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final IBudgetProjectService budgetProjectService;
 
@@ -29,32 +29,32 @@ public class BudgetProjectController {
         this.budgetProjectService = budgetProjectService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/list")
     public R<List<BudgetProject>> list(@RequestParam(required = false) Integer year) {
         return R.ok(budgetProjectService.listByYear(year));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<BudgetProject> getById(@PathVariable Long id) {
         return R.ok(budgetProjectService.getById(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody BudgetProjectSaveReqVO req) {
         return R.ok(budgetProjectService.createProject(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody BudgetProjectSaveReqVO req) {
         budgetProjectService.updateProject(id, req);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/invalidate")
     public R<Boolean> invalidate(@PathVariable Long id) {
         budgetProjectService.invalidate(id);

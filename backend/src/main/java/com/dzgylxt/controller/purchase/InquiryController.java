@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,7 +44,7 @@ public class InquiryController {
     private IQuotationService quotationService;
 
     /** 分页（id 倒序）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<Inquiry>> page(@RequestParam(defaultValue = "1") long current,
                                         @RequestParam(defaultValue = "10") long size) {
@@ -54,21 +55,21 @@ public class InquiryController {
     }
 
     /** 单据详情。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Inquiry> getById(@PathVariable Long id) {
         return R.ok(inquiryService.getById(id));
     }
 
     /** 创建询价（仅 APPROVED 申请）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody InquirySaveReqVO req) {
         return R.ok(inquiryService.createInquiry(req));
     }
 
     /** 发布（逐家准入校验 + 快照；≥1 家）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/publish")
     public R<Boolean> publish(@PathVariable Long id, @RequestBody(required = false) List<Long> supplierIds) {
         inquiryService.publish(id, supplierIds);
@@ -76,7 +77,7 @@ public class InquiryController {
     }
 
     /** 截标。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/close")
     public R<Boolean> close(@PathVariable Long id) {
         inquiryService.close(id);
@@ -84,7 +85,7 @@ public class InquiryController {
     }
 
     /** 取消。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/cancel")
     public R<Boolean> cancel(@PathVariable Long id) {
         inquiryService.cancel(id);
@@ -92,7 +93,7 @@ public class InquiryController {
     }
 
     /** 供应商范围。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/suppliers")
     public R<List<InquirySupplier>> suppliers(@PathVariable Long id) {
         return R.ok(inquirySupplierService.list(
@@ -100,7 +101,7 @@ public class InquiryController {
     }
 
     /** 增补范围（逐家准入校验）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/suppliers")
     public R<Boolean> addSuppliers(@PathVariable Long id, @RequestBody List<Long> supplierIds) {
         inquirySupplierService.addSuppliers(id, supplierIds);
@@ -108,7 +109,7 @@ public class InquiryController {
     }
 
     /** 移除范围（未发布可删）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @DeleteMapping("/{id}/suppliers/{supplierId}")
     public R<Boolean> removeSupplier(@PathVariable Long id, @PathVariable Long supplierId) {
         inquirySupplierService.removeSupplier(id, supplierId);
@@ -116,7 +117,7 @@ public class InquiryController {
     }
 
     /** 报价包模板下载（设计 §5.2 /inquiries/{id}/quotation-template）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/quotation-template")
     public ResponseEntity<byte[]> quotationTemplate(@PathVariable Long id) {
         return ResponseEntity.ok()
@@ -128,7 +129,7 @@ public class InquiryController {
     }
 
     /** 比价视图（按 SKU 最低/最高/均价 + 历史价）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/comparison")
     public R<InquiryComparisonVO> comparison(@PathVariable Long id) {
         return R.ok(inquiryService.comparison(id));

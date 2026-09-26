@@ -1,5 +1,8 @@
 package com.dzgylxt.controller.cost;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
 import com.dzgylxt.entity.cost.PriceHistory;
 import com.dzgylxt.service.IPriceHistoryService;
@@ -28,11 +31,14 @@ public class PriceHistoryController {
     @Autowired
     private IPriceHistoryService priceHistoryService;
 
-    /** 待审价列表（异常价人工复核队列）。 */
+    /** 待审价列表（异常价人工复核队列，分页）。 */
     @PreAuthorize("isAuthenticated() and @authz.hasPerm(authentication, 'catalog:price:read')")
     @GetMapping("/pending")
-    public R<List<PriceHistory>> pending() {
-        return R.ok(priceHistoryService.pendingList());
+    public R<PageResult<PriceHistory>> pending(@RequestParam(defaultValue = "1") long current,
+                                               @RequestParam(defaultValue = "10") long size) {
+        Page<PriceHistory> page = new Page<>(current, size);
+        IPage<PriceHistory> result = priceHistoryService.pendingList(page);
+        return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
     }
 
     /** 某 SKU 近期通过价（比价历史取数口径复现，供前端展示）。 */

@@ -10,6 +10,7 @@ import com.dzgylxt.vo.settlement.SettlementDraftVO;
 import com.dzgylxt.vo.settlement.SettlementSaveReqVO;
 import com.dzgylxt.vo.settlement.PrepaymentCreateReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,7 +32,7 @@ public class SettlementController {
     private ISettlementService settlementService;
 
     /** 分页（订单/供应商/状态过滤）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<Settlement>> page(@RequestParam(defaultValue = "1") long current,
                                           @RequestParam(defaultValue = "10") long size,
@@ -45,7 +46,7 @@ public class SettlementController {
     }
 
     /** 单据。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Settlement> getById(@PathVariable Long id) {
         Settlement settlement = settlementService.getById(id);
@@ -57,35 +58,35 @@ public class SettlementController {
     }
 
     /** 订单入口带出草稿。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/draft/from-order/{orderId}")
     public R<SettlementDraftVO> draftFromOrder(@PathVariable Long orderId) {
         return R.ok(settlementService.draftFromOrder(orderId));
     }
 
     /** 到货单入口带出草稿（优先）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/draft/from-arrival/{arrivalId}")
     public R<SettlementDraftVO> draftFromArrival(@PathVariable Long arrivalId) {
         return R.ok(settlementService.draftFromArrival(arrivalId));
     }
 
     /** R4：预付款结算草稿（订单发起，带出已付预付款）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/prepayment/draft/{orderId}")
     public R<SettlementDraftVO> draftPrepayment(@PathVariable Long orderId) {
         return R.ok(settlementService.draftPrepaymentFromOrder(orderId));
     }
 
     /** 创建结算单。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody SettlementSaveReqVO req) {
         return R.ok(settlementService.createSettlement(req));
     }
 
     /** R4：预付款结算（订单发起，无需到货/无结算数量）→ SETTLEMENT 审批 → 核销；尾款自动扣减。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/prepayment/{orderId}")
     public R<Long> createPrepayment(@PathVariable Long orderId,
                                     @RequestBody PrepaymentCreateReqVO req) {
@@ -93,7 +94,7 @@ public class SettlementController {
     }
 
     /** 修改重提（驳回留痕后）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody SettlementSaveReqVO req) {
         settlementService.updateSettlement(id, req);
@@ -101,14 +102,14 @@ public class SettlementController {
     }
 
     /** 提交 SETTLEMENT 审批。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/submit")
     public R<Long> submit(@PathVariable Long id) {
         return R.ok(settlementService.submit(id));
     }
 
     /** B9：作废结算单（仅 PENDING 可作废；释放 committed 口径）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/void")
     public R<Boolean> voidSettlement(@PathVariable Long id, @RequestBody VoidReq req) {
         settlementService.voidSettlement(id, req.getReason());

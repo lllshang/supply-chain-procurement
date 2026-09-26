@@ -7,6 +7,7 @@ import com.dzgylxt.common.R;
 import com.dzgylxt.entity.catalog.Unit;
 import com.dzgylxt.service.IUnitService;
 import com.dzgylxt.vo.catalog.UnitSaveReqVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,7 +25,6 @@ import java.util.List;
 @RequestMapping("/api/v1/catalog/units")
 public class UnitController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final IUnitService unitService;
 
@@ -32,7 +32,7 @@ public class UnitController {
         this.unitService = unitService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<Unit>> page(@RequestParam(defaultValue = "1") long current,
                                     @RequestParam(defaultValue = "10") long size) {
@@ -40,32 +40,32 @@ public class UnitController {
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/list")
     public R<List<Unit>> list() {
         return R.ok(unitService.list());
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Unit> getById(@PathVariable Long id) {
         return R.ok(unitService.getById(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody UnitSaveReqVO req) {
         return R.ok(unitService.createUnit(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody UnitSaveReqVO req) {
         unitService.updateUnit(id, req);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/invalidate")
     public R<Boolean> invalidate(@PathVariable Long id) {
         unitService.invalidate(id);

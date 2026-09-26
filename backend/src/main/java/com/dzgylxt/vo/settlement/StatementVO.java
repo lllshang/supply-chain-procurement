@@ -35,5 +35,7 @@ public class StatementVO implements Serializable {
         private String direction;
         private BigDecimal amount;
         private String remark;
+        /** 源单据主键 id（结算单/付款单 id），供前端下钻跳转。 */
+        private Long refId;
     }
 }

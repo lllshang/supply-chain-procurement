@@ -8,6 +8,7 @@ import com.dzgylxt.common.BaseEntity;
 import com.dzgylxt.common.PageResult;
 import com.dzgylxt.common.R;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,7 +35,7 @@ public abstract class BaseController<S extends IService<T>, T extends BaseEntity
     @Autowired
     protected S service;
 
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<T>> page(@RequestParam(defaultValue = "1") long current,
                                  @RequestParam(defaultValue = "10") long size) {
@@ -43,32 +44,32 @@ public abstract class BaseController<S extends IService<T>, T extends BaseEntity
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), current, size));
     }
 
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/list")
     public R<List<T>> list() {
         return R.ok(service.list());
     }
 
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<T> getById(@PathVariable Long id) {
         return R.ok(service.getById(id));
     }
 
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Boolean> save(@RequestBody T entity) {
         return R.ok(service.save(entity));
     }
 
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody T entity) {
         entity.setId(id);
         return R.ok(service.updateById(entity));
     }
 
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @DeleteMapping("/{id}")
     public R<Boolean> remove(@PathVariable Long id) {
         return R.ok(service.removeById(id));

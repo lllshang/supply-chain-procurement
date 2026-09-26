@@ -5,6 +5,7 @@ import com.dzgylxt.service.ISupplierSkuService;
 import com.dzgylxt.vo.supplier.BatchBindRespVO;
 import com.dzgylxt.vo.supplier.SupplierSkuRespVO;
 import com.dzgylxt.vo.supplier.SupplierSkuSaveReqVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +24,6 @@ import java.util.List;
 @RequestMapping("/api/v1/supplier-skus")
 public class SupplierSkuController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final ISupplierSkuService supplierSkuService;
 
@@ -31,26 +31,26 @@ public class SupplierSkuController {
         this.supplierSkuService = supplierSkuService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping
     public R<List<SupplierSkuRespVO>> list(@RequestParam Long supplierId) {
         return R.ok(supplierSkuService.listBySupplier(supplierId));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> bind(@RequestBody SupplierSkuSaveReqVO req) {
         return R.ok(supplierSkuService.bind(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @DeleteMapping("/{id}")
     public R<Boolean> unbind(@PathVariable Long id) {
         supplierSkuService.unbind(id);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/batch")
     public R<BatchBindRespVO> batchBind(@RequestParam("file") MultipartFile file) {
         return R.ok(supplierSkuService.batchBind(file));

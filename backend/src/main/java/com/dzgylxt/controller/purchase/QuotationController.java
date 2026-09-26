@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,14 +34,14 @@ public class QuotationController extends BaseController<IQuotationService, Quota
     private IQuotationService quotationService;
 
     /** 报价包模板下载（含询价明细 + 供应商信息位 + templateVersion）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/template")
     public ResponseEntity<byte[]> template(@RequestParam Long inquiryId) {
         return xlsx(quotationService.exportTemplate(inquiryId), "quotation-template-" + inquiryId + ".xlsx");
     }
 
     /** 有效报价列表（invalid=0，可按批次过滤）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping
     public R<List<Quotation>> list(@RequestParam Long inquiryId,
                                    @RequestParam(required = false) String batchNo) {
@@ -48,7 +49,7 @@ public class QuotationController extends BaseController<IQuotationService, Quota
     }
 
     /** 批次导入（询价维度端点，设计 §5.2 /inquiries/{id}/quotations/import）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/import")
     public R<QuotationImportResultVO> importQuotations(@RequestParam Long inquiryId,
                                                        @RequestParam("file") MultipartFile file) {
@@ -56,7 +57,7 @@ public class QuotationController extends BaseController<IQuotationService, Quota
     }
 
     /** 错误 Sheet 独立文件流下载（B4：替代内联 base64，按批次号从 Redis 取 xlsx 字节流式返回）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/import/error-sheet/{batchNo}")
     public ResponseEntity<byte[]> errorSheet(@PathVariable String batchNo) {
         String b64 = quotationService.getErrorSheetBase64(batchNo);
@@ -68,7 +69,7 @@ public class QuotationController extends BaseController<IQuotationService, Quota
     }
 
     /** 比价采纳。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/accept")
     public R<Boolean> accept(@PathVariable Long id) {
         quotationService.accept(id);
@@ -76,7 +77,7 @@ public class QuotationController extends BaseController<IQuotationService, Quota
     }
 
     /** 比价否决。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/reject")
     public R<Boolean> reject(@PathVariable Long id) {
         quotationService.reject(id);

@@ -1,6 +1,8 @@
 package com.dzgylxt.service.impl.cost;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.ResultCode;
@@ -82,8 +84,8 @@ public class PriceHistoryServiceImpl extends ServiceImpl<PriceHistoryMapper, Pri
     }
 
     @Override
-    public List<PriceHistory> pendingList() {
-        return list(Wrappers.<PriceHistory>lambdaQuery()
+    public IPage<PriceHistory> pendingList(IPage<PriceHistory> page) {
+        return page(page, Wrappers.<PriceHistory>lambdaQuery()
                 .eq(PriceHistory::getAuditStatus, PriceAuditStatus.PENDING)
                 .orderByDesc(PriceHistory::getId));
     }

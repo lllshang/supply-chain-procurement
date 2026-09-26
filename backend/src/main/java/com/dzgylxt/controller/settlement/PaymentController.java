@@ -14,6 +14,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,7 +39,7 @@ public class PaymentController {
     private IPaymentService paymentService;
 
     /** 分页（结算单过滤）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<Payment>> page(@RequestParam(defaultValue = "1") long current,
                                        @RequestParam(defaultValue = "10") long size,
@@ -53,21 +54,21 @@ public class PaymentController {
     }
 
     /** 单据。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Payment> getById(@PathVariable Long id) {
         return R.ok(paymentService.getById(id));
     }
 
     /** 创建付款单。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody PaymentSaveReqVO req) {
         return R.ok(paymentService.createPayment(req));
     }
 
     /** 修改重提。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody PaymentSaveReqVO req) {
         paymentService.updatePayment(id, req);
@@ -75,7 +76,7 @@ public class PaymentController {
     }
 
     /** 线下付款登记确认（R6：免审批，财务直接登记；凭证+日期）→ PAID。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/confirm")
     public R<Boolean> confirm(@PathVariable Long id, @RequestBody ConfirmReq req) {
         paymentService.confirmPayment(id, req.getVoucherFile(), req.getPayDate());
@@ -83,7 +84,7 @@ public class PaymentController {
     }
 
     /** 供应商对账单（应付/已付/差额 + 明细）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/statement")
     public R<StatementVO> statement(@RequestParam Long supplierId,
                                     @RequestParam(required = false)
@@ -94,7 +95,7 @@ public class PaymentController {
     }
 
     /** 供应商对账单 Excel 导出（T06）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/statement/export")
     public ResponseEntity<byte[]> statementExport(@RequestParam Long supplierId,
                                                   @RequestParam(required = false)

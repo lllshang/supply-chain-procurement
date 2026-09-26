@@ -5,6 +5,7 @@ import com.dzgylxt.entity.catalog.ProductCategory;
 import com.dzgylxt.service.IProductCategoryService;
 import com.dzgylxt.vo.catalog.ProductCategorySaveReqVO;
 import com.dzgylxt.vo.common.CategoryTreeNodeVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +22,6 @@ import java.util.List;
 @RequestMapping("/api/v1/catalog/categories")
 public class ProductCategoryController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final IProductCategoryService categoryService;
 
@@ -29,38 +29,38 @@ public class ProductCategoryController {
         this.categoryService = categoryService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/tree")
     public R<List<CategoryTreeNodeVO>> tree() {
         return R.ok(categoryService.tree());
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/list")
     public R<List<ProductCategory>> list() {
         return R.ok(categoryService.list());
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<ProductCategory> getById(@PathVariable Long id) {
         return R.ok(categoryService.getById(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody ProductCategorySaveReqVO req) {
         return R.ok(categoryService.createCategory(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody ProductCategorySaveReqVO req) {
         categoryService.updateCategory(id, req);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/invalidate")
     public R<Boolean> invalidate(@PathVariable Long id) {
         categoryService.invalidate(id);

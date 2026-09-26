@@ -1,5 +1,7 @@
 package com.dzgylxt.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dzgylxt.entity.cost.PriceHistory;
 
 import java.math.BigDecimal;
@@ -28,7 +30,7 @@ public interface IPriceHistoryService {
     List<PriceHistory> recent(Long skuId, int limit);
 
     /** 待审价列表（价格审核页）。 */
-    List<PriceHistory> pendingList();
+    IPage<PriceHistory> pendingList(IPage<PriceHistory> page);
 
     /** 审核待审价（通过/驳回；仅 PENDING 可流转）。 */
     void audit(Long id, boolean approved, String remark);

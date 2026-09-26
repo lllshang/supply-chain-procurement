@@ -10,6 +10,7 @@ import com.dzgylxt.entity.purchase.AwardItem;
 import com.dzgylxt.service.IAwardService;
 import com.dzgylxt.vo.purchase.AwardSaveReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,7 +32,7 @@ public class AwardController {
     private IAwardService awardService;
 
     /** 分页（id 倒序）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<Award>> page(@RequestParam(defaultValue = "1") long current,
                                         @RequestParam(defaultValue = "10") long size) {
@@ -42,21 +43,21 @@ public class AwardController {
     }
 
     /** 单据详情。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Award> getById(@PathVariable Long id) {
         return R.ok(awardService.getById(id));
     }
 
     /** 创建定标（仅已截标询价；按 SKU 可拆多供应商）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody AwardSaveReqVO req) {
         return R.ok(awardService.createAward(req));
     }
 
     /** 调整定标明细（REJECTED 后重提）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}/items")
     public R<Boolean> updateItems(@PathVariable Long id, @RequestBody AwardSaveReqVO req) {
         awardService.updateAwardItems(id, req);
@@ -64,14 +65,14 @@ public class AwardController {
     }
 
     /** 提交审批（异常价人工复核提示）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/submit")
     public R<Long> submit(@PathVariable Long id) {
         return R.ok(awardService.submit(id));
     }
 
     /** 作废/关闭（P2b-3：驳回未用/审批前放弃终态闭环，释放占用+留痕；已登记合同不可作废）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/void")
     public R<Boolean> voidAward(@PathVariable Long id,
                                 @RequestParam(required = false) String reason) {
@@ -80,7 +81,7 @@ public class AwardController {
     }
 
     /** 定标明细（含换算快照）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/items")
     public R<List<AwardItem>> items(@PathVariable Long id) {
         return R.ok(awardService.listItems(id));

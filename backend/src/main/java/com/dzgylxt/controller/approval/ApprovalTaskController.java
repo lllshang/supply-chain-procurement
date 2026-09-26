@@ -17,6 +17,7 @@ import com.dzgylxt.service.impl.approval.ApprovalTaskServiceImpl;
 import com.dzgylxt.vo.approval.ApprovalDoneVO;
 import com.dzgylxt.vo.approval.ApprovalTaskDetailVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -116,7 +117,7 @@ public class ApprovalTaskController extends BaseController<ApprovalTaskServiceIm
      * 兼容端点（退役中）：旧任务筛选列表（bizType/status 过滤）。
      * P3 既有 /search 语义保留一版，新前端工作台走 /todo（服务端候选人过滤）。
      */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/search")
     public R<PageResult<ApprovalTask>> page(@RequestParam(defaultValue = "1") long current,
                                             @RequestParam(defaultValue = "10") long size,

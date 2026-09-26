@@ -13,6 +13,7 @@ import com.dzgylxt.service.IOrderService;
 import com.dzgylxt.vo.order.OrderChangeReqVO;
 import com.dzgylxt.vo.order.OrderCreateReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,7 +37,7 @@ public class PurchaseOrderController {
     private OrderChangeMapper orderChangeMapper;
 
     /** 分页（id 倒序），附带 R5 派生进度（结清/付清）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<PurchaseOrder>> page(@RequestParam(defaultValue = "1") long current,
                                    @RequestParam(defaultValue = "10") long size) {
@@ -48,7 +49,7 @@ public class PurchaseOrderController {
     }
 
     /** 单据详情，附带 R5 派生进度（结清/付清）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<PurchaseOrder> getById(@PathVariable Long id) {
         PurchaseOrder order = orderService.getById(id);
@@ -59,28 +60,28 @@ public class PurchaseOrderController {
     }
 
     /** 下单（三重校验事务；物料/服务拆单，返回订单 id 列表）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<List<Long>> create(@RequestBody OrderCreateReqVO req) {
         return R.ok(orderService.createOrder(req));
     }
 
     /** 订单明细（含换算快照与来源追溯）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/items")
     public R<List<OrderItem>> items(@PathVariable Long id) {
         return R.ok(orderService.listItems(id));
     }
 
     /** 全链路追溯（申请/询价/定标/合同/订单/到货/变更）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/trace")
     public R<Object> trace(@PathVariable Long id) {
         return R.ok(orderService.trace(id));
     }
 
     /** 订单变更（仅 CREATED，重跑三重校验，免审留痕 Q5/Q9）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/change")
     public R<Boolean> change(@PathVariable Long id, @RequestBody OrderChangeReqVO req) {
         orderService.changeOrder(id, req);
@@ -88,7 +89,7 @@ public class PurchaseOrderController {
     }
 
     /** 取消（释放合同额度 + 回冲申请余量）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/cancel")
     public R<Boolean> cancel(@PathVariable Long id, @RequestBody CancelReq req) {
         orderService.cancelOrder(id, req.getReason());
@@ -96,7 +97,7 @@ public class PurchaseOrderController {
     }
 
     /** 变更留痕列表。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/changes")
     public R<List<OrderChange>> changes(@PathVariable Long id) {
         return R.ok(orderChangeMapper.selectList(

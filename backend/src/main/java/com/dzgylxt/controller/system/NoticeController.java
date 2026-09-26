@@ -7,6 +7,7 @@ import com.dzgylxt.common.ResultCode;
 import com.dzgylxt.entity.system.UserNotice;
 import com.dzgylxt.security.UserContext;
 import com.dzgylxt.service.INoticeService;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,14 +34,14 @@ public class NoticeController {
     }
 
     /** 未读数（红点角标）。 */
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/unread-count")
     public R<Long> unreadCount() {
         return R.ok(noticeService.unreadCount(UserContext.getCurrentUserId()));
     }
 
     /** 分页列表（强制 user_id=当前用户，个人数据归属过滤）。 */
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping
     public R<PageResult<UserNotice>> page(@RequestParam(defaultValue = "1") long current,
                                           @RequestParam(defaultValue = "20") long size) {
@@ -49,7 +50,7 @@ public class NoticeController {
     }
 
     /** 标记已读（归属校验，非本人 → 2004）。 */
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/read")
     public R<Boolean> markRead(@PathVariable Long id) {
         Long userId = UserContext.getCurrentUserId();
@@ -60,7 +61,7 @@ public class NoticeController {
     }
 
     /** 全部已读。 */
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/read-all")
     public R<Integer> readAll() {
         return R.ok(noticeService.markAllRead(UserContext.getCurrentUserId()));

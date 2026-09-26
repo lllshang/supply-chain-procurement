@@ -8,6 +8,7 @@ import com.dzgylxt.service.IBudgetExecutionService;
 import com.dzgylxt.service.IBudgetOccupyService;
 import com.dzgylxt.vo.budget.BudgetOccupyCmd;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,7 +37,7 @@ public class BudgetExecutionController {
     private IBudgetOccupyService budgetOccupyService;
 
     /** 执行台账（部门×年度，月度行+执行率）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping
     public R<List<IBudgetExecutionService.Row>> ledger(
             @RequestParam(required = false) Long deptId,
@@ -45,7 +46,7 @@ public class BudgetExecutionController {
     }
 
     /** 占用流水分页。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/logs")
     public R<IPage<BudgetOccupyLog>> logs(@RequestParam(defaultValue = "1") long current,
                                           @RequestParam(defaultValue = "10") long size,
@@ -56,7 +57,7 @@ public class BudgetExecutionController {
     }
 
     /** 月度调整（调增直生效；调减校验 amount≥used；超 20% 走 BUDGET 审批）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{lineId}/adjust")
     public R<Boolean> adjust(@PathVariable Long lineId, @RequestBody AdjustReq req) {
         boolean pending = budgetOccupyService.adjustAmount(lineId, req.getNewAmount(), req.getReason());
@@ -64,7 +65,7 @@ public class BudgetExecutionController {
     }
 
     /** 人工校准（运维）：按 Σlog 重算 used_amount。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{lineId}/recalibrate")
     public R<Boolean> recalibrate(@PathVariable Long lineId) {
         executionService.recalibrate(lineId);

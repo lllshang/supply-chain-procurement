@@ -8,6 +8,7 @@ import com.dzgylxt.entity.common.FileMeta;
 import com.dzgylxt.mapper.common.FileMetaMapper;
 import com.dzgylxt.vo.common.FileUploadRespVO;
 import lombok.extern.slf4j.Slf4j;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,7 +32,6 @@ import java.io.IOException;
 @RequestMapping("/api/v1/files")
 public class FileController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final FileStorage fileStorage;
     private final FileMetaMapper fileMetaMapper;
@@ -47,7 +47,7 @@ public class FileController {
      * @param file 表单文件字段名固定为 {@code file}
      * @return 统一响应体，{@code data} 含 {@code fileKey}（及可选 {@code url}）
      */
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/upload")
     public R<FileUploadRespVO> upload(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {

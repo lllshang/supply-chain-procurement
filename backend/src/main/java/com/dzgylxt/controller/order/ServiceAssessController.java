@@ -9,6 +9,7 @@ import com.dzgylxt.entity.order.ServiceAssess;
 import com.dzgylxt.service.IServiceAssessService;
 import com.dzgylxt.vo.order.ServiceAssessSaveReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,7 +30,7 @@ public class ServiceAssessController {
     private IServiceAssessService assessService;
 
     /** 分页（id 倒序）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<ServiceAssess>> page(@RequestParam(defaultValue = "1") long current,
                                    @RequestParam(defaultValue = "10") long size) {
@@ -40,21 +41,21 @@ public class ServiceAssessController {
     }
 
     /** 单据详情。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<ServiceAssess> getById(@PathVariable Long id) {
         return R.ok(assessService.getById(id));
     }
 
     /** 登记考核（仅服务订单 order_type=1）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> assess(@RequestBody ServiceAssessSaveReqVO req) {
         return R.ok(assessService.assess(req));
     }
 
     /** 按订单查考核记录。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/order/{orderId}")
     public R<List<ServiceAssess>> byOrder(@PathVariable Long orderId) {
         return R.ok(assessService.list(

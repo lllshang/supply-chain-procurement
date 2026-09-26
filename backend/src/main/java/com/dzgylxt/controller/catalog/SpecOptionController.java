@@ -4,6 +4,7 @@ import com.dzgylxt.common.R;
 import com.dzgylxt.entity.catalog.SpecOption;
 import com.dzgylxt.service.ISpecOptionService;
 import com.dzgylxt.vo.catalog.SpecOptionSaveReqVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +22,6 @@ import java.util.Map;
 @RequestMapping("/api/v1/catalog/spec-options")
 public class SpecOptionController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final ISpecOptionService specOptionService;
 
@@ -29,38 +29,38 @@ public class SpecOptionController {
         this.specOptionService = specOptionService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/list")
     public R<List<SpecOption>> list() {
         return R.ok(specOptionService.list());
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/grouped")
     public R<Map<String, List<String>>> grouped() {
         return R.ok(specOptionService.groupedOptions());
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<SpecOption> getById(@PathVariable Long id) {
         return R.ok(specOptionService.getById(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody SpecOptionSaveReqVO req) {
         return R.ok(specOptionService.createSpecOption(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody SpecOptionSaveReqVO req) {
         specOptionService.updateSpecOption(id, req);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/invalidate")
     public R<Boolean> invalidate(@PathVariable Long id) {
         specOptionService.invalidate(id);

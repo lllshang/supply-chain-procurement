@@ -10,6 +10,7 @@ import com.dzgylxt.enums.AdjustType;
 import com.dzgylxt.service.IFulfillmentAdjustService;
 import com.dzgylxt.vo.order.AdjustSaveReqVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,7 +29,7 @@ public class FulfillmentAdjustController {
     private IFulfillmentAdjustService adjustService;
 
     /** 分页（id 倒序）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<FulfillmentAdjust>> page(@RequestParam(defaultValue = "1") long current,
                                    @RequestParam(defaultValue = "10") long size) {
@@ -39,28 +40,28 @@ public class FulfillmentAdjustController {
     }
 
     /** 单据详情。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<FulfillmentAdjust> getById(@PathVariable Long id) {
         return R.ok(adjustService.getById(id));
     }
 
     /** 创建调整单（草稿）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody AdjustSaveReqVO req) {
         return R.ok(adjustService.createAdjust(req));
     }
 
     /** 提交（R3：一律走 FULFILLMENT_ADJUST 审批，免审阈值已取消）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/submit")
     public R<Long> submit(@PathVariable Long id) {
         return R.ok(adjustService.submit(id));
     }
 
     /** 台账筛选（类型/订单）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/search")
     public R<IPage<FulfillmentAdjust>> search(@RequestParam(defaultValue = "1") long current,
                                               @RequestParam(defaultValue = "10") long size,

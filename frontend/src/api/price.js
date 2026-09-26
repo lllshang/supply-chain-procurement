@@ -6,9 +6,9 @@ import request from '@/utils/request'
 // source: QUOTATION/AWARD/ORDER/MANUAL）
 // ============================================================
 
-// 待审价列表（异常价人工复核队列，List<PriceHistory>）
-export function getPricePending() {
-  return request.get('/api/v1/price-histories/pending')
+// 待审价列表（异常价人工复核队列；后端返回 PageResult<PriceHistory> = data{records,total,current,size}）
+export function getPricePending(current = 1, size = 10) {
+  return request.get('/api/v1/price-histories/pending', { params: { current, size } })
 }
 
 // 某 SKU 近期通过价（供审核时参考比对；limit 默认 5）

@@ -10,7 +10,7 @@
         <EnumSelect v-model="queryStatus" enum-key="paymentStatus" placeholder="状态" style="--filter-width: 140px" />
         <el-button type="primary" :icon="Search" @click="reload">查询</el-button>
       </div>
-      <el-table :data="rows" v-loading="loading" stripe>
+      <el-table :data="rows" v-loading="loading" stripe :row-class-name="rowClassName">
         <el-table-column prop="payNo" label="付款单号" width="170" />
         <el-table-column prop="settlementId" label="结算单ID" width="180" show-overflow-tooltip />
         <el-table-column prop="payAmount" label="付款金额" width="120" align="right" />
@@ -116,6 +116,7 @@ import PageHead from '@/components/PageHead.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import EnumSelect from '@/components/EnumSelect.vue'
 import { usePagination } from '@/composables/usePagination'
+import { useQueryLocate } from '@/composables/useQueryLocate'
 import { saveBlob } from '@/api/purchase2'
 import {
   pagePayments, getPayment, createPayment, updatePayment, confirmPayment,
@@ -128,6 +129,9 @@ const rows = ref([])
 const { current, pageSize, total, loading, load, onCurrentChange } = usePagination((p) =>
   pagePayments({ settlementId: querySettlementId.value || undefined, status: queryStatus.value || undefined, ...p })
 )
+
+// P4 来源单据跳转定位（route.query.bizId 行高亮），与 SettlementIndex 一致
+const { rowClassName } = useQueryLocate()
 
 function reload() {
   return load().then((data) => { rows.value = data })

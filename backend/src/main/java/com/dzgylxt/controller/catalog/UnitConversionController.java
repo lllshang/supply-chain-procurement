@@ -4,6 +4,7 @@ import com.dzgylxt.common.R;
 import com.dzgylxt.entity.catalog.UnitConversion;
 import com.dzgylxt.service.IUnitConversionService;
 import com.dzgylxt.vo.catalog.UnitConversionSaveReqVO;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,7 +20,6 @@ import java.util.List;
 @RequestMapping("/api/v1/catalog/unit-conversions")
 public class UnitConversionController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final IUnitConversionService unitConversionService;
 
@@ -27,19 +27,19 @@ public class UnitConversionController {
         this.unitConversionService = unitConversionService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping
     public R<List<UnitConversion>> history(@RequestParam Long skuId) {
         return R.ok(unitConversionService.history(skuId));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/current")
     public R<UnitConversion> current(@RequestParam Long skuId, @RequestParam String fromUnit) {
         return R.ok(unitConversionService.currentEffective(skuId, fromUnit));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> save(@RequestBody UnitConversionSaveReqVO req) {
         return R.ok(unitConversionService.saveConversion(req));

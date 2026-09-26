@@ -36,6 +36,17 @@
         </el-table-column>
       </el-table>
       <el-empty v-if="!loading && rows.length === 0" description="暂无待审价" :image-size="80" />
+      <el-pagination
+        class="pager"
+        background
+        layout="total, prev, pager, next, sizes"
+        :total="pendingPage.total"
+        :current-page="pendingPage.current"
+        :page-size="pendingPage.size"
+        :page-sizes="[10, 20, 50]"
+        @current-change="onPendingCurrentChange"
+        @size-change="onPendingSizeChange"
+      />
     </el-card>
 
     <el-card style="margin-top: 16px">
@@ -102,20 +113,34 @@ function bizLabel(bizType, bizId) {
   return bizId ? `${label}#${bizId}` : label
 }
 
-// ---- 待审列表 ----
+// ---- 待审列表（O1：后端返回 PageResult<PriceHistory>，分页拉取） ----
 const rows = ref([])
 const loading = ref(false)
+const pendingPage = reactive({ current: 1, size: 10, total: 0 })
 
 async function reloadPending() {
   loading.value = true
   try {
-    const res = await getPricePending()
-    rows.value = res.data || []
+    const res = await getPricePending(pendingPage.current, pendingPage.size)
+    const page = res.data || {}
+    rows.value = page.records || []
+    pendingPage.total = page.total || 0
   } catch (e) {
     rows.value = []
+    pendingPage.total = 0
   } finally {
     loading.value = false
   }
+}
+
+function onPendingCurrentChange(curr) {
+  pendingPage.current = curr
+  reloadPending()
+}
+function onPendingSizeChange(size) {
+  pendingPage.size = size
+  pendingPage.current = 1
+  reloadPending()
 }
 
 // 通过：直接落库（无二次确认，误操作可在比价历史中人工订正）
@@ -185,4 +210,5 @@ onMounted(reloadPending)
 .toolbar-tip { color: var(--el-text-color-secondary); font-size: 13px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; }
 .panel-toolbar { display: flex; align-items: center; gap: 8px; }
+.pager { margin-top: 16px; justify-content: flex-end; display: flex; }
 </style>

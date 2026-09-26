@@ -17,6 +17,7 @@ import com.dzgylxt.vo.common.ImportTaskVO;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,7 +36,6 @@ import java.util.List;
 @RequestMapping("/api/v1/catalog/spus")
 public class SpuController {
 
-    private static final String GUARD = "isAuthenticated() and @authz.hasAnyPerm(authentication)";
 
     private final ISpuService spuService;
     private final ISkuService skuService;
@@ -49,83 +49,83 @@ public class SpuController {
         this.productImportService = productImportService;
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<SpuPageRespVO>> page(SpuPageReqVO req) {
         IPage<SpuPageRespVO> result = spuService.pageSpu(req);
         return R.ok(PageResult.of(result.getRecords(), result.getTotal(), result.getCurrent(), result.getSize()));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<Spu> getById(@PathVariable Long id) {
         return R.ok(spuService.getById(id));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{spuId}/skus")
     public R<List<Sku>> listSkus(@PathVariable Long spuId) {
         return R.ok(skuService.listBySpu(spuId));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> create(@RequestBody SpuSaveReqVO req) {
         return R.ok(spuService.createSpu(req));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody SpuSaveReqVO req) {
         spuService.updateSpu(id, req);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/enable")
     public R<Boolean> enable(@PathVariable Long id) {
         spuService.enable(id);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/disable")
     public R<Boolean> disable(@PathVariable Long id) {
         spuService.disable(id);
         return R.ok(true);
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/import/single")
     public R<ImportTaskVO> importSingle(@RequestParam("file") MultipartFile file) {
         return R.ok(productImportService.importSingle(file));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/import/multi/preview")
     public R<ProductImportPreviewVO> previewMulti(@RequestParam("file") MultipartFile file) {
         return R.ok(productImportService.previewMulti(file));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/import/multi")
     public R<ImportTaskVO> importMulti(@RequestParam("file") MultipartFile file) {
         return R.ok(productImportService.importMulti(file));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/export")
     public R<ImportTaskVO> export(@RequestBody ProductExportReqVO req) {
         return R.ok(productImportService.export(req, "v1"));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/export/{taskId}")
     public R<ImportTaskVO> exportStatus(@PathVariable String taskId) {
         return R.ok(productImportService.exportTaskStatus(taskId));
     }
 
-    @PreAuthorize(GUARD)
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/export/{taskId}/download")
     public ResponseEntity<byte[]> download(@PathVariable String taskId) {
         byte[] bytes = productImportService.exportBytes(taskId);

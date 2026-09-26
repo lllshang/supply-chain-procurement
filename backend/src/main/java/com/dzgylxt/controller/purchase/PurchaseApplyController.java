@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,7 +39,7 @@ public class PurchaseApplyController {
     private IPurchaseApplyService applyService;
 
     /** 分页（id 倒序）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/page")
     public R<PageResult<PurchaseApply>> page(@RequestParam(defaultValue = "1") long current,
                                              @RequestParam(defaultValue = "10") long size) {
@@ -49,28 +50,28 @@ public class PurchaseApplyController {
     }
 
     /** 单头。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}")
     public R<PurchaseApply> getById(@PathVariable Long id) {
         return R.ok(applyService.getById(id));
     }
 
     /** 详情（头 + 明细含换算快照列）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/items")
     public R<ApplyDetailRespVO> detail(@PathVariable Long id) {
         return R.ok(applyService.detail(id));
     }
 
     /** 创建申请（明细可空，兼容 P1 表单）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping
     public R<Long> save(@RequestBody ApplySaveReqVO req) {
         return R.ok(applyService.createApply(req));
     }
 
     /** 编辑申请（仅 DRAFT/REJECTED）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PutMapping("/{id}")
     public R<Boolean> update(@PathVariable Long id, @RequestBody ApplySaveReqVO req) {
         applyService.updateApply(id, req);
@@ -78,14 +79,14 @@ public class PurchaseApplyController {
     }
 
     /** 提交（预算软校验 → 两级审批）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/submit")
     public R<Long> submit(@PathVariable Long id) {
         return R.ok(applyService.submit(id));
     }
 
     /** 导出申请单（OOXML，单头+明细两 Sheet；与其他导出格式统一，QA #26）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @GetMapping("/{id}/export")
     public ResponseEntity<byte[]> export(@PathVariable Long id) {
         byte[] bytes = applyService.exportApply(id);
@@ -99,7 +100,7 @@ public class PurchaseApplyController {
     }
 
     /** 作废申请（P3 设计 §2 行10；未转单完成前可作废并释放预算占用）。 */
-    @PreAuthorize("isAuthenticated() and @authz.hasAnyPerm(authentication)")
+    @PreAuthorize(SecurityConstants.GUARD)
     @PostMapping("/{id}/close")
     public R<Boolean> close(@PathVariable Long id, @RequestBody(required = false) CloseReq req) {
         applyService.closeApply(id, req == null ? null : req.getReason());
