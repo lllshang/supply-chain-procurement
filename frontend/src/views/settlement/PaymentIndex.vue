@@ -24,6 +24,7 @@
           <template #default="{ row }">
             <el-button v-if="row.status === 'UNPAID'" link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button v-if="row.status === 'UNPAID'" link type="success" @click="openConfirm(row)">登记确认</el-button>
+            <el-button v-if="row.status === 'UNPAID' || row.status === 'PAID'" link type="danger" @click="onVoid(row)">作废/冲销</el-button>
           </template>
         </el-table-column>
       </el-table>

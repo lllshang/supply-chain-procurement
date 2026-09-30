@@ -90,10 +90,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
+  Bell,
   Fold,
   Setting,
   Box,
@@ -120,6 +121,7 @@ import {
   Operation
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
+import { unreadCount, pageNotices, markNoticeRead, readAllNotices } from '@/api/approval'
 
 // sys_menu.icon -> Element Plus 图标映射（对齐原型菜单图标观感）。
 // 键与 backend db/data.sql 的 icon 值一致；映射不到时使用默认图标。
