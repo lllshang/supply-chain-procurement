@@ -14,13 +14,14 @@ const routes = [
     redirect: '/purchase',
     children: [
       { path: 'purchase', name: 'PurchaseRequest', component: () => import('@/views/PurchaseRequest.vue'), meta: { title: '采购申请' } },
-      // ---- P1 商品库（catalog） ----
+      // ---- 产品管理（catalog）：产品配置合并页 + 各配置页深链保留 ----
+      { path: 'catalog/config', name: 'CatalogConfig', component: () => import('@/views/catalog/ProductConfig.vue'), meta: { title: '产品配置' } },
       { path: 'catalog/category', name: 'CatalogCategory', component: () => import('@/views/catalog/CategoryConfig.vue'), meta: { title: '品类配置' } },
       { path: 'catalog/unit', name: 'CatalogUnit', component: () => import('@/views/catalog/UnitConfig.vue'), meta: { title: '单位配置' } },
       { path: 'catalog/spec', name: 'CatalogSpec', component: () => import('@/views/catalog/SpecConfig.vue'), meta: { title: '规格配置' } },
       { path: 'catalog/price-rule', name: 'CatalogPriceRule', component: () => import('@/views/catalog/PriceRuleConfig.vue'), meta: { title: '价格规则' } },
-      // ---- P3 价格库审核（事后成交价沉淀的人工复核，views/cost 域） ----
-      { path: 'catalog/price-audit', name: 'CatalogPriceAudit', component: () => import('@/views/cost/PriceAuditIndex.vue'), meta: { title: '价格库审核' } },
+      // ---- P3 价格纠正（事后成交价沉淀的人工复核，views/cost 域；原型命名） ----
+      { path: 'catalog/price-audit', name: 'CatalogPriceAudit', component: () => import('@/views/cost/PriceAuditIndex.vue'), meta: { title: '价格纠正' } },
       { path: 'catalog/product', name: 'CatalogProduct', component: () => import('@/views/catalog/ProductList.vue'), meta: { title: '产品库' } },
       { path: 'catalog/import', name: 'CatalogImport', component: () => import('@/views/catalog/ProductImport.vue'), meta: { title: '产品导入' } },
       // ---- P1 供应商（supplier） ----

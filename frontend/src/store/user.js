@@ -10,18 +10,14 @@ export const fallbackMenus = [
   {
     id: 2,
     parentId: 0,
-    menuName: '商品库管理',
+    menuName: '产品管理',
     icon: 'box',
     path: '/catalog',
     menuType: 1,
     children: [
-      { id: 201, parentId: 2, menuName: '品类配置', icon: 'list', path: '/catalog/category', menuType: 2, perms: 'catalog:category:read,catalog:category:write' },
-      { id: 202, parentId: 2, menuName: '单位配置', icon: 'scale-to-original', path: '/catalog/unit', menuType: 2, perms: 'catalog:unit:read,catalog:unit:write' },
-      { id: 203, parentId: 2, menuName: '规格配置', icon: 'operation', path: '/catalog/spec', menuType: 2, perms: 'catalog:spec:read,catalog:spec:write' },
-      { id: 204, parentId: 2, menuName: '价格规则', icon: 'price-tag', path: '/catalog/price-rule', menuType: 2, perms: 'catalog:price:read,catalog:price:write' },
       { id: 205, parentId: 2, menuName: '产品库', icon: 'goods', path: '/catalog/product', menuType: 2, perms: 'catalog:spu:read,catalog:spu:write' },
-      { id: 206, parentId: 2, menuName: '产品导入', icon: 'upload', path: '/catalog/import', menuType: 2, perms: 'catalog:import' },
-      { id: 207, parentId: 2, menuName: '价格库审核', icon: 'price-tag', path: '/catalog/price-audit', menuType: 2, perms: 'catalog:price:read,catalog:price:audit' }
+      { id: 208, parentId: 2, menuName: '产品配置', icon: 'setting', path: '/catalog/config', menuType: 2, perms: 'catalog:category:read,catalog:category:write,catalog:unit:read,catalog:unit:write,catalog:spec:read,catalog:spec:write,catalog:price:read,catalog:price:write' },
+      { id: 207, parentId: 2, menuName: '价格纠正', icon: 'price-tag', path: '/catalog/price-audit', menuType: 2, perms: 'catalog:price:read,catalog:price:audit,catalog:price:write' }
     ]
   },
   {

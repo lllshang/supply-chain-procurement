@@ -14,6 +14,7 @@ export function usePagination(fetcher, options = {}) {
   const current = ref(1)
   const pageSize = ref(options.size || 10)
   const total = ref(0)
+  const totalSku = ref(0)
   const loading = ref(false)
 
   async function load() {
@@ -23,10 +24,12 @@ export function usePagination(fetcher, options = {}) {
       const data = res?.data || {}
       // #28 后端 Long→String 序列化后 total 为字符串，el-pagination 要求 Number（#34b）
       total.value = Number(data.total) || 0
+      totalSku.value = Number(data.totalSkuCount) || 0
       return data.records || []
     } catch (e) {
       // 请求失败回退空列表（错误已由拦截器提示）
       total.value = 0
+      totalSku.value = 0
       return []
     } finally {
       loading.value = false
@@ -43,7 +46,7 @@ export function usePagination(fetcher, options = {}) {
     return load()
   }
 
-  return { current, pageSize, total, loading, load, onCurrentChange, reset }
+  return { current, pageSize, total, totalSku, loading, load, onCurrentChange, reset }
 }
 
 export default usePagination

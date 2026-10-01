@@ -1213,4 +1213,15 @@ ALTER TABLE `contract`
   ADD COLUMN `sign_date`  DATE         NULL COMMENT '签订日期' AFTER `owner`,
   ADD COLUMN `project_id` BIGINT       NULL COMMENT '关联项目（可选）' AFTER `sign_date`;
 
+-- ============================================================
+-- 产品库对齐原型：采购项类型 + 规格包装类型（🔴 数据模型补齐）
+-- 原型 ProductListView 筛选面板含「采购项类型(物料类/服务类)」「规格类型(单/多/固定混色箱)」，
+-- 此前 spu 无 item_type / pack_type 字段，导致服务类无法建档、两个筛选项缺失。
+-- 新建库 CREATE TABLE spu 未含这两列，统一由下方 ALTER 补齐（首建即成功）；
+-- 存量库重复执行因"列已存在"(1060) 由 spring.sql.init.continue-on-error=true 忽略。
+-- ============================================================
+ALTER TABLE `spu`
+  ADD COLUMN `item_type` TINYINT NOT NULL DEFAULT 0 COMMENT '采购项类型：0=物料类 1=服务类（PRD PM-04/BR-22/BR-25；服务类不进库存、进服务验收+扣款）' AFTER `category_id`,
+  ADD COLUMN `pack_type` TINYINT NOT NULL DEFAULT 0 COMMENT '规格包装类型：0=普通 1=固定混色箱（原型规格类型筛选用）' AFTER `item_type`;
+
 SET FOREIGN_KEY_CHECKS = 1;

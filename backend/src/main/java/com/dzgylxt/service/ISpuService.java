@@ -26,4 +26,7 @@ public interface ISpuService extends IService<Spu> {
 
     /** 分页查询（筛选：category/status/关键字）。 */
     IPage<SpuPageRespVO> pageSpu(SpuPageReqVO req);
+
+    /** 全量 SKU 规格项总数（用于列表底部"共 N 个产品 / M 个规格项"汇总）。 */
+    long countTotalSkus();
 }

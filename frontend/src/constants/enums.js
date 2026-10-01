@@ -199,13 +199,19 @@ export const STRING_ENUMS = {
   // 商品状态 name 版（Spu/Sku 已枚举化；unit/category/spec/price_rule 仍为
   // 数值，沿用 ENUMS.productStatus，键分开避免混用）
   productStatusName: [
-    { value: 'NORMAL', label: '正常', type: 'success' },
+    { value: 'NORMAL', label: '启用', type: 'success' },
     { value: 'DISABLED', label: '停用', type: 'info' }
   ],
   // 行级类型（物料/服务）
   itemType: [
     { value: 'MATERIAL', label: '物料' },
     { value: 'SERVICE', label: '服务' }
+  ],
+  // 产品库规格类型筛选（单规格/多规格/固定混色箱；单多规格由 SKU 数量推导）
+  specMode: [
+    { value: 'single', label: '单规格' },
+    { value: 'multiple', label: '多规格' },
+    { value: 'mixed', label: '固定混色箱' }
   ],
   // ---- P3 结算与付款（后端 IEnum 以枚举名序列化） ----
   // 结算状态

@@ -53,7 +53,7 @@ public class SpuController {
     @GetMapping("/page")
     public R<PageResult<SpuPageRespVO>> page(SpuPageReqVO req) {
         IPage<SpuPageRespVO> result = spuService.pageSpu(req);
-        return R.ok(PageResult.of(result.getRecords(), result.getTotal(), result.getCurrent(), result.getSize()));
+        return R.ok(PageResult.of(result.getRecords(), result.getTotal(), result.getCurrent(), result.getSize(), spuService.countTotalSkus()));
     }
 
     @PreAuthorize(SecurityConstants.GUARD)

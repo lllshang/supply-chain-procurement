@@ -17,7 +17,7 @@ VALUES (1, 'SUPER_ADMIN', '超级管理员', '系统内置超级管理员', 0, N
 -- ---------------- 菜单（12 个一级模块） ----------------
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
 (1, 0, '系统管理',   1, '/system',    'layout',        'setting',  'system:view',    1,  0, NOW(), NOW(), 0),
-(2, 0, '商品库管理', 1, '/catalog',   'catalog/index','box',      'catalog:view',   2,  0, NOW(), NOW(), 0),
+(2, 0, '产品管理',   1, '/catalog',   'catalog/index','box',      'catalog:view',   2,  0, NOW(), NOW(), 0),
 (3, 0, '供应商管理', 1, '/supplier',  'supplier/index','shop',     'supplier:view',  3,  0, NOW(), NOW(), 0),
 (4, 0, '采购管理',   1, '/purchase',  'purchase/index','shopping','purchase:view',  4,  0, NOW(), NOW(), 0),
 (5, 0, '预算管理',   1, '/budget',    'budget/index',  'money',    'budget:view',    5,  0, NOW(), NOW(), 0),
@@ -29,16 +29,23 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (11,0, '报表中心',   1, '/report',    'report/index',  'chart',    'report:view',    11, 0, NOW(), NOW(), 0),
 (12,0, '基础设置',   1, '/setting',   'setting/index', 'tools',    'setting:view',   12, 0, NOW(), NOW(), 0);
 
+-- ---------------- 产品管理菜单对齐原型（2026-09-25 重构）----------------
+-- 原「商品库管理」拆成：产品库 / 产品配置(合并品类·单位·规格·价格规则 Tab 页) / 价格纠正
+-- 废弃独立菜单：品类配置(201) 单位配置(202) 规格配置(203) 价格规则(204) 产品导入(206)
+-- 兼容已初始化库：删除废弃菜单及其角色授权，UPDATE 改名/排序项；幂等可重复执行。
+UPDATE sys_menu SET menu_name='产品管理' WHERE id=2 AND deleted=0;
+UPDATE sys_menu SET sort=1 WHERE id=205 AND deleted=0;
+UPDATE sys_menu SET menu_name='价格纠正', sort=3, perms='catalog:price:read,catalog:price:audit,catalog:price:write' WHERE id=207 AND deleted=0;
+DELETE FROM sys_role_menu WHERE menu_id IN (201,202,203,204,206);
+DELETE FROM sys_menu WHERE id IN (201,202,203,204,206) AND deleted=0;
+
 -- ---------------- P1 二级菜单（商品库/供应商/预算，parent_id 指向一级菜单；幂等） ----------------
 -- perms 同时含 read 与 write 键，RbacService.getUserPerms 汇总后供前端 v-permission 使用。
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
--- 商品库管理（parent_id = 2）
-(201, 2, '品类配置', 2, '/catalog/category',   'catalog/category/index',  'list',   'catalog:category:read,catalog:category:write', 1, 0, NOW(), NOW(), 0),
-(202, 2, '单位配置', 2, '/catalog/unit',       'catalog/unit/index',      'scale-to-original', 'catalog:unit:read,catalog:unit:write', 2, 0, NOW(), NOW(), 0),
-(203, 2, '规格配置', 2, '/catalog/spec',       'catalog/spec/index',      'operation','catalog:spec:read,catalog:spec:write',       3, 0, NOW(), NOW(), 0),
-(204, 2, '价格规则', 2, '/catalog/price-rule', 'catalog/price/index',     'price-tag','catalog:price:read,catalog:price:write',     4, 0, NOW(), NOW(), 0),
-(205, 2, '产品库',   2, '/catalog/product',    'catalog/product/index',   'goods',   'catalog:spu:read,catalog:spu:write',          5, 0, NOW(), NOW(), 0),
-(206, 2, '产品导入', 2, '/catalog/import',     'catalog/import/index',    'upload',  'catalog:import',                              6, 0, NOW(), NOW(), 0),
+-- 产品管理（parent_id = 2）：原型结构 = 产品库 / 产品配置(合并品类·单位·规格·价格规则 Tab 页) / 价格纠正
+-- 注：品类/单位/规格/价格规则不再作为独立菜单，统一收纳进「产品配置」Tab 页（前端 catalog/ProductConfig.vue）
+(205, 2, '产品库',   2, '/catalog/product',    'catalog/product/index',   'goods',   'catalog:spu:read,catalog:spu:write',          1, 0, NOW(), NOW(), 0),
+(208, 2, '产品配置', 2, '/catalog/config',     'catalog/ProductConfig',   'setting', 'catalog:category:read,catalog:category:write,catalog:unit:read,catalog:unit:write,catalog:spec:read,catalog:spec:write,catalog:price:read,catalog:price:write', 2, 0, NOW(), NOW(), 0),
 -- 供应商管理（parent_id = 3）
 (301, 3, '供应商分类', 2, '/supplier/category', 'supplier/category/index','share',   'supplier:read,supplier:write',                1, 0, NOW(), NOW(), 0),
 (302, 3, '供应商档案', 2, '/supplier/list',    'supplier/list/index',     'shop',    'supplier:read,supplier:write',                2, 0, NOW(), NOW(), 0),
@@ -76,9 +83,9 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (902, 9, '付款登记', 2, '/settlement/payment', 'settlement/payment/index', 'credit-card', 'payment:read,payment:write,payment:confirm',          2, 0, NOW(), NOW(), 0),
 (903, 9, '对账单',   2, '/settlement/statement','settlement/statement/index','document',   'payment:read',                                        3, 0, NOW(), NOW(), 0);
 
--- ---------------- P3 价格库审核菜单（商品库管理下，紧邻价格规则；幂等） ----------------
+-- ---------------- 价格纠正菜单（产品管理下，原型命名；原名「价格库审核」） ----------------
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
-(207, 2, '价格库审核', 2, '/catalog/price-audit', 'cost/price-audit/index', 'price-tag', 'catalog:price:read,catalog:price:audit', 7, 0, NOW(), NOW(), 0);
+(207, 2, '价格纠正', 2, '/catalog/price-audit', 'cost/price-audit/index', 'price-tag', 'catalog:price:read,catalog:price:audit,catalog:price:write', 3, 0, NOW(), NOW(), 0);
 
 -- ---------------- 管理员用户（密码 admin123，BCrypt $2a$10$） ----------------
 INSERT IGNORE INTO sys_user (id, username, password_hash, nickname, main_dept_id, status, created_at, updated_at, deleted)
@@ -102,13 +109,10 @@ INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, created_at, updated_at, 
 (10, 1, 10, NOW(), NOW(), 0),
 (11, 1, 11, NOW(), NOW(), 0),
 (12, 1, 12, NOW(), NOW(), 0),
--- P1 二级菜单授权（超级管理员）
-(13, 1, 201, NOW(), NOW(), 0),
-(14, 1, 202, NOW(), NOW(), 0),
-(15, 1, 203, NOW(), NOW(), 0),
-(16, 1, 204, NOW(), NOW(), 0),
+-- P1 二级菜单授权（超级管理员）：产品库 + 产品配置
+-- 注意：id=50 已被旧版 data.sql 占用为 role_menu(50,1,1002)「已办审批」，故 208 改用 id=208 避免 INSERT IGNORE 主键冲突被静默跳过。
 (17, 1, 205, NOW(), NOW(), 0),
-(18, 1, 206, NOW(), NOW(), 0),
+(208, 1, 208, NOW(), NOW(), 0),
 (19, 1, 301, NOW(), NOW(), 0),
 (20, 1, 302, NOW(), NOW(), 0),
 (21, 1, 303, NOW(), NOW(), 0),

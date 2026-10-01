@@ -8,7 +8,22 @@
         <el-input v-model="form.name" placeholder="产品名称" />
       </el-form-item>
       <el-form-item label="品类" required>
-        <TreeSelect v-model="form.categoryId" :fetcher="getCategoryTree" :leaf-only="true" placeholder="选择三级品类（叶子）" />
+        <TreeSelect v-model="form.categoryId" :fetcher="getCategoryTree" :leaf-only="true" show-level path-label placeholder="选择三级品类（叶子）" />
+      </el-form-item>
+      <el-form-item label="采购项类型" required>
+        <el-radio-group v-model="form.itemType">
+          <el-radio value="MATERIAL">物料类</el-radio>
+          <el-radio value="SERVICE">服务类</el-radio>
+        </el-radio-group>
+        <div class="form-hint" v-if="form.itemType === 'SERVICE'">
+          服务类不进入库存，不验收入库，按服务履约与质量考核结算。
+        </div>
+      </el-form-item>
+      <el-form-item label="规格包装">
+        <el-radio-group v-model="form.packType">
+          <el-radio :value="0">普通</el-radio>
+          <el-radio :value="1">固定混色箱</el-radio>
+        </el-radio-group>
       </el-form-item>
       <el-form-item label="基本单位" required>
         <UnitSelect v-model="form.baseUnit" />
@@ -59,6 +74,8 @@ const form = reactive({
   spuCode: '',
   name: '',
   categoryId: null,
+  itemType: 'MATERIAL',
+  packType: 0,
   baseUnit: '',
   spec: '',
   imageFileKey: '',
@@ -68,7 +85,7 @@ const form = reactive({
 
 function reset() {
   Object.assign(form, {
-    id: null, spuCode: '', name: '', categoryId: null, baseUnit: '',
+    id: null, spuCode: '', name: '', categoryId: null, itemType: 'MATERIAL', packType: 0, baseUnit: '',
     spec: '', imageFileKey: '', description: '', remark: ''
   })
 }
@@ -87,6 +104,8 @@ watch(
           spuCode: d.spuCode || '',
           name: d.name || '',
           categoryId: d.categoryId ?? null,
+          itemType: d.itemType || 'MATERIAL',
+          packType: d.packType ?? 0,
           baseUnit: d.baseUnit || '',
           spec: d.spec || '',
           imageFileKey: d.imageFileKey || '',
@@ -112,6 +131,8 @@ async function onSave() {
       spuCode: form.spuCode,
       name: form.name,
       categoryId: form.categoryId,
+      itemType: form.itemType,
+      packType: form.packType,
       baseUnit: form.baseUnit,
       spec: form.spec,
       imageFileKey: form.imageFileKey,
@@ -133,3 +154,7 @@ async function onSave() {
   }
 }
 </script>
+
+<style scoped>
+.form-hint { color: #909399; font-size: 12px; line-height: 1.4; margin-top: 4px; }
+</style>

@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-card>
-      <PageHead title="价格库审核" />
+      <PageHead title="价格纠正" />
       <div class="toolbar">
         <span class="toolbar-tip">异常价（超限价或低于历史均价 20%）进入待审队列，人工复核通过后沉淀为比价历史通过价。</span>
       </div>
