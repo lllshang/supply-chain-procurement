@@ -154,6 +154,36 @@ INSERT IGNORE INTO unit (id, code, name, status, created_at, updated_at, deleted
 (3, 'KG',  '千克', 0, NOW(), NOW(), 0),
 (4, 'M',   '米',   0, NOW(), NOW(), 0);
 
+-- ---------------- P1 规格配置字典（规格维度可选值，对齐原型 defaultSpecConfigs，幂等） ----------------
+-- 原型来源：后台管理端原型/src/stores/productConfig.ts defaultSpecConfigs（6 个规格类型）。
+-- 多规格编辑对话框「规格类型」下拉即从此表取（specName 为类型、specValue 为可选参数值）。
+INSERT IGNORE INTO spec_option (id, spec_name, spec_value, status, created_at, updated_at, deleted) VALUES
+(1,  '大小',     'XS',          0, NOW(), NOW(), 0),
+(2,  '大小',     'S',           0, NOW(), NOW(), 0),
+(3,  '大小',     'M',           0, NOW(), NOW(), 0),
+(4,  '大小',     'L',           0, NOW(), NOW(), 0),
+(5,  '大小',     'XL',          0, NOW(), NOW(), 0),
+(6,  '大小',     '35cm',        0, NOW(), NOW(), 0),
+(7,  '大小',     '50cm',        0, NOW(), NOW(), 0),
+(8,  '颜色',     '黑色',        0, NOW(), NOW(), 0),
+(9,  '颜色',     '白色',        0, NOW(), NOW(), 0),
+(10, '颜色',     '藏蓝',        0, NOW(), NOW(), 0),
+(11, '颜色',     '橙白',        0, NOW(), NOW(), 0),
+(12, '颜色',     '红色',        0, NOW(), NOW(), 0),
+(13, '颜色',     '蓝色',        0, NOW(), NOW(), 0),
+(14, '容量',     '250ml',       0, NOW(), NOW(), 0),
+(15, '容量',     '500ml',       0, NOW(), NOW(), 0),
+(16, '容量',     '1L',          0, NOW(), NOW(), 0),
+(17, '容量',     '1.5L',        0, NOW(), NOW(), 0),
+(18, '包装',     '单件',        0, NOW(), NOW(), 0),
+(19, '包装',     '6瓶/箱',      0, NOW(), NOW(), 0),
+(20, '包装',     '12瓶/箱',     0, NOW(), NOW(), 0),
+(21, '包装',     '24瓶/箱',     0, NOW(), NOW(), 0),
+(22, '尺寸',     '70cm×140cm',  0, NOW(), NOW(), 0),
+(23, '尺寸',     '80cm×160cm',  0, NOW(), NOW(), 0),
+(24, '纸张规格', 'A4 70g',      0, NOW(), NOW(), 0),
+(25, '纸张规格', 'A3 70g',      0, NOW(), NOW(), 0);
+
 -- ---------------- P1 商品品类（示例三级树，幂等） ----------------
 INSERT IGNORE INTO product_category (id, parent_id, level, code, name, tree_path, status, created_at, updated_at, deleted) VALUES
 (1, 0, 1, 'CAT_L1_BASE', '原材料', '/1',   0, NOW(), NOW(), 0),

@@ -6,6 +6,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * SKU 新增/编辑请求。
@@ -28,4 +29,17 @@ public class SkuSaveReqVO implements Serializable {
     private String imageFileKey;
     /** 0=正常 1=停用 */
     private ProductStatus status;
+
+    // ===== 编辑对话框全量对齐原型 =====
+    /** 单位换算系数：1 采购单位 = N 基本单位（多规格模式逐行覆盖） */
+    private Integer unitConversionFactor;
+    /** 多规格取值（multiple 模式）：[{attributeId, value}] */
+    private List<SpecValueDTO> specValues;
+
+    /** 多规格取值。 */
+    @Data
+    public static class SpecValueDTO implements Serializable {
+        private String attributeId;
+        private String value;
+    }
 }

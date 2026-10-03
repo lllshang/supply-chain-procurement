@@ -267,6 +267,27 @@ export const PERIOD_OPTIONS = [
   ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `${i + 1}月` }))
 ]
 
+// ===== 产品库编辑对话框（对齐原型 taxRateOptions / measurementTypeOptions） =====
+// 税率下拉选项（合法域 0–13；与原型一致，缺失时对应选项不会出现）
+export const taxRateOptions = [0, 1, 3, 6, 9, 13]
+// 计量方式（非服务类）：计件 / 计重
+export const measurementTypeOptions = [
+  { value: 'piece', label: '计件' },
+  { value: 'weight', label: '计重' }
+]
+// 规格模式三态（原型规格模式 radio）
+export const specificationModeOptions = [
+  { value: 'single', label: '单规格' },
+  { value: 'multiple', label: '多规格' },
+  { value: 'mixed', label: '固定混色箱' }
+]
+
+// 特性开关：与原型 ProductListView.vue:44 同名同值（mixedPackFeatureEnabled = false）。
+// 原型把「固定混色箱」入口藏在开关后——编辑对话框规格模式 radio（原型 L3026）与列表规格类型筛选
+// option（原型 L2610）均带 v-if="mixedPackFeatureEnabled"，默认关闭、代码保留不删。本仓按原型对齐，
+// 默认关闭；后续若要上线该特性，改本行为 true 即可（后端 mixedPackComponents/packType 已就绪）。
+export const mixedPackFeatureEnabled = false
+
 function resolveOptions(enumKey) {
   if (enumKey === 'period') return PERIOD_OPTIONS
   return ENUMS[enumKey] || STRING_ENUMS[enumKey] || []
@@ -289,4 +310,4 @@ export function enumType(enumKey, value) {
   return hit && hit.type ? hit.type : 'info'
 }
 
-export default { ENUMS, STRING_ENUMS, PERIOD_OPTIONS, enumOptions, enumLabel, enumType }
+export default { ENUMS, STRING_ENUMS, PERIOD_OPTIONS, taxRateOptions, measurementTypeOptions, specificationModeOptions, enumOptions, enumLabel, enumType }

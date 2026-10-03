@@ -30,6 +30,10 @@ public class SpuPageRespVO implements Serializable {
     private String imageUrl;
     /** 0=正常 1=停用 */
     private ProductStatus status;
+    /** 商品简介 */
+    private String description;
+    /** 税率%（目录域产品级，合法域 0–13） */
+    private java.math.BigDecimal taxRate;
     private LocalDateTime updatedAt;
 
     // ===== 列表聚合字段（P-C5 对齐原型：规格/单位/标准价区间） =====

@@ -128,6 +128,9 @@ export function enableSku(id) {
 export function disableSku(id) {
   return request.post(`/api/v1/catalog/skus/${id}/disable`)
 }
+export function deleteSku(id) {
+  return request.delete(`/api/v1/catalog/skus/${id}`)
+}
 
 // ---- 单位换算（P-C5） ----
 export function listUnitConversions(params) {

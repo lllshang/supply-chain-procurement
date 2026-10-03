@@ -29,6 +29,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -96,8 +98,11 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
         entity.setBaseUnit(req.getBaseUnit());
         entity.setImageFileKey(req.getImageFileKey());
         entity.setDescription(req.getDescription());
+        entity.setTaxRate(req.getTaxRate());
         entity.setRemark(req.getRemark());
         entity.setStatus(req.getStatus() == null ? STATUS_NORMAL : req.getStatus());
+        // ===== 编辑对话框全量对齐原型 =====
+        applySpecFields(entity, req);
         save(entity);
         return entity.getId();
     }
@@ -128,6 +133,7 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
         if (req.getPackType() != null) {
             entity.setPackType(req.getPackType());
         }
+        applySpecFields(entity, req);
         if (StringUtils.hasText(req.getSpuCode())) {
             entity.setSpuCode(req.getSpuCode());
         }
@@ -137,6 +143,7 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
         entity.setSpec(req.getSpec());
         entity.setImageFileKey(req.getImageFileKey());
         entity.setDescription(req.getDescription());
+        entity.setTaxRate(req.getTaxRate());
         entity.setRemark(req.getRemark());
         if (req.getStatus() != null) {
             entity.setStatus(req.getStatus());
@@ -250,6 +257,8 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
             vo.setImageFileKey(spu.getImageFileKey());
             vo.setImageUrl(resolveImageUrl(spu.getImageFileKey()));
             vo.setStatus(spu.getStatus());
+            vo.setDescription(spu.getDescription());
+            vo.setTaxRate(spu.getTaxRate());
             vo.setUpdatedAt(spu.getUpdatedAt());
 
             List<Sku> skus = skuMap.getOrDefault(spu.getId(), List.of());
@@ -279,11 +288,13 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
                 if (skus.size() == 1 && !StringUtils.hasText(vo.getSpecification())) {
                     vo.setSpecification(skus.get(0).getSpec());
                 }
-                Sku rep = skus.get(0);
-                if (StringUtils.hasText(rep.getPurchaseUnit()) && StringUtils.hasText(rep.getBaseUnit())) {
-                    vo.setUnitConversion(buildConversionText(rep, now, unitNameMap));
-                }
             }
+            // 单位换算文本：单规格/混色箱取 SPU 级系数，多规格取首个 SKU 级系数；回退到单位换算表
+            String conversion = buildInlineConversionText(spu, skus, unitNameMap);
+            if (conversion == null && !skus.isEmpty()) {
+                conversion = buildConversionText(skus.get(0), now, unitNameMap);
+            }
+            vo.setUnitConversion(conversion);
             records.add(vo);
         }
         Page<SpuPageRespVO> respPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
@@ -329,6 +340,30 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
         }
     }
 
+    /** 由内联字段推导单位换算文本：单规格/混色箱用 SPU 级系数，多规格用首个 SKU 级系数。系数为 1 或单位相同则不展示。 */
+    private String buildInlineConversionText(Spu spu, List<Sku> skus, Map<String, String> unitNameMap) {
+        String pu;
+        String bu;
+        Integer factor;
+        if ("multiple".equals(spu.getSpecificationMode()) && !skus.isEmpty()) {
+            Sku rep = skus.get(0);
+            pu = rep.getPurchaseUnit();
+            bu = rep.getBaseUnit();
+            factor = rep.getUnitConversionFactor();
+        } else {
+            pu = spu.getPurchaseUnit();
+            bu = spu.getBaseUnit();
+            factor = spu.getUnitConversionFactor();
+        }
+        if (!StringUtils.hasText(pu) || !StringUtils.hasText(bu) || pu.equals(bu)) {
+            return null;
+        }
+        if (factor == null || factor <= 1) {
+            return null;
+        }
+        return "1" + unitDisplayName(unitNameMap, pu) + " = " + factor + unitDisplayName(unitNameMap, bu);
+    }
+
     private String buildConversionText(Sku sku, LocalDateTime now, Map<String, String> unitNameMap) {
         String pu = unitDisplayName(unitNameMap, sku.getPurchaseUnit());
         String bu = unitDisplayName(unitNameMap, sku.getBaseUnit());
@@ -355,6 +390,36 @@ public class SpuServiceImpl extends ServiceImpl<SpuMapper, Spu> implements ISpuS
 
     private String formatRate(BigDecimal rate) {
         return rate.stripTrailingZeros().toPlainString();
+    }
+
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+
+    /** 将编辑对话框全量字段（含 JSON 结构的混色箱子件/多规格属性）映射到 SPU 实体。 */
+    private void applySpecFields(Spu entity, SpuSaveReqVO req) {
+        entity.setBarcode(req.getBarcode());
+        entity.setMeasurementType(req.getMeasurementType());
+        entity.setPurchaseUnit(req.getPurchaseUnit());
+        if (StringUtils.hasText(req.getSpecificationMode())) {
+            entity.setSpecificationMode(req.getSpecificationMode());
+            entity.setPackType("mixed".equals(req.getSpecificationMode()) ? 1 : 0);
+        }
+        entity.setUnitConversionFactor(req.getUnitConversionFactor());
+        entity.setStandardPrice(req.getStandardPrice());
+        entity.setReferencePrice(req.getReferencePrice());
+        entity.setMixedPackComponents(toJson(req.getMixedPackComponents()));
+        entity.setSpecAttributes(toJson(req.getSpecAttributes()));
+    }
+
+    private String toJson(Object obj) {
+        if (obj == null) {
+            return null;
+        }
+        try {
+            return JSON_MAPPER.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            log.warn("SPU 扩展字段 JSON 序列化失败: {}", e.getMessage());
+            return null;
+        }
     }
 
     private void changeStatus(Long id, ProductStatus status) {

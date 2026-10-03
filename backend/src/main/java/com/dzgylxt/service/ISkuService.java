@@ -26,6 +26,9 @@ public interface ISkuService extends IService<Sku> {
     /** 停用。 */
     void disable(Long id);
 
+    /** 删除（物理删除，用于产品编辑时移除被删 SKU）。 */
+    void deleteSku(Long id);
+
     /** 分页查询。 */
     IPage<SkuPageRespVO> pageSku(SkuPageReqVO req);
 

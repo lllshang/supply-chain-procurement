@@ -22,6 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -79,6 +82,16 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements ISkuS
     @Override
     public void disable(Long id) {
         changeStatus(id, STATUS_DISABLED);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteSku(Long id) {
+        Sku entity = getById(id);
+        if (entity == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "SKU 不存在：" + id);
+        }
+        removeById(id);
     }
 
     @Override
@@ -168,6 +181,21 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements ISkuS
         entity.setStandardPrice(req.getStandardPrice());
         entity.setValuationType(req.getValuationType() == null ? ValuationType.BY_PIECE : req.getValuationType());
         entity.setImageFileKey(req.getImageFileKey());
+        entity.setUnitConversionFactor(req.getUnitConversionFactor());
+        entity.setSpecValues(toJson(req.getSpecValues()));
+    }
+
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+
+    private String toJson(Object obj) {
+        if (obj == null) {
+            return null;
+        }
+        try {
+            return JSON_MAPPER.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            throw new com.dzgylxt.common.BizException(com.dzgylxt.common.ResultCode.PARAM_ERROR, "SKU 扩展字段 JSON 序列化失败");
+        }
     }
 
     private void checkNonNegative(String field, BigDecimal value) {

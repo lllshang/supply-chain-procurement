@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS spu (
     status     TINYINT      NOT NULL DEFAULT 0,
     image_file_key VARCHAR(255) NULL COMMENT '主图 file_key（引用 file_meta.file_key）',
     description    TEXT         NULL COMMENT '商品简介',
+    tax_rate       DECIMAL(5,2) NULL COMMENT '税率%（目录域产品级，0–13，与采购域 P3c-A2 含税口径对齐）',
     remark     VARCHAR(255) NULL,
     created_by BIGINT       NULL,
     created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
@@ -647,9 +648,23 @@ CREATE TABLE IF NOT EXISTS budget_project (
 -- 说明：新建库时上述 CREATE TABLE 已含新列，以下 ALTER 会因"列已存在"报 1060，
 -- 由 spring.sql.init.continue-on-error=true 忽略；存量库则由这些 ALTER 补齐新列。
 -- 更严谨的幂等迁移脚本见 scripts/sql/p1_alter.sql。
-ALTER TABLE `spu`
-  ADD COLUMN `image_file_key` VARCHAR(255) NULL COMMENT '主图 file_key（引用 file_meta.file_key）' AFTER `status`,
-  ADD COLUMN `description`    TEXT         NULL COMMENT '商品简介' AFTER `image_file_key`;
+-- 逐列独立 ALTER：MySQL 单条 ALTER 中任一列已存在即整句失败（1060），
+-- 拆成独立语句后即便 image_file_key/description 已存在被忽略，tax_rate 仍可补齐。
+ALTER TABLE `spu` ADD COLUMN `image_file_key` VARCHAR(255) NULL COMMENT '主图 file_key（引用 file_meta.file_key）' AFTER `status`;
+ALTER TABLE `spu` ADD COLUMN `description`    TEXT         NULL COMMENT '商品简介' AFTER `image_file_key`;
+ALTER TABLE `spu` ADD COLUMN `tax_rate`       DECIMAL(5,2) NULL COMMENT '税率%（目录域产品级，0–13，与采购域 P3c-A2 含税口径对齐）' AFTER `description`;
+
+-- 产品库编辑对话框全量对齐原型（单/多规格 + 固定混色箱）所需 SPU 级字段。
+-- 逐列独立 ALTER，任一列已存在被 continue-on-error 忽略也不影响其余列补齐。
+ALTER TABLE `spu` ADD COLUMN `barcode`                VARCHAR(64)   NULL COMMENT '产品条码（单规格/混色箱模式录入，多规格由子 SKU 承载）' AFTER `tax_rate`;
+ALTER TABLE `spu` ADD COLUMN `measurement_type`       VARCHAR(20)   NULL COMMENT '计量方式：piece=计件 weight=计重（非服务类）' AFTER `barcode`;
+ALTER TABLE `spu` ADD COLUMN `purchase_unit`          VARCHAR(32)   NULL COMMENT '采购单位（引用 unit.code；默认同基本单位）' AFTER `measurement_type`;
+ALTER TABLE `spu` ADD COLUMN `specification_mode`     VARCHAR(20)   NULL DEFAULT 'single' COMMENT '规格模式：single=单规格 multiple=多规格 mixed=固定混色箱' AFTER `purchase_unit`;
+ALTER TABLE `spu` ADD COLUMN `unit_conversion_factor` INT           NULL COMMENT '单位换算系数：1 采购单位 = N 基本单位（单规格/混色箱模式）' AFTER `specification_mode`;
+ALTER TABLE `spu` ADD COLUMN `standard_price`         DECIMAL(18,2) NULL COMMENT '标准价（SPU 级，单规格/混色箱模式；元/采购单位）' AFTER `unit_conversion_factor`;
+ALTER TABLE `spu` ADD COLUMN `reference_price`        DECIMAL(18,2) NULL COMMENT '参考价（SPU 级，单规格/混色箱模式；元/采购单位）' AFTER `standard_price`;
+ALTER TABLE `spu` ADD COLUMN `mixed_pack_components`  TEXT          NULL COMMENT '固定混色箱子件 JSON：[{name,skuCode,specification,quantity,baseUnit}]' AFTER `reference_price`;
+ALTER TABLE `spu` ADD COLUMN `spec_attributes`        TEXT          NULL COMMENT '多规格属性定义 JSON：[{id,name,values[]}]' AFTER `mixed_pack_components`;
 
 ALTER TABLE `sku`
   ADD COLUMN `purchase_unit`   VARCHAR(32)   NULL COMMENT '采购单位（引用 unit.code）'        AFTER `spec`,
@@ -657,6 +672,10 @@ ALTER TABLE `sku`
   ADD COLUMN `standard_price`  DECIMAL(18,2) NULL COMMENT '标准价（≥0）'                     AFTER `reference_price`,
   ADD COLUMN `valuation_type`  TINYINT       NULL COMMENT '计价方式：0=计件 1=计重'           AFTER `standard_price`,
   ADD COLUMN `image_file_key`  VARCHAR(255)  NULL COMMENT '主图 file_key（引用 file_meta.file_key）' AFTER `valuation_type`;
+
+-- 产品库编辑对话框全量对齐原型：SKU 级单位换算系数与多规格取值。
+ALTER TABLE `sku` ADD COLUMN `unit_conversion_factor` INT  NULL COMMENT '单位换算系数：1 采购单位 = N 基本单位（多规格模式逐行覆盖）' AFTER `image_file_key`;
+ALTER TABLE `sku` ADD COLUMN `spec_values`            TEXT NULL COMMENT '多规格取值 JSON：[{attributeId,value}]（与 spu.spec_attributes 对应）' AFTER `unit_conversion_factor`;
 
 ALTER TABLE `supplier`
   ADD COLUMN `supplier_category_id` BIGINT  NULL     DEFAULT NULL COMMENT '供应商分类ID（引用 supplier_category）' AFTER `category`,

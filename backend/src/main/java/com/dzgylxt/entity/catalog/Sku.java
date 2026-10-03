@@ -36,4 +36,8 @@ public class Sku extends BaseEntity implements Serializable {
     private ValuationType valuationType;
     /** 主图 file_key（引用 file_meta.file_key） */
     private String imageFileKey;
+    /** 单位换算系数：1 采购单位 = N 基本单位（多规格模式逐行覆盖 SPU 级系数） */
+    private Integer unitConversionFactor;
+    /** 多规格取值 JSON：[{attributeId,value}]（与 spu.spec_attributes 对应） */
+    private String specValues;
 }
