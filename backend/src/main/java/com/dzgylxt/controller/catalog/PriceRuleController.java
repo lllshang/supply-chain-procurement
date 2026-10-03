@@ -3,6 +3,7 @@ package com.dzgylxt.controller.catalog;
 import com.dzgylxt.common.R;
 import com.dzgylxt.entity.catalog.PriceRule;
 import com.dzgylxt.service.IPriceRuleService;
+import com.dzgylxt.vo.catalog.LowestOrderSyncVO;
 import com.dzgylxt.vo.catalog.PriceRuleSaveReqVO;
 import com.dzgylxt.common.SecurityConstants;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -69,5 +70,17 @@ public class PriceRuleController {
                                     @RequestParam BigDecimal price) {
         priceRuleService.validatePrice(refType, refId, price);
         return R.ok(true);
+    }
+
+    @PreAuthorize(SecurityConstants.GUARD)
+    @GetMapping("/lowest-order-sync")
+    public R<LowestOrderSyncVO> getLowestOrderSync() {
+        return R.ok(priceRuleService.getLowestOrderSync());
+    }
+
+    @PreAuthorize(SecurityConstants.GUARD)
+    @PostMapping("/lowest-order-sync")
+    public R<Integer> applyLowestOrderSync(@RequestParam boolean enabled) {
+        return R.ok(priceRuleService.applyLowestOrderSync(enabled));
     }
 }

@@ -66,4 +66,11 @@ public class SpecOptionController {
         specOptionService.invalidate(id);
         return R.ok(true);
     }
+
+    @PreAuthorize(SecurityConstants.GUARD)
+    @PostMapping("/{id}/enable")
+    public R<Boolean> enable(@PathVariable Long id) {
+        specOptionService.enable(id);
+        return R.ok(true);
+    }
 }

@@ -90,6 +90,16 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements IU
     }
 
     @Override
+    public void enable(Long id) {
+        Unit entity = getById(id);
+        if (entity == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "单位不存在：" + id);
+        }
+        entity.setStatus(CatalogStatus.VALID);
+        updateById(entity);
+    }
+
+    @Override
     public void assertExists(String code) {
         if (!StringUtils.hasText(code)) {
             throw new BizException(ResultCode.PARAM_ERROR, "单位编码不可为空");

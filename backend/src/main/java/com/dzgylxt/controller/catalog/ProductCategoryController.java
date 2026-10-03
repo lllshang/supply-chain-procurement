@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /** 商品三级品类管理。 */
 @RestController
@@ -33,6 +34,12 @@ public class ProductCategoryController {
     @GetMapping("/tree")
     public R<List<CategoryTreeNodeVO>> tree() {
         return R.ok(categoryService.tree());
+    }
+
+    @PreAuthorize(SecurityConstants.GUARD)
+    @GetMapping("/product-counts")
+    public R<Map<Long, Long>> productCounts() {
+        return R.ok(categoryService.productCounts());
     }
 
     @PreAuthorize(SecurityConstants.GUARD)

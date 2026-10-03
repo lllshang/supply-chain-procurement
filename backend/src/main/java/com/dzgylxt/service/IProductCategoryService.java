@@ -6,6 +6,7 @@ import com.dzgylxt.vo.catalog.ProductCategorySaveReqVO;
 import com.dzgylxt.vo.common.CategoryTreeNodeVO;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 商品三级品类服务。
@@ -26,4 +27,7 @@ public interface IProductCategoryService extends IService<ProductCategory> {
 
     /** 供 SPU 保存时校验"必须是叶子节点（level=3 且无子节点）"。 */
     void assertLeaf(Long categoryId);
+
+    /** 递归统计每个品类下（含下级）关联的有效 SPU 数量，返回 categoryId -> count。 */
+    Map<Long, Long> productCounts();
 }

@@ -24,6 +24,10 @@ export function updateCategory(id, data) {
 export function invalidateCategory(id) {
   return request.post(`/api/v1/catalog/categories/${id}/invalidate`)
 }
+// 递归统计每个品类下（含下级）关联的有效 SPU 数量：Map<categoryId, count>
+export function getCategoryProductCounts() {
+  return request.get('/api/v1/catalog/categories/product-counts')
+}
 
 // ---- 单位（P-C2） ----
 export function pageUnits(params) {
@@ -43,6 +47,9 @@ export function updateUnit(id, data) {
 }
 export function invalidateUnit(id) {
   return request.post(`/api/v1/catalog/units/${id}/invalidate`)
+}
+export function enableUnit(id) {
+  return request.post(`/api/v1/catalog/units/${id}/enable`)
 }
 
 // ---- 规格（P-C3） ----
@@ -64,6 +71,9 @@ export function updateSpecOption(id, data) {
 export function invalidateSpecOption(id) {
   return request.post(`/api/v1/catalog/spec-options/${id}/invalidate`)
 }
+export function enableSpecOption(id) {
+  return request.post(`/api/v1/catalog/spec-options/${id}/enable`)
+}
 
 // ---- 价格规则（P-C4） ----
 export function listPriceRules(params) {
@@ -84,6 +94,14 @@ export function invalidatePriceRule(id) {
 // 价格校验：refType(1商品/2品类) + refId + price → 通过返回 data=true，越界后端抛业务错误
 export function validatePrice(params) {
   return request.get('/api/v1/catalog/price-rules/validate', { params })
+}
+// 采购最低价同步标准价：读取开关状态 + 上次更新数量
+export function getLowestOrderSync() {
+  return request.get('/api/v1/catalog/price-rules/lowest-order-sync')
+}
+// 采购最低价同步标准价：持久化开关；开启时按最低采购单价回写 SPU 标准价，返回更新条数
+export function applyLowestOrderSync(enabled) {
+  return request.post('/api/v1/catalog/price-rules/lowest-order-sync', null, { params: { enabled } })
 }
 
 // ---- SPU（P-C5） ----

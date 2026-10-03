@@ -1,6 +1,7 @@
 package com.dzgylxt.service.impl.catalog;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dzgylxt.common.BizException;
 import com.dzgylxt.common.ResultCode;
@@ -18,7 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** 商品三级品类服务实现。 */
 @Service
@@ -150,5 +154,40 @@ public class ProductCategoryServiceImpl extends ServiceImpl<ProductCategoryMappe
         Long count = spuMapper.selectCount(new LambdaQueryWrapper<Spu>()
                 .eq(Spu::getCategoryId, categoryId));
         return count != null && count > 0;
+    }
+
+    @Override
+    public Map<Long, Long> productCounts() {
+        List<ProductCategory> all = list();
+        Map<Long, List<ProductCategory>> childrenMap = new HashMap<>();
+        for (ProductCategory c : all) {
+            long pid = c.getParentId() == null ? 0L : c.getParentId();
+            childrenMap.computeIfAbsent(pid, k -> new ArrayList<>()).add(c);
+        }
+        Map<Long, Long> leafCounts = new HashMap<>();
+        List<Map<String, Object>> rows = spuMapper.selectMaps(
+                new QueryWrapper<Spu>().select("category_id as cid, count(1) as cnt")
+                        .eq("status", 0).groupBy("category_id"));
+        for (Map<String, Object> r : rows) {
+            Object cid = r.get("cid");
+            if (cid == null) continue;
+            Object cnt = r.get("cnt");
+            long cidLong = ((Number) cid).longValue();
+            long c = cnt == null ? 0L : ((Number) cnt).longValue();
+            leafCounts.put(cidLong, c);
+        }
+        Map<Long, Long> result = new HashMap<>();
+        for (ProductCategory c : all) {
+            result.put(c.getId(), sumSubtree(c.getId(), childrenMap, leafCounts));
+        }
+        return result;
+    }
+
+    private long sumSubtree(Long id, Map<Long, List<ProductCategory>> childrenMap, Map<Long, Long> leafCounts) {
+        long sum = leafCounts.getOrDefault(id, 0L);
+        for (ProductCategory k : childrenMap.getOrDefault(id, Collections.emptyList())) {
+            sum += sumSubtree(k.getId(), childrenMap, leafCounts);
+        }
+        return sum;
     }
 }

@@ -23,4 +23,7 @@ public interface ISpecOptionService extends IService<SpecOption> {
 
     /** 置无效：被 SKU 引用则拒绝。 */
     void invalidate(Long id);
+
+    /** 启用（状态置为有效）。 */
+    void enable(Long id);
 }

@@ -22,4 +22,10 @@ public interface IPriceRuleService extends IService<PriceRule> {
 
     /** 置无效：被引用则拒绝（价格规则本身可置无效）。 */
     void invalidate(Long id);
+
+    /** 采购最低价同步标准价：读取开关状态与上次更新数量。 */
+    com.dzgylxt.vo.catalog.LowestOrderSyncVO getLowestOrderSync();
+
+    /** 采购最低价同步标准价：持久化开关；开启时按最低采购单价回写 SPU 标准价，返回更新条数。 */
+    int applyLowestOrderSync(boolean enabled);
 }

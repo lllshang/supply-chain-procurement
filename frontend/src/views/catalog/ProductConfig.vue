@@ -4,7 +4,7 @@
       <span class="hint">品类 / 单位 / 规格 / 价格规则统一在此维护（原型「产品配置」Tab 页）</span>
     </PageHead>
     <el-tabs v-model="active">
-      <el-tab-pane label="品类配置" name="category">
+      <el-tab-pane label="品类体系" name="category">
         <CategoryConfig />
       </el-tab-pane>
       <el-tab-pane label="单位配置" name="unit">

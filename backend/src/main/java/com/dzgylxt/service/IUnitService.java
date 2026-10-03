@@ -18,6 +18,9 @@ public interface IUnitService extends IService<Unit> {
     /** 置无效：被 SKU/换算/绑定引用则拒绝。 */
     void invalidate(Long id);
 
+    /** 启用（状态置为有效）。 */
+    void enable(Long id);
+
     /** 断言单位编码存在且有效。 */
     void assertExists(String code);
 }

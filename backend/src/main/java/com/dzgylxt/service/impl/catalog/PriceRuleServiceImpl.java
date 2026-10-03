@@ -11,7 +11,9 @@ import com.dzgylxt.enums.CatalogStatus;
 import com.dzgylxt.mapper.catalog.PriceRuleMapper;
 import com.dzgylxt.mapper.catalog.SpuMapper;
 import com.dzgylxt.service.IPriceRuleService;
+import com.dzgylxt.vo.catalog.LowestOrderSyncVO;
 import com.dzgylxt.vo.catalog.PriceRuleSaveReqVO;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -23,10 +25,15 @@ import java.util.List;
 @Service
 public class PriceRuleServiceImpl extends ServiceImpl<PriceRuleMapper, PriceRule> implements IPriceRuleService {
 
-    private final SpuMapper spuMapper;
+    private static final String KEY_ENABLED = "price:lowest-order-sync:enabled";
+    private static final String KEY_COUNT = "price:lowest-order-sync:lastCount";
 
-    public PriceRuleServiceImpl(SpuMapper spuMapper) {
+    private final SpuMapper spuMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    public PriceRuleServiceImpl(SpuMapper spuMapper, RedisTemplate<String, Object> redisTemplate) {
         this.spuMapper = spuMapper;
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -83,6 +90,29 @@ public class PriceRuleServiceImpl extends ServiceImpl<PriceRuleMapper, PriceRule
         }
         entity.setStatus(CatalogStatus.INVALID);
         updateById(entity);
+    }
+
+    @Override
+    public LowestOrderSyncVO getLowestOrderSync() {
+        boolean enabled = Boolean.parseBoolean(String.valueOf(redisTemplate.opsForValue().get(KEY_ENABLED)));
+        int count = 0;
+        Object c = redisTemplate.opsForValue().get(KEY_COUNT);
+        if (c != null) {
+            count = Integer.parseInt(String.valueOf(c));
+        }
+        return new LowestOrderSyncVO(enabled, count);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int applyLowestOrderSync(boolean enabled) {
+        redisTemplate.opsForValue().set(KEY_ENABLED, String.valueOf(enabled));
+        if (!enabled) {
+            return 0;
+        }
+        int updated = spuMapper.syncStandardPriceFromLowestOrder();
+        redisTemplate.opsForValue().set(KEY_COUNT, String.valueOf(updated));
+        return updated;
     }
 
     /** 依据 rule_type 校验字段组合并写回实体。 */

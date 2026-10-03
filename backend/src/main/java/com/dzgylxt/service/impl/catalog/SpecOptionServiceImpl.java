@@ -94,6 +94,16 @@ public class SpecOptionServiceImpl extends ServiceImpl<SpecOptionMapper, SpecOpt
         updateById(entity);
     }
 
+    @Override
+    public void enable(Long id) {
+        SpecOption entity = getById(id);
+        if (entity == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "规格值不存在：" + id);
+        }
+        entity.setStatus(CatalogStatus.VALID);
+        updateById(entity);
+    }
+
     private boolean isReferenced(String specValue) {
         if (!StringUtils.hasText(specValue)) {
             return false;

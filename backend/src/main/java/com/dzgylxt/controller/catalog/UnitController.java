@@ -71,4 +71,11 @@ public class UnitController {
         unitService.invalidate(id);
         return R.ok(true);
     }
+
+    @PreAuthorize(SecurityConstants.GUARD)
+    @PostMapping("/{id}/enable")
+    public R<Boolean> enable(@PathVariable Long id) {
+        unitService.enable(id);
+        return R.ok(true);
+    }
 }
