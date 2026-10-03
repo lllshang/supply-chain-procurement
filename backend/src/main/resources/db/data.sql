@@ -184,6 +184,12 @@ INSERT IGNORE INTO spec_option (id, spec_name, spec_value, status, created_at, u
 (24, '纸张规格', 'A4 70g',      0, NOW(), NOW(), 0),
 (25, '纸张规格', 'A3 70g',      0, NOW(), NOW(), 0);
 
+-- ---------------- P3 物料采购单位回填（数据修正，幂等；解决历史物料 purchase_unit 为空导致「单位换算」不显示） ----------------
+-- 原型规则：单位换算需采购单位+基本单位同时存在；历史数据仅 base_unit 有值。
+-- 默认采购单位=基本单位（1:1，换算禁用态），用户在编辑页可将采购单位改为箱/包以启用换算。
+UPDATE spu SET purchase_unit = base_unit
+WHERE item_type = 0 AND purchase_unit IS NULL AND base_unit IS NOT NULL AND deleted = 0;
+
 -- ---------------- P1 商品品类（示例三级树，幂等） ----------------
 INSERT IGNORE INTO product_category (id, parent_id, level, code, name, tree_path, status, created_at, updated_at, deleted) VALUES
 (1, 0, 1, 'CAT_L1_BASE', '原材料', '/1',   0, NOW(), NOW(), 0),
