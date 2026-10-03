@@ -27,6 +27,7 @@ h5/dist/
 node_modules/
 dist/
 *.tsbuildinfo
+vite.config.js.timestamp-*.mjs
 
 # ---------------- 运行时 / 密钥 ----------------
 *.pem
@@ -44,3 +45,4 @@ minio-data/
 docs/顶点公园供应链系统.zip
 docs/顶点公园供应链系统/
 docs/顶点公园供应链系统 2/
+docs/供应链系统.zip
