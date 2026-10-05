@@ -30,19 +30,21 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (12,0, '基础设置',   1, '/setting',   'setting/index', 'tools',    'setting:view',   12, 0, NOW(), NOW(), 0);
 
 -- ---------------- 产品管理菜单对齐原型（2026-09-25 重构）----------------
--- 原「商品库管理」拆成：产品库 / 产品配置(合并品类·单位·规格·价格规则 Tab 页) / 价格纠正
+-- 原「商品库管理」拆成：产品库 / 产品配置(合并品类·单位·规格·价格规则 Tab 页)。
+-- 注：旧「价格纠正」(id 207) 按 PRD §6.2.4 应为「入口隐藏、不计入验收」能力，故此处将其改名「价格审核」并移至「结算与付款」域
+--      （PRD §6.12.1 价格库，属可见能力），消除"借用原型价格纠正菜单名、实为价格库审核"的错位。
 -- 废弃独立菜单：品类配置(201) 单位配置(202) 规格配置(203) 价格规则(204) 产品导入(206)
 -- 兼容已初始化库：删除废弃菜单及其角色授权，UPDATE 改名/排序项；幂等可重复执行。
 UPDATE sys_menu SET menu_name='产品管理' WHERE id=2 AND deleted=0;
 UPDATE sys_menu SET sort=1 WHERE id=205 AND deleted=0;
-UPDATE sys_menu SET menu_name='价格纠正', sort=3, perms='catalog:price:read,catalog:price:audit,catalog:price:write' WHERE id=207 AND deleted=0;
+UPDATE sys_menu SET parent_id=9, menu_name='价格审核', sort=4, perms='catalog:price:read,catalog:price:audit,catalog:price:write', status=0 WHERE id=207 AND deleted=0;
 DELETE FROM sys_role_menu WHERE menu_id IN (201,202,203,204,206);
 DELETE FROM sys_menu WHERE id IN (201,202,203,204,206) AND deleted=0;
 
 -- ---------------- P1 二级菜单（商品库/供应商/预算，parent_id 指向一级菜单；幂等） ----------------
 -- perms 同时含 read 与 write 键，RbacService.getUserPerms 汇总后供前端 v-permission 使用。
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
--- 产品管理（parent_id = 2）：原型结构 = 产品库 / 产品配置(合并品类·单位·规格·价格规则 Tab 页) / 价格纠正
+-- 产品管理（parent_id = 2）：原型结构 = 产品库 / 产品配置(合并品类·单位·规格·价格规则 Tab 页)
 -- 注：品类/单位/规格/价格规则不再作为独立菜单，统一收纳进「产品配置」Tab 页（前端 catalog/ProductConfig.vue）
 (205, 2, '产品库',   2, '/catalog/product',    'catalog/product/index',   'goods',   'catalog:spu:read,catalog:spu:write',          1, 0, NOW(), NOW(), 0),
 (208, 2, '产品配置', 2, '/catalog/config',     'catalog/ProductConfig',   'setting', 'catalog:category:read,catalog:category:write,catalog:unit:read,catalog:unit:write,catalog:spec:read,catalog:spec:write,catalog:price:read,catalog:price:write', 2, 0, NOW(), NOW(), 0),
@@ -83,9 +85,10 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 (902, 9, '付款登记', 2, '/settlement/payment', 'settlement/payment/index', 'credit-card', 'payment:read,payment:write,payment:confirm',          2, 0, NOW(), NOW(), 0),
 (903, 9, '对账单',   2, '/settlement/statement','settlement/statement/index','document',   'payment:read',                                        3, 0, NOW(), NOW(), 0);
 
--- ---------------- 价格纠正菜单（产品管理下，原型命名；原名「价格库审核」） ----------------
+-- ---------------- 价格审核（PRD §6.12.1 价格库）：id=207 由旧「价格纠正」改名并移至结算与付款域 ----------------
+-- 上方 UPDATE（line 40）修正已初始化库中的 207 行；下方 INSERT IGNORE 保证全新库也能建出该菜单（幂等）。
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, icon, perms, sort, status, created_at, updated_at, deleted) VALUES
-(207, 2, '价格纠正', 2, '/catalog/price-audit', 'cost/price-audit/index', 'price-tag', 'catalog:price:read,catalog:price:audit,catalog:price:write', 3, 0, NOW(), NOW(), 0);
+(207, 9, '价格审核', 2, '/catalog/price-audit', 'cost/price-audit/index', 'price-tag', 'catalog:price:read,catalog:price:audit,catalog:price:write', 4, 0, NOW(), NOW(), 0);
 
 -- ---------------- 管理员用户（密码 admin123，BCrypt $2a$10$） ----------------
 INSERT IGNORE INTO sys_user (id, username, password_hash, nickname, main_dept_id, status, created_at, updated_at, deleted)

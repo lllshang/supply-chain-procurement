@@ -16,8 +16,7 @@ export const fallbackMenus = [
     menuType: 1,
     children: [
       { id: 205, parentId: 2, menuName: '产品库', icon: 'goods', path: '/catalog/product', menuType: 2, perms: 'catalog:spu:read,catalog:spu:write' },
-      { id: 208, parentId: 2, menuName: '产品配置', icon: 'setting', path: '/catalog/config', menuType: 2, perms: 'catalog:category:read,catalog:category:write,catalog:unit:read,catalog:unit:write,catalog:spec:read,catalog:spec:write,catalog:price:read,catalog:price:write' },
-      { id: 207, parentId: 2, menuName: '价格纠正', icon: 'price-tag', path: '/catalog/price-audit', menuType: 2, perms: 'catalog:price:read,catalog:price:audit,catalog:price:write' }
+      { id: 208, parentId: 2, menuName: '产品配置', icon: 'setting', path: '/catalog/config', menuType: 2, perms: 'catalog:category:read,catalog:category:write,catalog:unit:read,catalog:unit:write,catalog:spec:read,catalog:spec:write,catalog:price:read,catalog:price:write' }
     ]
   },
   {
@@ -101,7 +100,8 @@ export const fallbackMenus = [
     children: [
       { id: 901, parentId: 9, menuName: '结算管理', icon: 'money', path: '/settlement/list', menuType: 2, perms: 'settlement:read,settlement:write,settlement:submit' },
       { id: 902, parentId: 9, menuName: '付款登记', icon: 'credit-card', path: '/settlement/payment', menuType: 2, perms: 'payment:read,payment:write,payment:confirm' },
-      { id: 903, parentId: 9, menuName: '对账单', icon: 'document', path: '/settlement/statement', menuType: 2, perms: 'payment:read' }
+      { id: 903, parentId: 9, menuName: '对账单', icon: 'document', path: '/settlement/statement', menuType: 2, perms: 'payment:read' },
+      { id: 207, parentId: 9, menuName: '价格审核', icon: 'price-tag', path: '/catalog/price-audit', menuType: 2, perms: 'catalog:price:read,catalog:price:audit,catalog:price:write' }
     ]
   },
   {
