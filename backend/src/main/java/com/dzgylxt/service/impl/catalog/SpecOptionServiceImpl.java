@@ -104,6 +104,19 @@ public class SpecOptionServiceImpl extends ServiceImpl<SpecOptionMapper, SpecOpt
         updateById(entity);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id) {
+        SpecOption entity = getById(id);
+        if (entity == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "规格值不存在：" + id);
+        }
+        if (isReferenced(entity.getSpecValue())) {
+            throw new BizException(ResultCode.BIZ_ERROR, "规格值被 SKU 引用，不可删除");
+        }
+        removeById(id);
+    }
+
     private boolean isReferenced(String specValue) {
         if (!StringUtils.hasText(specValue)) {
             return false;

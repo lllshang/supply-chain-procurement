@@ -74,6 +74,10 @@ export function invalidateSpecOption(id) {
 export function enableSpecOption(id) {
   return request.post(`/api/v1/catalog/spec-options/${id}/enable`)
 }
+// 删除单个规格值（逻辑删除；被 SKU 引用时后端拒绝）
+export function deleteSpecOption(id) {
+  return request.delete(`/api/v1/catalog/spec-options/${id}`)
+}
 
 // ---- 价格规则（P-C4） ----
 export function listPriceRules(params) {

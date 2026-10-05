@@ -44,7 +44,14 @@
               placeholder="输入参数值后回车"
               class="full-width"
               @change="(vals) => onValuesChange(row, vals)"
-            />
+            >
+              <el-option
+                v-for="v in row.values"
+                :key="v.id"
+                :label="v.specValue"
+                :value="v.specValue"
+              />
+            </el-select>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="180" align="center">
@@ -93,6 +100,7 @@ import {
   updateSpecOption,
   invalidateSpecOption,
   enableSpecOption,
+  deleteSpecOption,
 } from '@/api/catalog'
 
 const specs = ref([])
@@ -199,7 +207,7 @@ async function onValuesChange(type, newValues) {
   const removed = type.values.filter((v) => !newValues.includes(v.specValue))
   try {
     for (const v of removed) {
-      await invalidateSpecOption(v.id)
+      await deleteSpecOption(v.id)
     }
     for (const v of added) {
       await createSpecOption({ specName: type.specName, specValue: v })
@@ -234,7 +242,7 @@ async function removeType(type) {
   }
   try {
     for (const v of type.values) {
-      await invalidateSpecOption(v.id)
+      await deleteSpecOption(v.id)
     }
     ElMessage.success('规格类型已删除')
     await load()

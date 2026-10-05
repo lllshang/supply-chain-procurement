@@ -26,4 +26,7 @@ public interface ISpecOptionService extends IService<SpecOption> {
 
     /** 启用（状态置为有效）。 */
     void enable(Long id);
+
+    /** 删除单个规格值（逻辑删除）：被 SKU 引用则拒绝。 */
+    void delete(Long id);
 }
