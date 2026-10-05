@@ -64,7 +64,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
-import { listUnits, createUnit, updateUnit, invalidateUnit, enableUnit } from '@/api/catalog'
+import { listUnits, createUnit, updateUnit, invalidateUnit, enableUnit, deleteUnit } from '@/api/catalog'
 
 const units = ref([])
 const current = ref(1)
@@ -163,7 +163,7 @@ async function removeUnit(row) {
     return
   }
   try {
-    await invalidateUnit(row.id)
+    await deleteUnit(row.id)
     ElMessage.success('单位已删除')
     await load()
   } catch (e) {

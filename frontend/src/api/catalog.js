@@ -51,6 +51,10 @@ export function invalidateUnit(id) {
 export function enableUnit(id) {
   return request.post(`/api/v1/catalog/units/${id}/enable`)
 }
+// 删除单位（逻辑删除；被 SKU/换算/绑定引用时后端拒绝）
+export function deleteUnit(id) {
+  return request.delete(`/api/v1/catalog/units/${id}`)
+}
 
 // ---- 规格（P-C3） ----
 export function listSpecOptions(params) {

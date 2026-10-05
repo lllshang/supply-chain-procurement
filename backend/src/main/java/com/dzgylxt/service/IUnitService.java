@@ -21,6 +21,9 @@ public interface IUnitService extends IService<Unit> {
     /** 启用（状态置为有效）。 */
     void enable(Long id);
 
+    /** 删除单位（逻辑删除）：被 SKU/换算/绑定引用则拒绝。 */
+    void delete(Long id);
+
     /** 断言单位编码存在且有效。 */
     void assertExists(String code);
 }

@@ -100,6 +100,19 @@ public class UnitServiceImpl extends ServiceImpl<UnitMapper, Unit> implements IU
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id) {
+        Unit entity = getById(id);
+        if (entity == null) {
+            throw new BizException(ResultCode.DATA_NOT_FOUND, "单位不存在：" + id);
+        }
+        if (isReferenced(entity.getCode())) {
+            throw new BizException(ResultCode.BIZ_ERROR, "单位被 SKU/换算/绑定引用，不可删除");
+        }
+        removeById(id);
+    }
+
+    @Override
     public void assertExists(String code) {
         if (!StringUtils.hasText(code)) {
             throw new BizException(ResultCode.PARAM_ERROR, "单位编码不可为空");
